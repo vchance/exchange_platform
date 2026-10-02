@@ -233,6 +233,7 @@ export interface Wording {
     confirmCounterparty: string
     notThem: string
     waitingConfirmation: string
+    waitingConfirmationSigned: string
     proposalHeading: string
     amendmentHeading: string
     version: string

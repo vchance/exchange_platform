@@ -245,6 +245,7 @@
     "confirmCounterparty": "Sí, es a quien invité",
     "notThem": "Si no lo es, no confirmes. Retira tu propuesta y empieza de nuevo.",
     "waitingConfirmation": "{name} todavía no ha confirmado que eres la persona a la que invitó. Puedes firmar ahora; tu firma surte efecto cuando lo confirme.",
+    "waitingConfirmationSigned": "Ya firmaste. Tu firma surte efecto cuando {name} confirme que eres la persona a la que invitó.",
     "proposalHeading": "Propuesta pendiente de firma",
     "amendmentHeading": "Cambio propuesto al acuerdo",
     "version": "Versión {number}",

@@ -245,6 +245,7 @@
     "confirmCounterparty": "Yes, this is who I invited",
     "notThem": "If it isn’t, don’t confirm. Withdraw your proposal and start again.",
     "waitingConfirmation": "{name} has not yet confirmed that you are the person they invited. You can sign now; your signature takes effect once they confirm.",
+    "waitingConfirmationSigned": "You have signed. Your signature takes effect once {name} confirms that you are the person they invited.",
     "proposalHeading": "Proposal waiting to be signed",
     "amendmentHeading": "Proposed change to the agreement",
     "version": "Version {number}",

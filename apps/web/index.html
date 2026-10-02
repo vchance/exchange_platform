@@ -1,22 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{lang}}" dir="{{dir}}">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Exchange</title>
+    <meta name="color-scheme" content="light dark" />
+    <title>{{title}}</title>
     <!--
+      A template, not a page. `build/entry-pages.ts` fills the markers from the
+      wording files and writes one copy per language, so an invitation link
+      previews in the sender's language (DESIGN.md §4.2, §13.5).
+
       Link previews. Messaging apps fetch a shared link without verifying, so
-      nothing here may ever name a person, a term or an amount. This shell is
-      in the default language; the text comes from `linkPreview` in the
-      wording files, and each language gets its own shell so a link previews
-      in the sender's language (DESIGN.md §4.2, §13.5).
+      nothing here may ever name a person, a term or an amount.
     -->
-    <meta name="description" content="You’ve been invited to review an exchange." />
-    <meta property="og:title" content="Exchange" />
-    <meta property="og:description" content="You’ve been invited to review an exchange." />
+    <meta name="description" content="{{description}}" />
+    <meta property="og:title" content="{{title}}" />
+    <meta property="og:description" content="{{description}}" />
     <meta property="og:type" content="website" />
     <meta name="robots" content="noindex" />
+    <meta name="referrer" content="no-referrer" />
   </head>
   <body>
     <div id="root"></div>
