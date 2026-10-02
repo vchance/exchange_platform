@@ -92,6 +92,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The people the caller has blocked, most recently blocked first. */
+        get: operations["blocked_people"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/exchanges": {
         parameters: {
             query?: never;
@@ -122,6 +139,30 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/block": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the caller has blocked the other party of this exchange. */
+        get: operations["block_status"];
+        /**
+         * Blocks the other party of this exchange. Neither of the two can then join
+         *     an exchange the other starts. Whatever is waiting to be signed between
+         *     them is withdrawn or declined; an agreement in force stays in force. The
+         *     other party is not told.
+         */
+        put: operations["block"];
+        post?: never;
+        /** Removes the caller's block on the other party of this exchange. */
+        delete: operations["unblock"];
         options?: never;
         head?: never;
         patch?: never;
@@ -164,6 +205,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/exchanges/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What has happened in an exchange, oldest first, with what the parties
+         *     wrote along the way: the message sent with a revision, a note on a claim,
+         *     the reason for a dispute, a statement. Answers with the latest events, 50
+         *     unless `limit` says otherwise and never more than 200; `earlier` in the
+         *     answer is the `before` that reads the page before.
+         */
+        get: operations["history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/exchanges/{id}/invitation": {
         parameters: {
             query?: never;
@@ -175,6 +239,54 @@ export interface paths {
         put?: never;
         /** Replaces the invitation link. The previous link stops working. */
         post: operations["reissue_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The record of an exchange as one self-contained document, for a party to
+         *     keep or hand to someone else: how it stands, every revision sent with
+         *     what it says and what became of it, every signature and what it rests
+         *     on, and everything that happened, in order.
+         * @description One document holds at most 500 events, and at most 50 revisions or about
+         *     a megabyte of their text, whichever comes first. A longer record
+         *     continues in further documents: `part.next` holds the two values to ask
+         *     for the next one with, and `part.complete` says when one document is all
+         *     of it.
+         */
+        get: operations["record"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reports an exchange, and with it the other party, for review. The other
+         *     party is not told. Reporting the same exchange again while the first
+         *     report is open changes nothing and is answered the same way.
+         */
+        post: operations["report_exchange"];
         delete?: never;
         options?: never;
         head?: never;
@@ -233,6 +345,28 @@ export interface paths {
          *     travels in the body so it never appears in a URL the service logs.
          */
         post: operations["preview_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/invitations/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reports the proposal behind an invitation link, and with it the person
+         *     who sent it. No sign-in needed: the token is the proof of having received
+         *     it, as for the preview, and travels in the body for the same reason. A
+         *     link that shows no preview takes no report.
+         */
+        post: operations["report_invitation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -312,11 +446,42 @@ export interface components {
         };
         /** @enum {string} */
         Action: "CLAIM" | "RETRACT_CLAIM" | "CONFIRM" | "DISPUTE" | "WAIVE";
+        /**
+         * @description Who did something: one of the two parties, or the service acting on a
+         *     timer.
+         * @enum {string}
+         */
+        Actor: "A" | "B" | "SYSTEM";
         AddIdentifier: {
             /** @description The one-time code sent to it. */
             code: string;
             /** @description An email address, or a phone number in international form. */
             identifier: string;
+        };
+        /**
+         * @description Whether the caller has blocked the other party of an exchange. Says
+         *     nothing about whether the other party has blocked the caller.
+         */
+        BlockStatus: {
+            blocked: boolean;
+            /**
+             * @description The other party's name as the exchange writes it. An exchange closed
+             *     before anything was agreed shows no terms to read it from.
+             */
+            name: string;
+        };
+        /**
+         * @description Someone the caller has blocked, named as an exchange the two share names
+         *     them. The exchange is also how to unblock them.
+         */
+        BlockedPerson: {
+            /** @description RFC 3339. */
+            blocked_at: string;
+            display_code: string;
+            /** Format: uuid */
+            exchange_id: string;
+            /** @description Their name as written in that exchange. */
+            name: string;
         };
         /** @description Who claimed the invitation, shown to the initiator so they can confirm. */
         Claimant: {
@@ -380,6 +545,18 @@ export interface components {
             language: string;
             version: string;
         };
+        /** @description Which consent wording the signer was shown before signing. */
+        ConsentShown: {
+            language: string;
+            version: string;
+        };
+        /** @description Where to continue reading a record too long for one document. */
+        Continuation: {
+            /** Format: int64 */
+            events_after: number;
+            /** Format: int32 */
+            revisions_after: number;
+        };
         ContributionDto: {
             /**
              * Format: int64
@@ -400,6 +577,15 @@ export interface components {
             quantity?: components["schemas"]["QuantityDto"] | null;
             required: boolean;
             type: components["schemas"]["ContributionType"];
+        };
+        /**
+         * @description A contribution, with its description as the parties wrote it in the
+         *     revision the event happened under.
+         */
+        ContributionRef: {
+            description: string;
+            /** Format: uuid */
+            id: string;
         };
         ContributionStatus: {
             /** Format: uuid */
@@ -455,6 +641,12 @@ export interface components {
          * @enum {string}
          */
         ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        /**
+         * @description Everything that can happen to an exchange. Events of any other kind are
+         *     not part of what the parties are shown.
+         * @enum {string}
+         */
+        EventType: "COUNTERPARTY_CLAIMED" | "COUNTERPARTY_CONFIRMED" | "REVISION_SENT" | "REVISION_SUPERSEDED" | "REVISION_ACCEPTED" | "REVISION_DECLINED" | "REVISION_WITHDRAWN" | "REVISION_EXPIRED" | "AGREEMENT_IN_FORCE" | "CONTRIBUTION_CLAIMED" | "CONTRIBUTION_CLAIM_RETRACTED" | "CONTRIBUTION_CONFIRMED" | "CONTRIBUTION_DISPUTED" | "CONTRIBUTION_WAIVED" | "END_PROPOSED" | "END_PROPOSAL_CANCELLED" | "CLOSE_REQUESTED" | "CLOSE_REQUEST_RETRACTED" | "STATEMENT_ADDED" | "INACTIVITY_PROMPTED" | "EXCHANGE_CLOSED";
         ExchangeSummary: {
             closed_outcome?: components["schemas"]["OutcomeDto"] | null;
             display_code: string;
@@ -494,6 +686,19 @@ export interface components {
             /** @description Which side the viewer is. */
             you: components["schemas"]["Slot"];
         };
+        /** @description A stretch of an exchange's history, oldest first. */
+        HistoryPage: {
+            /**
+             * Format: int64
+             * @description Set when there is history before this page: pass it as `before` to
+             *     read the page before.
+             */
+            earlier?: number | null;
+            events: components["schemas"]["RecordEvent"][];
+            parties: components["schemas"]["Parties"];
+            /** @description Which side the reader is. */
+            you: components["schemas"]["Slot"];
+        };
         InvitationIssued: {
             invitation_token: string;
         };
@@ -519,16 +724,222 @@ export interface components {
             service: string;
             version: string;
         };
+        /**
+         * @description A report on the proposal behind an invitation link, from someone who need
+         *     not be signed in. The token is their proof of having received it.
+         */
+        NewInvitationReport: {
+            /** @description As for a report on an exchange. */
+            details?: string | null;
+            reason: components["schemas"]["ReportReason"];
+            token: string;
+        };
+        NewReport: {
+            /**
+             * @description What the reporter wants a reviewer to know. Optional, except with the
+             *     reason `OTHER`. At most 2,000 characters.
+             */
+            details?: string | null;
+            reason: components["schemas"]["ReportReason"];
+        };
+        /** @description What a reader of the document needs to be told, in its language. */
+        Notices: {
+            /** @description What this document is. */
+            about: string;
+            /** @description How to recompute a content hash. */
+            content_hash: string;
+            /** @description What a signature here rests on. */
+            signatures: string;
+            /** @description That what the parties recorded about delivery is theirs alone. */
+            statements: string;
+        };
         /** @enum {string} */
         OutcomeDto: "NOT_AGREED" | "COMPLETED" | "ENDED_BY_AGREEMENT" | "UNRESOLVED";
+        /** @description Which stretch of the record a document holds. */
+        Part: {
+            /** @description This one document holds the whole record. */
+            complete: boolean;
+            /** @description Where this document starts. Zero and zero for the first. */
+            from: components["schemas"]["Continuation"];
+            next?: components["schemas"]["Continuation"] | null;
+        };
+        /**
+         * @description Each party's name as the agreement writes it: the agreement in force, or
+         *     the first proposal until there is one.
+         */
+        Parties: {
+            A: string;
+            B: string;
+        };
         QuantityDto: {
             /** @description A positive decimal number such as `2` or `1.5`. */
             amount: string;
             unit?: string | null;
         };
+        /** @description Where a contribution of the agreement stands. */
+        RecordContribution: {
+            description: string;
+            /** @description The party who owes it. */
+            from: components["schemas"]["Slot"];
+            /** Format: uuid */
+            id: string;
+            required: boolean;
+            /** @description When it came to stand this way. RFC 3339, UTC. */
+            since?: string | null;
+            status: components["schemas"]["Status"];
+        };
+        /**
+         * @description The record of one exchange, as one self-contained document: a party's
+         *     copy to keep or to hand to someone else.
+         */
+        RecordDocument: {
+            /**
+             * @description Where each contribution of the agreement stands. These are the
+             *     parties' own statements about delivery; the service did not check
+             *     them.
+             */
+            contributions: components["schemas"]["RecordContribution"][];
+            /** @description Everything that happened, oldest first. */
+            events: components["schemas"]["RecordEvent"][];
+            exchange: components["schemas"]["RecordExchange"];
+            /** @description Always `exchange-record`. */
+            format: string;
+            /** Format: int32 */
+            format_version: number;
+            /** @description RFC 3339, UTC. */
+            generated_at: string;
+            /**
+             * @description The language `notices` and the descriptions are written in. What the
+             *     parties wrote is never translated.
+             */
+            language: string;
+            notices: components["schemas"]["Notices"];
+            part: components["schemas"]["Part"];
+            parties: components["schemas"]["Parties"];
+            /**
+             * @description Which party this copy was made for. Both parties' copies hold the
+             *     same record.
+             */
+            prepared_for: components["schemas"]["Slot"];
+            /** @description Every revision sent, oldest first. */
+            revisions: components["schemas"]["RecordRevision"][];
+        };
+        /**
+         * @description One entry in the history. The history is append-only: nothing in it is
+         *     ever edited or removed, and a correction is a later entry.
+         */
+        RecordEvent: {
+            actor: components["schemas"]["Actor"];
+            /** @description RFC 3339, UTC. */
+            at: string;
+            contribution?: components["schemas"]["ContributionRef"] | null;
+            /**
+             * @description When the invited party joined: whether the invitation named them, so
+             *     that no confirmation by the initiator was needed.
+             */
+            invitation_named_them?: boolean | null;
+            /**
+             * @description What the actor wrote with it, exactly as written: the message sent
+             *     with a revision, a note on a claim, the reason for a dispute, or a
+             *     statement.
+             */
+            note?: string | null;
+            outcome?: components["schemas"]["OutcomeDto"] | null;
+            reason?: string | null;
+            revision?: components["schemas"]["RevisionRef"] | null;
+            /**
+             * Format: int64
+             * @description Position in the exchange's history, counting from 1.
+             */
+            sequence: number;
+            status?: components["schemas"]["Status"] | null;
+            /**
+             * @description When a revision came into force: where each of its contributions
+             *     stood as a result. A contribution of the agreement before that is not
+             *     listed was removed by the amendment.
+             */
+            statuses?: components["schemas"]["ContributionStatus"][] | null;
+            type: components["schemas"]["EventType"];
+            /** @description When the exchange ended by agreement: what was released, undelivered. */
+            waived?: string[] | null;
+        };
+        /** @description How the exchange stands. */
+        RecordExchange: {
+            close_requested_at?: string | null;
+            close_requested_by?: components["schemas"]["Slot"] | null;
+            closed_at?: string | null;
+            closed_outcome?: components["schemas"]["OutcomeDto"] | null;
+            closed_reason?: string | null;
+            counterparty: components["schemas"]["CounterpartyDto"];
+            /** @description RFC 3339, UTC. */
+            created_at: string;
+            currency: string;
+            /** @description For telling exchanges apart. Not a credential. */
+            display_code: string;
+            end_proposed_by?: components["schemas"]["Slot"] | null;
+            /** Format: uuid */
+            id: string;
+            in_force_revision?: components["schemas"]["RevisionRef"] | null;
+            /**
+             * Format: int64
+             * @description The sequence number of the latest event when this was written.
+             */
+            last_event: number;
+            open_revision?: components["schemas"]["RevisionRef"] | null;
+            state: components["schemas"]["StateDto"];
+            /** @description The timezone due dates are read in. */
+            timezone: string;
+        };
+        /**
+         * @description A revision that was sent: what it says, who sent and signed it, and what
+         *     became of it.
+         */
+        RecordRevision: {
+            answers?: components["schemas"]["RevisionRef"] | null;
+            author: components["schemas"]["Slot"];
+            /** @description SHA-256 of `signed` as canonical JSON (RFC 8785), in hex. */
+            content_hash: string;
+            /** @description When it would lapse if not signed by both. RFC 3339, UTC. */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            /** @description The message sent with it. Not part of what is signed. */
+            note?: string | null;
+            /** @description RFC 3339, UTC. */
+            sent_at: string;
+            /**
+             * Format: int32
+             * @description 1 for the first proposal, counting up.
+             */
+            sequence: number;
+            /**
+             * @description The author's, made by sending it, then the other party's if they
+             *     accepted.
+             */
+            signatures: components["schemas"]["Signature"][];
+            /** @description What the signatures cover, word for word. */
+            signed: components["schemas"]["SignedDocument"];
+            standing: components["schemas"]["RevisionStanding"];
+        };
+        /**
+         * @description Why an exchange is being reported. A fixed list, so that a reviewer can
+         *     tell what kind of harm a report is about before reading it.
+         * @enum {string}
+         */
+        ReportReason: "HARASSMENT" | "PROHIBITED_TRADE" | "SCAM" | "IMPERSONATION" | "UNDERAGE" | "UNWANTED" | "OTHER";
         RequestCode: {
             /** @description An email address, or a phone number in international form. */
             identifier: string;
+        };
+        /** @description A revision, named both ways: by ID, and by the number people see. */
+        RevisionRef: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int32
+             * @description 1 for the first proposal, counting up.
+             */
+            sequence: number;
         };
         RevisionSent: {
             exchange: components["schemas"]["ExchangeView"];
@@ -538,6 +949,19 @@ export interface components {
              */
             invitation_token?: string | null;
         };
+        RevisionStanding: {
+            /** @description When it came into force, if it ever did. */
+            in_force_at?: string | null;
+            replaced_by?: components["schemas"]["RevisionRef"] | null;
+            /** @description When it came to stand this way. RFC 3339, UTC. */
+            since: string;
+            status: components["schemas"]["RevisionStatus"];
+        };
+        /**
+         * @description What became of a revision.
+         * @enum {string}
+         */
+        RevisionStatus: "OPEN" | "IN_FORCE" | "REPLACED" | "SUPERSEDED" | "VOIDED" | "DECLINED" | "WITHDRAWN" | "EXPIRED";
         /** @description What a revision says: the part both parties sign. */
         RevisionTerms: {
             contributions: components["schemas"]["ContributionDto"][];
@@ -590,6 +1014,63 @@ export interface components {
             /** @description Present for `TOKEN` delivery only. */
             token?: string | null;
         };
+        /** @enum {string} */
+        SettlementDto: "OFF_PLATFORM" | "PROCESSOR";
+        /** @description One party's signature on one exact revision. */
+        Signature: {
+            consent: components["schemas"]["ConsentShown"];
+            /** @description The hash that was signed, in hex. It is the revision's own. */
+            content_hash: string;
+            /** @description The signer's name as that revision writes it. */
+            name: string;
+            party: components["schemas"]["Slot"];
+            /** @description RFC 3339, UTC. */
+            signed_at: string;
+            verification: components["schemas"]["Verification"];
+        };
+        /** @description A contribution as it is signed. */
+        SignedContribution: {
+            /**
+             * Format: int64
+             * @description Whole minor units of the exchange's currency. Money only.
+             */
+            amount_minor?: number | null;
+            completion_criteria?: string | null;
+            description: string;
+            due: components["schemas"]["DueDto"];
+            /** @description The party who owes it; the other receives it. */
+            from: components["schemas"]["Slot"];
+            /**
+             * Format: uuid
+             * @description The same contribution keeps its ID from one revision to the next.
+             */
+            id: string;
+            quantity?: components["schemas"]["QuantityDto"] | null;
+            required: boolean;
+            settlement?: components["schemas"]["SettlementDto"] | null;
+            type: components["schemas"]["ContributionType"];
+        };
+        /**
+         * @description Exactly what a signature covers. A revision's content hash is the SHA-256
+         *     of this object written as canonical JSON (RFC 8785).
+         */
+        SignedDocument: {
+            /** @description SHA-256 of each attached file, in hex. */
+            attachments: string[];
+            contributions: components["schemas"]["SignedContribution"][];
+            currency: string;
+            /** Format: uuid */
+            exchange: string;
+            parties: components["schemas"]["Parties"];
+            terms: string;
+            /** @description The timezone due dates are read in. */
+            timezone: string;
+            /**
+             * Format: int32
+             * @description The version of this layout.
+             */
+            v: number;
+        };
         /**
          * @description One side of the exchange. `A` is the initiator, `B` the invited counterparty.
          * @enum {string}
@@ -614,6 +1095,22 @@ export interface components {
              */
             language?: string | null;
         };
+        /**
+         * @description The evidence behind a signature: how the signer had shown the service who
+         *     they are. It is all the evidence there is.
+         */
+        Verification: {
+            /** @description The same, in words, in the document's language. */
+            description: string;
+            method: components["schemas"]["VerificationMethod"];
+            /**
+             * @description When the signer entered that code, which is when they signed in and
+             *     can be earlier than the signature. RFC 3339, UTC.
+             */
+            verified_at: string;
+        };
+        /** @enum {string} */
+        VerificationMethod: "EMAIL_OTP" | "PHONE_OTP";
     };
     responses: never;
     parameters: never;
@@ -786,6 +1283,35 @@ export interface operations {
             };
         };
     };
+    blocked_people: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Each by an exchange shared with them */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedPerson"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list: {
         parameters: {
             query?: never;
@@ -907,6 +1433,143 @@ export interface operations {
             };
         };
     };
+    block_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's own block, if any */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockStatus"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    block: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Blocked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Nobody has joined the exchange yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    unblock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not blocked any more */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Nobody has joined the exchange yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     run_command: {
         parameters: {
             query?: never;
@@ -1007,6 +1670,61 @@ export interface operations {
             };
         };
     };
+    history: {
+        parameters: {
+            query?: {
+                /** @description Return events before this sequence number. Leave out for the latest. */
+                before?: number;
+                /** @description How many events to return: 50 unless said, 200 at most. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryPage"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The query is not valid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     reissue_invitation: {
         parameters: {
             query?: never;
@@ -1043,6 +1761,137 @@ export interface operations {
             };
             /** @description The invitation has already been claimed */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    record: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Continue after the revision with this sequence number. Taken from
+                 *     `part.next` of the part before.
+                 */
+                revisions_after?: number;
+                /**
+                 * @description Continue after the event with this sequence number. Taken from
+                 *     `part.next` of the part before.
+                 */
+                events_after?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The record, or one part of it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordDocument"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The query is not valid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    report_exchange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewReport"];
+            };
+        };
+        responses: {
+            /** @description Received */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Nobody has joined the exchange yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Details too long, or missing for `OTHER` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many reports today */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1184,6 +2033,64 @@ export interface operations {
             };
             /** @description The link is not valid, or no longer */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    report_invitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewInvitationReport"];
+            };
+        };
+        responses: {
+            /** @description Received */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The link is not valid, or no longer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The link is the caller's own */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Details too long, or missing for `OTHER` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many reports today */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

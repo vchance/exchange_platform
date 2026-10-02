@@ -9,8 +9,11 @@ import type {
 } from '@exchange/api-client'
 
 import { idempotencyKeys } from './idempotency'
+import type { ReportReason } from './safety'
 
 type Schemas = components['schemas']
+export type BlockedPerson = Schemas['BlockedPerson']
+export type BlockStatus = Schemas['BlockStatus']
 export type InvitationPreview = Schemas['InvitationPreview']
 export type RevisionSent = Schemas['RevisionSent']
 export type RevisionView = Schemas['RevisionView']
@@ -186,6 +189,26 @@ export function createExchangeApi({ client, session, newKey }: ExchangeApiOption
       )
     },
 
+    /** The latest of an exchange's history, with what the parties wrote along the way. */
+    history(id: string): Promise<Schemas['HistoryPage']> {
+      return send(() =>
+        client.GET('/v1/exchanges/{id}/history', { headers: headers(), params: { path: { id } } }),
+      )
+    },
+
+    /** One part of an exchange's record: the first, or the one starting at `from`. */
+    recordPart(
+      id: string,
+      from: Schemas['Continuation'] | null,
+    ): Promise<Schemas['RecordDocument']> {
+      return send(() =>
+        client.GET('/v1/exchanges/{id}/record', {
+          headers: headers(),
+          params: { path: { id }, query: from ?? {} },
+        }),
+      )
+    },
+
     /** Saves the working copy. It is private to its author and binds nobody. */
     saveDraft(id: string, draft: object): Promise<void> {
       return send(() =>
@@ -244,6 +267,59 @@ export function createExchangeApi({ client, session, newKey }: ExchangeApiOption
       return send(() =>
         client.POST('/v1/invitations/claim', { headers: headers(), body: { token: invitation } }),
       )
+    },
+
+    // Reporting and blocking (DESIGN.md §9).
+
+    /** Reports an exchange, and with it the other party. Repeating it is harmless. */
+    reportExchange(id: string, reason: ReportReason, details: string | null): Promise<void> {
+      return send(() =>
+        client.POST('/v1/exchanges/{id}/reports', {
+          headers: headers(),
+          params: { path: { id } },
+          body: { reason, details },
+        }),
+      )
+    },
+
+    // Like the preview, the invitation token travels in the body, never in a URL.
+    reportInvitation(
+      invitation: string,
+      reason: ReportReason,
+      details: string | null,
+    ): Promise<void> {
+      return send(() =>
+        client.POST('/v1/invitations/report', {
+          headers: headers(),
+          body: { token: invitation, reason, details },
+        }),
+      )
+    },
+
+    /** Whether the person signed in has blocked the other party of this exchange, and that party's name. */
+    blockStatus(id: string): Promise<BlockStatus> {
+      return send(() =>
+        client.GET('/v1/exchanges/{id}/block', { headers: headers(), params: { path: { id } } }),
+      )
+    },
+
+    block(id: string): Promise<void> {
+      return send(() =>
+        client.PUT('/v1/exchanges/{id}/block', { headers: headers(), params: { path: { id } } }),
+      )
+    },
+
+    unblock(id: string): Promise<void> {
+      return send(() =>
+        client.DELETE('/v1/exchanges/{id}/block', {
+          headers: headers(),
+          params: { path: { id } },
+        }),
+      )
+    },
+
+    blockedPeople(): Promise<BlockedPerson[]> {
+      return send(() => client.GET('/v1/blocks', { headers: headers() }))
     },
   }
 }

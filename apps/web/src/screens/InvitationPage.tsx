@@ -10,6 +10,7 @@ import { TermsView } from '../components/TermsView'
 import { Failure, PageHeading, Written } from '../components/ui'
 import { api, failureCode, type InvitationPreview } from '../lib/api'
 import { forgetInvitationToken, takeInvitationToken } from '../lib/invitation-token'
+import { InvitationReport } from './InvitationReport'
 
 const AccountSetup = lazy(() => import('./AccountSetup'))
 
@@ -197,6 +198,7 @@ export function InvitationPage() {
               </button>
             </div>
           )}
+          <InvitationReport token={token} />
         </>
       )}
     </>

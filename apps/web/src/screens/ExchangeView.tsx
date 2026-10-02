@@ -19,7 +19,9 @@ import { Failure, Notice, PageHeading, Written } from '../components/ui'
 import { useActions, type Actions } from '../lib/actions'
 import { api, failureCode, type RevisionView } from '../lib/api'
 import { Ending } from './Ending'
+import { ExchangeSafety } from './ExchangeSafety'
 import { Fulfillment } from './Fulfillment'
+import { History } from './History'
 
 /** How often an open exchange is checked for what the other party has done. */
 const CHECK_EVERY_MS = 20_000
@@ -185,6 +187,10 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       )}
 
       {active && <Ending exchange={exchange} otherName={otherName} actions={actions} />}
+
+      <History exchange={exchange} />
+
+      <ExchangeSafety exchange={exchange} otherName={otherName} actions={actions} reload={reload} />
 
       {exchange.state !== 'CLOSED' && (
         <div className="actions">

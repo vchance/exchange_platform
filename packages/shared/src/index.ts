@@ -4,6 +4,8 @@ export type { ClosedReason, Wording } from './wording/types'
 export { CONSENT_VERSION, consentShown } from './consent'
 export { formatMessage } from './message'
 export type { MessageValues } from './message'
+export { eventMessage, joinRecord, noteKind, readWholeRecord, termsOfRevision } from './record'
+export type { HistoryPage, RecordDocument, RecordEvent, RecordRevision } from './record'
 export {
   decimalForInput,
   formatMoney,
@@ -45,6 +47,8 @@ export {
 export type { Move, MoveNote, Role } from './fulfillment'
 export { ApiFailure, createExchangeApi, failureCode } from './api'
 export type {
+  BlockedPerson,
+  BlockStatus,
   ExchangeApi,
   ExchangeApiOptions,
   InvitationPreview,
@@ -76,3 +80,5 @@ export {
   startingDraft,
 } from './composer'
 export type { ComposerKind, DraftSaver, SaveState } from './composer'
+export { REPORT_DETAILS_MAX_CHARS, REPORT_REASONS } from './safety'
+export type { ReportReason } from './safety'

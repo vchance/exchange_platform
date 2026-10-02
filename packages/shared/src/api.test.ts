@@ -193,3 +193,38 @@ test('an invitation token travels in the body, never in the address', async () =
     expect(made.init.body).toEqual({ token })
   }
 })
+
+test('reporting and blocking go out like every other call', async () => {
+  const token = 'a3'.repeat(32)
+  const { client, calls } = fakeClient()
+  const api = createExchangeApi({ client, session: holding('s3cret') })
+  await api.reportExchange(ID, 'SCAM', 'Asked for payment outside the exchange.')
+  await api.reportInvitation(token, 'UNWANTED', null)
+  await api.block(ID)
+  await api.blockStatus(ID)
+  await api.unblock(ID)
+  await api.blockedPeople()
+  await api.history(ID)
+  await api.recordPart(ID, null)
+
+  expect(calls.map((made) => `${made.method} ${made.path}`)).toEqual([
+    'POST /v1/exchanges/{id}/reports',
+    'POST /v1/invitations/report',
+    'PUT /v1/exchanges/{id}/block',
+    'GET /v1/exchanges/{id}/block',
+    'DELETE /v1/exchanges/{id}/block',
+    'GET /v1/blocks',
+    'GET /v1/exchanges/{id}/history',
+    'GET /v1/exchanges/{id}/record',
+  ])
+  for (const made of calls) {
+    expect(made.init.headers, made.path).toEqual({ Authorization: 'Bearer s3cret' })
+    // The invitation token is in a body and nowhere else.
+    expect(JSON.stringify(made.init.params ?? {})).not.toContain(token)
+  }
+  expect(calls[0].init.body).toEqual({
+    reason: 'SCAM',
+    details: 'Asked for payment outside the exchange.',
+  })
+  expect(calls[1].init.body).toEqual({ token, reason: 'UNWANTED', details: null })
+})

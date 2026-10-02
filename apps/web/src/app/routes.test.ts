@@ -9,6 +9,8 @@ test('an exchange lives at /exchanges/{id}, where notification emails link', () 
   expect(matchRoute(paths.exchange(ID))).toEqual({ name: 'exchange', id: ID })
   expect(matchRoute(`/exchanges/${ID.toUpperCase()}/`)).toEqual({ name: 'exchange', id: ID })
   expect(matchRoute(paths.revise(ID))).toEqual({ name: 'revise', id: ID })
+  expect(matchRoute(paths.record(ID))).toEqual({ name: 'record', id: ID })
+  expect(matchRoute(`/exchanges/${ID}/record/`)).toEqual({ name: 'record', id: ID })
 })
 
 test('an invitation page is /{language}/i for any language tag', () => {

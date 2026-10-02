@@ -44,6 +44,23 @@ export type NotificationKind =
   | 'CLOSED_UNRESOLVED'
   | 'CLOSED_INACTIVE'
 
+/** Events worded without saying who caused them. */
+export type NeutralEventType =
+  | 'REVISION_SUPERSEDED'
+  | 'REVISION_EXPIRED'
+  | 'AGREEMENT_IN_FORCE'
+  | 'INACTIVITY_PROMPTED'
+
+/**
+ * Events that one of the parties did. Every event type the API can return is
+ * one of these, a neutral one, or the exchange closing, so a new type fails
+ * the typecheck until each language has words for it.
+ */
+export type PartyEventType = Exclude<Schemas['EventType'], NeutralEventType | 'EXCHANGE_CLOSED'>
+
+/** What a note written with an event is: a message, a reason, a statement, or just a note. */
+export type RecordNoteKind = 'message' | 'note' | 'reason' | 'statement'
+
 /**
  * Every piece of text the product says. Each language's file in `wording/`
  * must supply all of it, so a missing translation fails the build
@@ -271,6 +288,39 @@ export interface Wording {
     ownInvitation: string
     alreadyResponded: string
   }
+  /** Reporting an exchange and blocking the other party (DESIGN.md §9). */
+  safety: {
+    heading: string
+    report: string
+    reportProposal: string
+    reportIntro: string
+    reportProposalIntro: string
+    reasonLegend: string
+    /** One entry per reason a report can give. */
+    reasons: Record<Schemas['ReportReason'], string>
+    reasonRequired: string
+    detailsLabel: string
+    detailsRequiredLabel: string
+    detailsHint: string
+    detailsRequired: string
+    sendReport: string
+    reportSent: string
+    tooManyReports: string
+    block: string
+    /** What blocking does, said before it is done: one sentence each. */
+    blockStops: string
+    blockEnds: string
+    blockKeeps: string
+    blockQuiet: string
+    confirmBlock: string
+    blocked: string
+    unblock: string
+    unblocked: string
+    blockedHeading: string
+    blockedIntro: string
+    blockedEmpty: string
+    blockedSince: string
+  }
   /**
    * What only the mobile app says. Everything else it shows is the wording the
    * web app uses for the same thing.
@@ -367,6 +417,79 @@ export interface Wording {
     addStatement: string
     sendStatement: string
     statementAdded: string
+  }
+  /**
+   * The record of an exchange: its history in the exchange view, the record
+   * page, and what the downloaded copy says about itself.
+   */
+  record: {
+    historyHeading: string
+    historyEmpty: string
+    historyEarlier: string
+    open: string
+    openHint: string
+    title: string
+    back: string
+    print: string
+    download: string
+    /** The downloaded copy's file name, without its extension. */
+    fileName: string
+    madeFor: string
+    timesIn: string
+    summaryHeading: string
+    started: string
+    closedOn: string
+    agreementIs: string
+    agreementNone: string
+    waiting: string
+    endProposed: string
+    closeRequested: string
+    /** As `closedReasons`, for a page that may be read by neither party. */
+    closedReasons: Record<ClosedReason, string>
+    aboutHeading: string
+    itemsHeading: string
+    itemFrom: string
+    since: string
+    signaturesHeading: string
+    verifiedBy: string
+    verifiedAt: string
+    consentShown: string
+    versionsNone: string
+    versionHeading: string
+    versionSent: string
+    versionAnswers: string
+    versionStatus: Record<Schemas['RevisionStatus'], string>
+    versionReplacedBy: string
+    versionSignedBy: string
+    eventsHeading: string
+    /** What a note written with an event is called. */
+    noteLabels: Record<RecordNoteKind, string>
+    /**
+     * One sentence per thing that can happen. `you` speaks to the party who
+     * did it and `named` names them, with `{name}`; an event about a revision
+     * may use `{number}`. An event about a contribution ends where the
+     * contribution's description, the parties' own words, is shown after it.
+     */
+    events: {
+      you: Record<PartyEventType, string>
+      named: Record<PartyEventType, string>
+      neutral: Record<NeutralEventType, string>
+      closed: Record<Schemas['OutcomeDto'], string>
+    }
+    /**
+     * What the service writes into a downloaded copy, and the record page
+     * shows: what a signature rests on, that what the parties recorded about
+     * delivery is theirs alone, and how to recompute a fingerprint
+     * (DESIGN.md §14, §14.1). Plain text: the service puts these in as they
+     * are, so they take no variables.
+     */
+    export: {
+      about: string
+      signatures: string
+      statements: string
+      contentHash: string
+      verification: Record<Schemas['VerificationMethod'], string>
+    }
   }
   /** One entry per error code the API can return. */
   errors: Record<ErrorCode, string>
