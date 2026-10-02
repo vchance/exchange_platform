@@ -1,0 +1,15 @@
+{
+  "name": "exchange-platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w @exchange/web",
+    "dev:mobile": "npm run start -w @exchange/mobile",
+    "build:web": "npm run build -w @exchange/web",
+    "gen:api": "cargo run --quiet --manifest-path backend/Cargo.toml --bin openapi > packages/api-client/openapi.json && npm run generate -w @exchange/api-client",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Exchange API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "The process is running.",
+        "operationId": "live",
+        "responses": {
+          "204": {
+            "description": "Running"
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "The process can reach the database.",
+        "operationId": "ready",
+        "responses": {
+          "204": {
+            "description": "Ready"
+          },
+          "503": {
+            "description": "Database unreachable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/meta": {
+      "get": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Identifies the service and its build.",
+        "operationId": "meta",
+        "responses": {
+          "200": {
+            "description": "Service identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meta"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorBody": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          }
+        }
+      },
+      "ErrorCode": {
+        "type": "string",
+        "description": "Stable codes for every refusal the API can return. Clients map these to\nwording in the user's language and never parse message text\n(DESIGN.md §13.3). Adding a code here is a contract change: the generated\nclient makes the shared wording tables fail to compile until it is covered.",
+        "enum": [
+          "STALE_REVISION",
+          "WRONG_ACTOR",
+          "ACTION_NOT_ALLOWED",
+          "CONTRIBUTION_LOCKED",
+          "CLIENT_TOO_OLD",
+          "NOT_FOUND",
+          "SERVICE_UNAVAILABLE",
+          "INTERNAL"
+        ]
+      },
+      "Meta": {
+        "type": "object",
+        "required": [
+          "service",
+          "version"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

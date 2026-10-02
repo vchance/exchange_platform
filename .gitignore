@@ -1,0 +1,23 @@
+# Dependencies and build output
+node_modules/
+target/
+dist/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Platform credentials never belong in the repository (DESIGN.md §13.3)
+*.p8
+*.p12
+*.pem
+*.key
+*.jks
+*.mobileprovision
+
+# Tooling
+.expo/
+*.tsbuildinfo
+*.log
+.DS_Store
