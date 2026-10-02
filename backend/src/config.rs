@@ -15,6 +15,7 @@ use anyhow::{Context, bail};
 use axum::http::HeaderName;
 
 use crate::auth::{CodeSender, LogSender};
+use crate::client_version::{MinimumClientVersions, parse_version};
 use crate::http::TrustedProxies;
 use crate::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
 use crate::notifications::wording::Wording;
@@ -161,6 +162,31 @@ impl WorkerConfig {
     }
 }
 
+/// An optional `MIN_CLIENT_VERSION_*` value: unset or empty means no minimum,
+/// and anything else must read as a version.
+fn min_client_version(get: Lookup<'_>, name: &str) -> anyhow::Result<Option<String>> {
+    match optional(get, name) {
+        None => Ok(None),
+        Some(value) => {
+            let value = value.trim();
+            if parse_version(value).is_none() {
+                bail!("{name}={value} is not a version such as 1.4.0");
+            }
+            Ok(Some(value.to_owned()))
+        }
+    }
+}
+
+/// The oldest build of each client that may still change anything
+/// (`crate::client_version`). Nothing is required unless a deployment says so.
+fn min_client_versions(get: Lookup<'_>) -> anyhow::Result<MinimumClientVersions> {
+    Ok(MinimumClientVersions {
+        web: min_client_version(get, "MIN_CLIENT_VERSION_WEB")?,
+        ios: min_client_version(get, "MIN_CLIENT_VERSION_IOS")?,
+        android: min_client_version(get, "MIN_CLIENT_VERSION_ANDROID")?,
+    })
+}
+
 /// Configuration for the `api` process.
 pub struct ApiConfig {
     pub database_url: String,
@@ -174,6 +200,7 @@ pub struct ApiConfig {
     /// The built web app to serve alongside the API, if any (`WEB_DIR`).
     pub web_dir: Option<PathBuf>,
     pub proxies: TrustedProxies,
+    pub min_client_versions: MinimumClientVersions,
 }
 
 impl ApiConfig {
@@ -199,6 +226,7 @@ impl ApiConfig {
             code_sender: code_sender(get)?,
             web_dir: optional(get, "WEB_DIR").map(PathBuf::from),
             proxies: trusted_proxies(get)?,
+            min_client_versions: min_client_versions(get)?,
         })
     }
 }
@@ -326,5 +354,21 @@ mod tests {
         ] {
             assert!(trusted_proxies(&lookup(&wrong)).is_err(), "{wrong:?}");
         }
+    }
+
+    #[test]
+    fn a_minimum_client_version_is_optional_but_must_be_a_version() {
+        let name = "MIN_CLIENT_VERSION_WEB";
+        let read = |value: Option<&str>| {
+            let settings = match value {
+                Some(value) => table(&[(name, value)]),
+                None => table(&[]),
+            };
+            min_client_version(&lookup(&settings), name)
+        };
+        assert_eq!(read(None).unwrap(), None);
+        assert_eq!(read(Some(" ")).unwrap(), None);
+        assert_eq!(read(Some(" 1.4.0 ")).unwrap().as_deref(), Some("1.4.0"));
+        assert!(read(Some("v1")).is_err());
     }
 }

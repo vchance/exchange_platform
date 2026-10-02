@@ -88,6 +88,8 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
                     {contribution.amount_minor != null && (
                       <p>{fmt(w.amount, { amount: money(contribution.amount_minor, currency) })}</p>
                     )}
+                    {/* Money is paid outside the product and only recorded here (DESIGN.md §11). */}
+                    {contribution.type === 'MONEY' && <p className="hint">{w.moneyOutside}</p>}
                     {contribution.quantity && (
                       <p>
                         {contribution.quantity.unit

@@ -6,8 +6,10 @@ import type {
   ErrorCode,
   ExchangeSummary,
   ExchangeView,
+  Meta,
 } from '@exchange/api-client'
 
+import { clientHeader, type ClientIdentity } from './client-version'
 import { idempotencyKeys } from './idempotency'
 import type { ReportReason } from './safety'
 
@@ -59,6 +61,11 @@ export interface ExchangeApiOptions {
   session: SessionHolding
   /** Makes an idempotency key. It must be unguessable; the default needs `crypto.randomUUID`. */
   newKey?: () => string
+  /**
+   * Which client this is and which build, named on every request so the
+   * service can refuse a change from one too old (`CLIENT_TOO_OLD`).
+   */
+  identity?: ClientIdentity
 }
 
 interface Reply<T> {
@@ -74,9 +81,10 @@ export type ExchangeApi = ReturnType<typeof createExchangeApi>
  * What differs between them is where the service is and how the session is
  * held, and both are given here.
  */
-export function createExchangeApi({ client, session, newKey }: ExchangeApiOptions) {
+export function createExchangeApi({ client, session, newKey, identity }: ExchangeApiOptions) {
   const keys = idempotencyKeys(newKey)
   let signedOut: () => void = () => {}
+  let tooOld: () => void = () => {}
 
   /** The session token, for a client that holds one. A cookie travels by itself. */
   function token(): string | null {
@@ -84,8 +92,11 @@ export function createExchangeApi({ client, session, newKey }: ExchangeApiOption
   }
 
   function headers(): Record<string, string> | undefined {
+    const sent: Record<string, string> = {}
     const held = token()
-    return held ? { Authorization: `Bearer ${held}` } : undefined
+    if (held) sent.Authorization = `Bearer ${held}`
+    if (identity) sent['X-Client-Version'] = clientHeader(identity)
+    return Object.keys(sent).length > 0 ? sent : undefined
   }
 
   async function send<T>(request: () => Promise<Reply<T>>): Promise<T> {
@@ -107,6 +118,7 @@ export function createExchangeApi({ client, session, newKey }: ExchangeApiOption
     // An error that is not the service's own came from something in between.
     if (code === null) throw new ApiFailure('SERVICE_UNAVAILABLE', true)
     if (code === 'UNAUTHENTICATED') signedOut()
+    if (code === 'CLIENT_TOO_OLD') tooOld()
     throw new ApiFailure(code)
   }
 
@@ -139,6 +151,16 @@ export function createExchangeApi({ client, session, newKey }: ExchangeApiOption
       signedOut = handler
     },
 
+    /** Registers what to do when the service says this build is too old to act. */
+    onClientTooOld(handler: () => void): void {
+      tooOld = handler
+    },
+
+    /** The service's identity, and how old a client may be. Needs no session. */
+    meta(): Promise<Meta> {
+      return send(() => client.GET('/v1/meta', { headers: headers() }))
+    },
+
     /** The signed-in account, or `null` when nobody is signed in. */
     async me(): Promise<Account | null> {
       // Without a token there is no session to ask about.
@@ -154,7 +176,9 @@ export function createExchangeApi({ client, session, newKey }: ExchangeApiOption
     },
 
     requestCode(identifier: string): Promise<void> {
-      return send(() => client.POST('/v1/auth/codes', { body: { identifier } }))
+      return send(() =>
+        client.POST('/v1/auth/codes', { headers: headers(), body: { identifier } }),
+      )
     },
 
     /**
@@ -164,6 +188,7 @@ export function createExchangeApi({ client, session, newKey }: ExchangeApiOption
     signIn(identifier: string, code: string, language: string): Promise<SessionCreated> {
       return send(() =>
         client.POST('/v1/auth/sessions', {
+          headers: headers(),
           body: { identifier, code, delivery: session.delivery, language },
         }),
       )
@@ -218,10 +243,16 @@ export function createExchangeApi({ client, session, newKey }: ExchangeApiOption
       )
     },
 
-    /** The latest of an exchange's history, with what the parties wrote along the way. */
-    history(id: string): Promise<Schemas['HistoryPage']> {
+    /**
+     * The latest of an exchange's history, with what the parties wrote along
+     * the way; or, given the `earlier` of a page, the page before it.
+     */
+    history(id: string, before?: number | null): Promise<Schemas['HistoryPage']> {
       return send(() =>
-        client.GET('/v1/exchanges/{id}/history', { headers: headers(), params: { path: { id } } }),
+        client.GET('/v1/exchanges/{id}/history', {
+          headers: headers(),
+          params: { path: { id }, query: before == null ? {} : { before } },
+        }),
       )
     },
 

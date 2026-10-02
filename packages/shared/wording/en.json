@@ -8,7 +8,9 @@
   "service": {
     "checking": "Checking the service…",
     "connected": "Connected to the service.",
-    "unreachable": "The service can’t be reached right now."
+    "unreachable": "The service can’t be reached right now.",
+    "outdatedWeb": "This page is out of date and can no longer make changes. Reload it to get the latest version.",
+    "reload": "Reload"
   },
   "notifications": {
     "email": {
@@ -145,6 +147,10 @@
         "CLOSED_INACTIVE": {
           "subject": "Your exchange was closed for inactivity ({code})",
           "body": "Nothing happened in this exchange for a long time, so it has been closed as unresolved. Each contribution keeps the status it had."
+        },
+        "REVISION_SENT_UNCONFIRMED": {
+          "subject": "The terms you were sent have changed ({code})",
+          "body": "The other party has changed the terms they sent you. Review them, then accept them if you agree. Until they confirm that you are the person they invited, you can’t decline them or send your own; you can leave the exchange instead."
         }
       }
     },
@@ -249,7 +255,12 @@
     "noParty": "No one named yet",
     "reference": "Reference {code}",
     "updated": "Updated {date}",
-    "tooManyToday": "You’ve started as many exchanges as one day allows. Try again tomorrow."
+    "tooManyToday": "You’ve started as many exchanges as one day allows. Try again tomorrow.",
+    "groupOpen": "In progress",
+    "groupDrafts": "Drafts, not sent",
+    "groupClosed": "Closed",
+    "showClosed": "Show closed exchanges ({count})",
+    "hideClosed": "Hide closed exchanges"
   },
   "states": {
     "DRAFT": "Draft, not sent",
@@ -268,7 +279,8 @@
     "DECLINED": "The proposal was declined.",
     "EXPIRED": "The proposal expired before both of you had signed it.",
     "CLOSE_REQUEST": "One of you asked to close it and the time to respond ran out. Each item keeps the status it had.",
-    "INACTIVE": "It was closed after a long time with no activity. Each item keeps the status it had."
+    "INACTIVE": "It was closed after a long time with no activity. Each item keeps the status it had.",
+    "DISCARDED": "The draft was discarded before it was sent."
   },
   "party": {
     "you": "You",
@@ -290,6 +302,14 @@
     "WAIVED": "Waived",
     "REMOVED": "Removed"
   },
+  "moneyStatus": {
+    "PENDING": "Not paid yet",
+    "CLAIMED": "Marked paid, waiting for the receiver to confirm",
+    "DISPUTED": "Disputed",
+    "ACCEPTED": "Receipt confirmed",
+    "WAIVED": "Waived",
+    "REMOVED": "Removed"
+  },
   "terms": {
     "ownWords": "The names, terms and descriptions here are the parties’ own words. Exchange never translates or changes them.",
     "partiesHeading": "Between",
@@ -308,7 +328,8 @@
     "dueAfter": "Due once “{description}” is confirmed",
     "overdue": "Overdue",
     "timezone": "Dates are in the {timezone} time zone.",
-    "fingerprint": "Fingerprint of these terms: {hash}"
+    "fingerprint": "Fingerprint of these terms: {hash}",
+    "moneyOutside": "Paid outside Exchange, however the two of you arrange it. Exchange moves no money; it only records what each of you says about this payment."
   },
   "composer": {
     "titleFirst": "New exchange",
@@ -375,7 +396,23 @@
     "staleDraft": "You have unsent changes that you started before the terms last changed.",
     "staleDraftKeep": "Keep my changes",
     "staleDraftDiscard": "Start again from the current terms",
-    "notAvailable": "There is nothing to change on this exchange right now."
+    "notAvailable": "There is nothing to change on this exchange right now.",
+    "moneyOutside": "Money is paid outside Exchange, however you two arrange it. Exchange doesn’t move or hold it; it only records that one of you says it was paid and the other says it was received.",
+    "discard": "Discard this draft",
+    "discardText": "Nothing has been sent, so nobody else has seen this. The draft closes and leaves your list. It can’t be reopened.",
+    "confirmDiscard": "Yes, discard it",
+    "effectsHeading": "What this change does to each item",
+    "effectsIntro": "Once you have both signed the change:",
+    "effectsSteer": "To adjust for an item that is already confirmed, add a new item rather than changing one.",
+    "effects": {
+      "UNTOUCHED": "Unchanged. It keeps its status.",
+      "CHANGED": "Changed. It goes back to the start: anything marked delivered or paid no longer counts, though the history keeps it.",
+      "NEW": "New. It starts as not yet delivered or paid.",
+      "REMOVED": "Removed from the agreement.",
+      "LOCKED": "Confirmed, so it can’t be changed or removed. Put it back as it was, or add a new item instead.",
+      "REUSED": "This item was removed earlier and can’t come back. Add it as a new item instead."
+    },
+    "removedCount": "{count, plural, one {# item of the agreement is removed by this change.} other {# items of the agreement are removed by this change.}}"
   },
   "consent": {
     "heading": "Signing electronically",
@@ -395,7 +432,7 @@
     "copyFailed": "It couldn’t be copied. Select the link and copy it yourself.",
     "share": "Share",
     "shareText": "I’ve sent you an exchange to review.",
-    "unclaimed": "Nobody has opened your invitation link yet.",
+    "unclaimed": "No one has joined through your invitation link yet. The proposal may have been read; joining means signing in.",
     "reissueIntro": "Lost the link, or sent it to the wrong person? Create a new one. The old link stops working.",
     "forLabel": "Who the invitation is for (optional)",
     "forHint": "Their email address or phone number. Only someone who signs in with it can then use the link. Leave it empty and whoever you give the link to can use it; you’ll be asked to confirm who they are.",
@@ -585,12 +622,31 @@
     "retractClose": "Take back the request",
     "addStatement": "Add a statement",
     "sendStatement": "Add to the record",
-    "statementAdded": "Your statement was added to the record."
+    "statementAdded": "Your statement was added to the record.",
+    "moneyMoves": {
+      "CLAIM": "I’ve paid",
+      "RECLAIM": "I’ve paid now",
+      "RETRACT_CLAIM": "Undo “I’ve paid”",
+      "CONFIRM": "I’ve received it",
+      "DISPUTE": "Dispute",
+      "WAIVE": "Waive"
+    },
+    "moneyMoveText": {
+      "CLAIM": "This records that you paid {name} outside Exchange. Exchange moves and holds no money. Only {name} can confirm they received it.",
+      "RECLAIM": "Say what you did about the dispute. {name} will be asked again to confirm they received it.",
+      "RETRACT_CLAIM": "This puts it back to not paid yet.",
+      "CONFIRM": "This records that you received the money. Confirming is final. It can’t be undone.",
+      "DISPUTE": "Say what is wrong. {name} can put it right and record the payment again.",
+      "WAIVE": "Waiving releases {name} from paying this. It can’t be undone."
+    },
+    "waitingLong": "{name} has not confirmed this since you marked it delivered on {date}. If they never do, it stays this way. You can ask to close the exchange without agreement; the record then shows this as delivered but not confirmed.",
+    "waitingLongMoney": "{name} has not confirmed receiving this since you recorded paying on {date}. If they never do, it stays this way. You can ask to close the exchange without agreement; the record then shows this as paid but not confirmed.",
+    "closeRequestLapses": "If nothing changes, it closes on {date}."
   },
   "record": {
     "historyHeading": "History",
     "historyEmpty": "Nothing has happened yet.",
-    "historyEarlier": "Earlier entries are in the full record.",
+    "historyEarlier": "Show earlier entries",
     "open": "Open the full record",
     "openHint": "Everything that was sent, signed and recorded in this exchange, to read, print or download.",
     "title": "Record of exchange {code}",
@@ -613,7 +669,8 @@
       "DECLINED": "The proposal was declined.",
       "EXPIRED": "The proposal expired before both parties had signed it.",
       "CLOSE_REQUEST": "One party asked to close it and the time to respond ran out. Each item kept the status it had.",
-      "INACTIVE": "It was closed after a long time with no activity. Each item kept the status it had."
+      "INACTIVE": "It was closed after a long time with no activity. Each item kept the status it had.",
+      "DISCARDED": "The draft was discarded by its initiator before it was sent."
     },
     "aboutHeading": "About this record",
     "itemsHeading": "Where each item of the agreement stands",
@@ -702,6 +759,20 @@
         "COMPLETED": "The exchange was completed: every required item had been confirmed or waived.",
         "ENDED_BY_AGREEMENT": "The exchange was ended by agreement. Everything still outstanding was waived.",
         "UNRESOLVED": "The exchange closed unresolved. Each item kept the status it had."
+      },
+      "moneyYou": {
+        "CONTRIBUTION_CLAIMED": "You recorded paying this:",
+        "CONTRIBUTION_CLAIM_RETRACTED": "You took back “paid” for this:",
+        "CONTRIBUTION_CONFIRMED": "You confirmed receiving this payment:",
+        "CONTRIBUTION_DISPUTED": "You disputed this payment:",
+        "CONTRIBUTION_WAIVED": "You waived this payment:"
+      },
+      "moneyNamed": {
+        "CONTRIBUTION_CLAIMED": "{name} recorded paying this:",
+        "CONTRIBUTION_CLAIM_RETRACTED": "{name} took back “paid” for this:",
+        "CONTRIBUTION_CONFIRMED": "{name} confirmed receiving this payment:",
+        "CONTRIBUTION_DISPUTED": "{name} disputed this payment:",
+        "CONTRIBUTION_WAIVED": "{name} waived this payment:"
       }
     },
     "export": {

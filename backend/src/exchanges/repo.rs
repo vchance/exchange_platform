@@ -119,6 +119,7 @@ pub fn outcome_columns(state: State) -> (Option<&'static str>, Option<&'static s
                 NotAgreed::Withdrawn => "WITHDRAWN",
                 NotAgreed::Declined => "DECLINED",
                 NotAgreed::Expired => "EXPIRED",
+                NotAgreed::Discarded => "DISCARDED",
             }),
         ),
         Outcome::Completed => (Some("COMPLETED"), None),
@@ -147,6 +148,7 @@ pub fn parse_state(state: &str, outcome: Option<&str>, reason: Option<&str>) -> 
         _ => State::Closed(Outcome::NotAgreed(match reason {
             Some("WITHDRAWN") => NotAgreed::Withdrawn,
             Some("DECLINED") => NotAgreed::Declined,
+            Some("DISCARDED") => NotAgreed::Discarded,
             _ => NotAgreed::Expired,
         })),
     }

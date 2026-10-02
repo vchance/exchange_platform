@@ -18,7 +18,7 @@ const port = Number(process.env.PORT ?? 5185)
 
 const cors = {
   'Access-Control-Allow-Origin': origin,
-  'Access-Control-Allow-Headers': 'authorization, content-type, idempotency-key',
+  'Access-Control-Allow-Headers': 'authorization, content-type, idempotency-key, x-client-version',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE',
   'Access-Control-Max-Age': '600',
   Vary: 'Origin',

@@ -116,6 +116,8 @@ export interface Sent {
   path: string;
   authorization: string | null;
   idempotencyKey: string | null;
+  /** How the app named itself and its build. */
+  clientVersion: string | null;
   body: unknown;
 }
 
@@ -146,6 +148,7 @@ export function fakeService(): FakeService {
         path,
         authorization,
         idempotencyKey: request.headers.get('Idempotency-Key'),
+        clientVersion: request.headers.get('X-Client-Version'),
         body,
       });
       const [status, answer] = respond(service, request.method, path, authorization, body);
@@ -166,6 +169,16 @@ function respond(
   body: unknown,
 ): [number, unknown] {
   const call = `${method} ${path}`;
+  if (call === 'GET /v1/meta') {
+    return [
+      200,
+      {
+        service: 'exchange-backend',
+        version: '0.0.0',
+        minimum_client_versions: { web: null, ios: null, android: null },
+      },
+    ];
+  }
   if (call === 'POST /v1/auth/codes') return [204, null];
   if (call === 'POST /v1/auth/sessions') {
     service.account = { ...ana, display_name: '', adult_confirmed: false };
@@ -178,6 +191,8 @@ function respond(
         bound: false,
         display_code: service.exchange.display_code,
         expires_at: revision.expires_at,
+        currency: service.exchange.currency,
+        timezone: service.exchange.timezone,
         revision: { ...revision, accepted_by: ['A'] },
       },
     ];

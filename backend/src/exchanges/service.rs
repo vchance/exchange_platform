@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::dto::{
     Claimant, CommandDto, Consent, CreateExchange, ExchangeSummary, ExchangeView, InvitationIssued,
     InvitationOptions, InvitationPreview, RevisionSent, RevisionView, RunCommand, SendRevision,
-    rfc3339, state_dto,
+    ViewContext, rfc3339, state_dto,
 };
 use super::repo::{self, Aggregate, NewRevision};
 use crate::auth;
@@ -250,7 +250,12 @@ async fn record_signature(
     Ok(())
 }
 
-async fn view(conn: &mut PgConnection, id: Uuid, account: Uuid) -> Result<ExchangeView, ApiError> {
+async fn view(
+    conn: &mut PgConnection,
+    rules: &Rules,
+    id: Uuid,
+    account: Uuid,
+) -> Result<ExchangeView, ApiError> {
     let (aggregate, you) = open_for(conn, id, account, false).await?;
 
     // Someone still in an open exchange needs to know that the other party
@@ -313,13 +318,32 @@ async fn view(conn: &mut PgConnection, id: Uuid, account: Uuid) -> Result<Exchan
     .fetch_optional(&mut *conn)
     .await?;
 
+    // When each contribution came to stand as it does: the moment of the
+    // event that gave it its status. A party waiting on the other needs to
+    // know how long they have been waiting.
+    let status_since = sqlx::query_as::<_, (Uuid, OffsetDateTime)>(
+        "SELECT c.id, e.occurred_at FROM contribution c
+         JOIN exchange_event e ON e.exchange_id = c.exchange_id AND e.sequence = c.last_event_seq
+         WHERE c.exchange_id = $1",
+    )
+    .bind(id)
+    .fetch_all(&mut *conn)
+    .await?
+    .into_iter()
+    .map(|(id, at)| (ContributionId(id), at))
+    .collect();
+
     Ok(ExchangeView::build(
         &aggregate,
         you,
-        claimant,
-        invitation_open,
-        other_party_left,
-        draft,
+        ViewContext {
+            claimant,
+            invitation_open,
+            other_party_left,
+            draft,
+            status_since,
+        },
+        rules,
     ))
 }
 
@@ -414,7 +438,7 @@ pub async fn create(
     .execute(&mut *tx)
     .await?;
 
-    let view = view(&mut tx, id, session.account_id).await?;
+    let view = view(&mut tx, rules, id, session.account_id).await?;
     tx.commit().await?;
     Ok(view)
 }
@@ -470,14 +494,19 @@ pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>
         .collect())
 }
 
-pub async fn get(db: &PgPool, session: &Session, id: Uuid) -> Result<ExchangeView, ApiError> {
+pub async fn get(
+    db: &PgPool,
+    rules: &Rules,
+    session: &Session,
+    id: Uuid,
+) -> Result<ExchangeView, ApiError> {
     // One snapshot for the several queries a view takes, so it never shows
     // parts of two different versions.
     let mut tx = db.begin().await?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
         .execute(&mut *tx)
         .await?;
-    view(&mut tx, id, session.account_id).await
+    view(&mut tx, rules, id, session.account_id).await
 }
 
 /// Saves the caller's working copy. Private to them and never binding.
@@ -561,7 +590,7 @@ pub async fn send_revision(
 
     if already_applied(&mut tx, session.account_id, &idempotency).await? {
         // The token was shown once, the first time; it cannot be shown again.
-        let exchange = view(&mut tx, id, session.account_id).await?;
+        let exchange = view(&mut tx, &settings.rules, id, session.account_id).await?;
         return Ok(RevisionSent {
             exchange,
             invitation_token: None,
@@ -658,7 +687,7 @@ pub async fn send_revision(
         None
     };
 
-    let exchange = view(&mut tx, id, session.account_id).await?;
+    let exchange = view(&mut tx, &settings.rules, id, session.account_id).await?;
     tx.commit().await?;
     Ok(RevisionSent {
         exchange,
@@ -686,7 +715,7 @@ pub async fn run_command(
     let at = now();
 
     if already_applied(&mut tx, session.account_id, &idempotency).await? {
-        return view(&mut tx, id, session.account_id).await;
+        return view(&mut tx, &settings.rules, id, session.account_id).await;
     }
     if body.expected_version != aggregate.version {
         return Err(ErrorCode::VersionConflict.into());
@@ -717,6 +746,7 @@ pub async fn run_command(
             },
             None,
         ),
+        CommandDto::Discard => (Command::Discard, None),
         CommandDto::Contribution {
             contribution,
             action,
@@ -800,6 +830,17 @@ pub async fn run_command(
 
     repo::persist(&mut tx, &aggregate, &decision, actor, note.as_deref(), at).await?;
 
+    // A discarded draft's working copy goes with it: it was never sent and
+    // is nobody's record of anything.
+    if aggregate.exchange.state == State::Draft
+        && matches!(decision.exchange.state, State::Closed(_))
+    {
+        sqlx::query("DELETE FROM exchange_draft WHERE exchange_id = $1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
     // The parties' names and the risk tier follow the agreement in force.
     let came_into_force = decision
         .events
@@ -817,7 +858,7 @@ pub async fn run_command(
         }
     }
 
-    let view = view(&mut tx, id, session.account_id).await?;
+    let view = view(&mut tx, &settings.rules, id, session.account_id).await?;
     tx.commit().await?;
     Ok(view)
 }
@@ -978,6 +1019,8 @@ pub async fn preview_invitation(db: &PgPool, token: &str) -> Result<InvitationPr
         display_code: aggregate.display_code.clone(),
         expires_at: rfc3339(invitation.expires_at),
         bound: invitation.bound_to.is_some(),
+        currency: aggregate.currency.clone(),
+        timezone: aggregate.timezone.clone(),
         revision: RevisionView::from_record(open),
     })
 }
@@ -1012,7 +1055,7 @@ pub async fn claim_invitation(
     // place is still theirs. For someone since removed from it, the link is
     // spent like any other, and says so the same way.
     if found.claimed_by == Some(account) && aggregate.accounts[1] == Some(account) {
-        return view(&mut tx, exchange, account).await;
+        return view(&mut tx, rules, exchange, account).await;
     }
 
     let initiator = aggregate.accounts[0];
@@ -1075,7 +1118,7 @@ pub async fn claim_invitation(
     claimed.accounts[1] = Some(account);
     repo::persist(&mut tx, &claimed, &decision, actor, None, at).await?;
 
-    let view = view(&mut tx, exchange, account).await?;
+    let view = view(&mut tx, rules, exchange, account).await?;
     tx.commit().await?;
     Ok(view)
 }

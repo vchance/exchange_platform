@@ -83,9 +83,11 @@ test('this is a device build, not the browser harness', () => {
 test('signing in keeps the token in secure storage and nowhere else, then asks for the profile', async () => {
   await open('/', { signedIn: false });
 
-  // Nobody is signed in: the first screen is the way to sign in.
+  // Nobody is signed in: the first screen is the way to sign in. The app
+  // has asked the service nothing but how old a build may be.
   await screen.findByText(w.signIn.intro);
-  expect(service.sent).toEqual([]);
+  expect(service.sent.map((request) => request.path)).toEqual(['/v1/meta']);
+  expect(service.sent[0].body).toBeNull();
 
   await fireEvent.changeText(
     screen.getByLabelText(w.signIn.identifierLabel),
@@ -133,8 +135,15 @@ test('a session from an earlier launch opens straight onto the exchanges', async
   await open('/', { signedIn: true });
   await screen.findByText(w.home.title);
   await screen.findByText('With Ben Ortiz');
-  expect(service.sent.map((request) => request.path)).toEqual(['/v1/me', '/v1/exchanges']);
-  for (const request of service.sent) expect(request.authorization).toBe(`Bearer ${TOKEN}`);
+  // Besides asking how old a build may be, which needs no session.
+  const asked = service.sent.filter((request) => request.path !== '/v1/meta');
+  expect(asked.map((request) => request.path)).toEqual(['/v1/me', '/v1/exchanges']);
+  for (const request of asked) expect(request.authorization).toBe(`Bearer ${TOKEN}`);
+  expect(service.sent.some((request) => request.path === '/v1/meta')).toBe(true);
+  // Every request names the client and its build.
+  for (const request of service.sent) {
+    expect(request.clientVersion).toMatch(/^(ios|android)\/\d+(\.\d+)*$/);
+  }
 });
 
 test('a token the service no longer honors is dropped, and the app asks to sign in', async () => {
@@ -195,7 +204,9 @@ test('when the exchange changed underneath, it is reloaded and the person is tol
   // The refusal says what happened, and the screen shows what the exchange is now.
   await screen.findByText(w.errors.VERSION_CONFLICT);
   await screen.findByText('Ben Ortiz proposed ending this exchange.');
-  expect(screen.getAllByText(w.contributionStatus.PENDING)).toHaveLength(2);
+  // The repair is spoken of as a delivery and the payment as money.
+  expect(screen.getAllByText(w.contributionStatus.PENDING)).toHaveLength(1);
+  expect(screen.getAllByText(w.moneyStatus.PENDING)).toHaveLength(1);
   // The history is read again with it, since the exchange is a newer version.
   await waitFor(() => {
     const after = service.sent.slice(service.sent.findIndex((r) => r.path.endsWith('/commands')));
@@ -246,7 +257,7 @@ test('with no link to open, an invitation can be pasted', async () => {
   await fireEvent.changeText(screen.getByLabelText(pasting.label), 'https://example.test/');
   await fireEvent.press(screen.getByText(pasting.open));
   await screen.findByText(pasting.invalid);
-  expect(service.sent).toEqual([]);
+  expect(service.sent.filter((request) => request.path !== '/v1/meta')).toEqual([]);
 
   await fireEvent.changeText(
     screen.getByLabelText(pasting.label),

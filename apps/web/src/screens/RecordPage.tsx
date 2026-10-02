@@ -1,7 +1,9 @@
 import type { components } from '@exchange/api-client'
 import {
+  moneyIds,
   recordFile,
   recordMoments,
+  statusWording,
   termsOfRevision,
   useRecord,
   verificationText,
@@ -68,6 +70,8 @@ function Record({ record }: { record: RecordDocument }) {
   const when = useMemo(() => recordMoments(language, exchange.timezone), [language, exchange.timezone])
   const code = exchange.display_code
   const reason = exchange.closed_reason
+  // Money is spoken of in words for paying and receiving (DESIGN.md §11).
+  const money = useMemo(() => moneyIds(record.revisions.map(termsOfRevision)), [record])
 
   return (
     // Everyone is named here, the reader included: the page may be printed
@@ -159,7 +163,9 @@ function Record({ record }: { record: RecordDocument }) {
               <li key={contribution.id} className="contribution">
                 <Written>{contribution.description}</Written>
                 <p>{fmt(w.itemFrom, { name: parties[contribution.from] })}</p>
-                <p className="status">{wording.contributionStatus[contribution.status]}</p>
+                <p className="status">
+                  {statusWording(wording, contribution.status, money.has(contribution.id))}
+                </p>
                 {contribution.since && (
                   <p className="hint">{fmt(w.since, { date: when(contribution.since) })}</p>
                 )}
@@ -184,7 +190,13 @@ function Record({ record }: { record: RecordDocument }) {
         {record.events.length === 0 ? (
           <p>{w.historyEmpty}</p>
         ) : (
-          <EventList events={record.events} parties={parties} reader={null} when={when} />
+          <EventList
+            events={record.events}
+            parties={parties}
+            reader={null}
+            when={when}
+            money={money}
+          />
         )}
       </section>
     </div>

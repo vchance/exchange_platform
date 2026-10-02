@@ -111,6 +111,57 @@ fn sending_the_first_revision_opens_the_negotiation() {
 }
 
 #[test]
+fn a_draft_never_sent_can_be_discarded_by_its_initiator() {
+    let mut scenario = Scenario::draft();
+    assert_eq!(
+        scenario.refused(B, Command::Discard, START),
+        Refusal::WrongActor
+    );
+    assert_eq!(
+        scenario.refused(Actor::System, Command::Discard, START),
+        Refusal::WrongActor
+    );
+
+    scenario.ok(A, Command::Discard, START);
+    assert_eq!(
+        scenario.closed(),
+        Some(Outcome::NotAgreed(NotAgreed::Discarded))
+    );
+    assert_eq!(
+        scenario.events,
+        [Event::Closed {
+            outcome: Outcome::NotAgreed(NotAgreed::Discarded),
+            waived: Vec::new(),
+        }]
+    );
+    assert_eq!(scenario.exchange.open, None);
+    assert_eq!(scenario.exchange.in_force, None);
+    // Closed is closed: the draft cannot be revived by sending.
+    assert_eq!(
+        scenario.refused(A, send(1, fence_job()), START),
+        Refusal::NotAllowed
+    );
+}
+
+#[test]
+fn once_something_has_been_sent_there_is_no_discarding() {
+    let scenario = Scenario::negotiating();
+    assert_eq!(
+        scenario.refused(A, Command::Discard, START),
+        Refusal::NotAllowed
+    );
+    let scenario = Scenario::active();
+    assert_eq!(
+        scenario.refused(A, Command::Discard, START),
+        Refusal::NotAllowed
+    );
+    assert_eq!(
+        scenario.refused(B, Command::Discard, START),
+        Refusal::NotAllowed
+    );
+}
+
+#[test]
 fn only_the_initiator_can_send_from_a_draft() {
     let scenario = Scenario::draft();
     assert_eq!(

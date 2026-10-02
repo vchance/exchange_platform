@@ -24,6 +24,7 @@ async fn main() -> anyhow::Result<()> {
             // (DESIGN.md §14.1); the real version replaces it then.
             consent_version: "draft-1".to_owned(),
             proxies: config.proxies,
+            min_client_versions: config.min_client_versions,
         }),
         code_sender: config.code_sender,
     };

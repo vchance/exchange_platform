@@ -8,7 +8,9 @@
   "service": {
     "checking": "Comprobando el servicio…",
     "connected": "Conectado al servicio.",
-    "unreachable": "No se puede conectar con el servicio en este momento."
+    "unreachable": "No se puede conectar con el servicio en este momento.",
+    "outdatedWeb": "Esta página está desactualizada y ya no puede hacer cambios. Recárgala para obtener la versión más reciente.",
+    "reload": "Recargar"
   },
   "notifications": {
     "email": {
@@ -145,6 +147,10 @@
         "CLOSED_INACTIVE": {
           "subject": "Tu intercambio se cerró por inactividad ({code})",
           "body": "No pasó nada en este intercambio durante mucho tiempo, así que se cerró como no resuelto. Cada contribución conserva el estado que tenía."
+        },
+        "REVISION_SENT_UNCONFIRMED": {
+          "subject": "Cambiaron los términos que te enviaron ({code})",
+          "body": "La otra parte cambió los términos que te envió. Revísalos y luego acéptalos si estás de acuerdo. Hasta que confirme que eres la persona a la que invitó, no puedes rechazarlos ni enviar los tuyos; en cambio, puedes salir del intercambio."
         }
       }
     },
@@ -249,7 +255,12 @@
     "noParty": "Aún sin nombre de la otra parte",
     "reference": "Referencia {code}",
     "updated": "Actualizado el {date}",
-    "tooManyToday": "Ya iniciaste todos los intercambios que se permiten en un día. Inténtalo mañana."
+    "tooManyToday": "Ya iniciaste todos los intercambios que se permiten en un día. Inténtalo mañana.",
+    "groupOpen": "En curso",
+    "groupDrafts": "Borradores, sin enviar",
+    "groupClosed": "Cerrados",
+    "showClosed": "Mostrar los intercambios cerrados ({count})",
+    "hideClosed": "Ocultar los intercambios cerrados"
   },
   "states": {
     "DRAFT": "Borrador, sin enviar",
@@ -268,7 +279,8 @@
     "DECLINED": "La propuesta fue rechazada.",
     "EXPIRED": "La propuesta venció antes de que ambas partes la firmaran.",
     "CLOSE_REQUEST": "Una de las partes pidió cerrarlo y se acabó el plazo para responder. Cada elemento conserva el estado que tenía.",
-    "INACTIVE": "Se cerró después de mucho tiempo sin actividad. Cada elemento conserva el estado que tenía."
+    "INACTIVE": "Se cerró después de mucho tiempo sin actividad. Cada elemento conserva el estado que tenía.",
+    "DISCARDED": "El borrador se descartó antes de enviarse."
   },
   "party": {
     "you": "Tú",
@@ -290,6 +302,14 @@
     "WAIVED": "Dispensado",
     "REMOVED": "Eliminado"
   },
+  "moneyStatus": {
+    "PENDING": "Aún sin pagar",
+    "CLAIMED": "Marcado como pagado, en espera de que quien lo recibe confirme",
+    "DISPUTED": "En disputa",
+    "ACCEPTED": "Recepción confirmada",
+    "WAIVED": "Dispensado",
+    "REMOVED": "Eliminado"
+  },
   "terms": {
     "ownWords": "Los nombres, términos y descripciones que aparecen aquí son palabras de las propias partes. Exchange nunca las traduce ni las cambia.",
     "partiesHeading": "Entre",
@@ -308,7 +328,8 @@
     "dueAfter": "Vence cuando se confirme «{description}»",
     "overdue": "Atrasado",
     "timezone": "Las fechas están en la zona horaria {timezone}.",
-    "fingerprint": "Huella de estos términos: {hash}"
+    "fingerprint": "Huella de estos términos: {hash}",
+    "moneyOutside": "Se paga fuera de Exchange, como lo acuerden entre ustedes. Exchange no mueve dinero; solo registra lo que cada parte dice sobre este pago."
   },
   "composer": {
     "titleFirst": "Nuevo intercambio",
@@ -375,7 +396,23 @@
     "staleDraft": "Tienes cambios sin enviar que empezaste antes del último cambio en los términos.",
     "staleDraftKeep": "Conservar mis cambios",
     "staleDraftDiscard": "Empezar de nuevo desde los términos actuales",
-    "notAvailable": "Por ahora no hay nada que cambiar en este intercambio."
+    "notAvailable": "Por ahora no hay nada que cambiar en este intercambio.",
+    "moneyOutside": "El dinero se paga fuera de Exchange, como lo acuerden entre ustedes. Exchange no lo mueve ni lo retiene; solo registra que una parte dice que lo pagó y la otra dice que lo recibió.",
+    "discard": "Descartar este borrador",
+    "discardText": "No se ha enviado nada, así que nadie más lo ha visto. El borrador se cierra y sale de tu lista. No se puede reabrir.",
+    "confirmDiscard": "Sí, descartarlo",
+    "effectsHeading": "Qué hace este cambio con cada elemento",
+    "effectsIntro": "Cuando ambas partes hayan firmado el cambio:",
+    "effectsSteer": "Para compensar un elemento que ya está confirmado, agrega un elemento nuevo en vez de cambiar uno.",
+    "effects": {
+      "UNTOUCHED": "Sin cambios. Conserva su estado.",
+      "CHANGED": "Cambiado. Vuelve al inicio: lo que se haya marcado como entregado o pagado deja de contar, aunque el historial lo conserva.",
+      "NEW": "Nuevo. Empieza como aún sin entregar ni pagar.",
+      "REMOVED": "Se quita del acuerdo.",
+      "LOCKED": "Ya está confirmado, así que no se puede cambiar ni quitar. Déjalo como estaba o agrega un elemento nuevo.",
+      "REUSED": "Este elemento se quitó antes y no puede volver. Agrégalo como un elemento nuevo."
+    },
+    "removedCount": "{count, plural, one {# elemento del acuerdo se quita con este cambio.} other {# elementos del acuerdo se quitan con este cambio.}}"
   },
   "consent": {
     "heading": "Firma electrónica",
@@ -395,7 +432,7 @@
     "copyFailed": "No se pudo copiar. Selecciona el enlace y cópialo tú mismo.",
     "share": "Compartir",
     "shareText": "Te envié un intercambio para que lo revises.",
-    "unclaimed": "Nadie ha abierto todavía tu enlace de invitación.",
+    "unclaimed": "Nadie se ha unido todavía a través de tu enlace de invitación. Puede que alguien haya leído la propuesta; unirse implica iniciar sesión.",
     "reissueIntro": "¿Perdiste el enlace o se lo enviaste a la persona equivocada? Crea uno nuevo. El enlace anterior deja de funcionar.",
     "forLabel": "Para quién es la invitación (opcional)",
     "forHint": "Su correo electrónico o número de teléfono. Solo quien inicie sesión con él podrá usar el enlace. Si lo dejas vacío, podrá usarlo quien reciba el enlace, y se te pedirá confirmar quién es.",
@@ -585,12 +622,31 @@
     "retractClose": "Retirar la solicitud",
     "addStatement": "Agregar una declaración",
     "sendStatement": "Agregar al registro",
-    "statementAdded": "Tu declaración se agregó al registro."
+    "statementAdded": "Tu declaración se agregó al registro.",
+    "moneyMoves": {
+      "CLAIM": "Ya pagué",
+      "RECLAIM": "Ya pagué ahora",
+      "RETRACT_CLAIM": "Deshacer «ya pagué»",
+      "CONFIRM": "Lo recibí",
+      "DISPUTE": "Disputar",
+      "WAIVE": "Dispensar"
+    },
+    "moneyMoveText": {
+      "CLAIM": "Esto registra que le pagaste a {name} fuera de Exchange. Exchange no mueve ni retiene dinero. Solo {name} puede confirmar que lo recibió.",
+      "RECLAIM": "Explica qué hiciste respecto a la disputa. Se le pedirá a {name} que confirme de nuevo que lo recibió.",
+      "RETRACT_CLAIM": "Esto lo regresa a aún sin pagar.",
+      "CONFIRM": "Esto registra que recibiste el dinero. Confirmar es definitivo. No se puede deshacer.",
+      "DISPUTE": "Explica qué está mal. {name} puede corregirlo y registrar el pago de nuevo.",
+      "WAIVE": "Dispensarlo libera a {name} de pagar esto. No se puede deshacer."
+    },
+    "waitingLong": "{name} no ha confirmado esto desde que lo marcaste como entregado el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrar el intercambio sin acuerdo; el registro mostrará entonces esto como entregado pero sin confirmar.",
+    "waitingLongMoney": "{name} no ha confirmado haber recibido esto desde que registraste el pago el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrar el intercambio sin acuerdo; el registro mostrará entonces esto como pagado pero sin confirmar.",
+    "closeRequestLapses": "Si nada cambia, se cierra el {date}."
   },
   "record": {
     "historyHeading": "Historial",
     "historyEmpty": "Todavía no ha pasado nada.",
-    "historyEarlier": "Las entradas anteriores están en el registro completo.",
+    "historyEarlier": "Mostrar las entradas anteriores",
     "open": "Abrir el registro completo",
     "openHint": "Todo lo que se envió, se firmó y se registró en este intercambio, para leerlo, imprimirlo o descargarlo.",
     "title": "Registro del intercambio {code}",
@@ -613,7 +669,8 @@
       "DECLINED": "La propuesta fue rechazada.",
       "EXPIRED": "La propuesta venció antes de que ambas partes la firmaran.",
       "CLOSE_REQUEST": "Una de las partes pidió cerrarlo y se acabó el plazo para responder. Cada elemento conservó el estado que tenía.",
-      "INACTIVE": "Se cerró después de mucho tiempo sin actividad. Cada elemento conservó el estado que tenía."
+      "INACTIVE": "Se cerró después de mucho tiempo sin actividad. Cada elemento conservó el estado que tenía.",
+      "DISCARDED": "Quien lo inició descartó el borrador antes de enviarlo."
     },
     "aboutHeading": "Acerca de este registro",
     "itemsHeading": "Cómo está cada elemento del acuerdo",
@@ -702,6 +759,20 @@
         "COMPLETED": "El intercambio se completó: todos los elementos obligatorios habían sido confirmados o dispensados.",
         "ENDED_BY_AGREEMENT": "El intercambio se terminó de común acuerdo. Se dispensó todo lo que seguía pendiente.",
         "UNRESOLVED": "El intercambio se cerró sin resolver. Cada elemento conservó el estado que tenía."
+      },
+      "moneyYou": {
+        "CONTRIBUTION_CLAIMED": "Registraste el pago de esto:",
+        "CONTRIBUTION_CLAIM_RETRACTED": "Deshiciste «pagado» para esto:",
+        "CONTRIBUTION_CONFIRMED": "Confirmaste haber recibido este pago:",
+        "CONTRIBUTION_DISPUTED": "Disputaste este pago:",
+        "CONTRIBUTION_WAIVED": "Dispensaste este pago:"
+      },
+      "moneyNamed": {
+        "CONTRIBUTION_CLAIMED": "{name} registró el pago de esto:",
+        "CONTRIBUTION_CLAIM_RETRACTED": "{name} deshizo «pagado» para esto:",
+        "CONTRIBUTION_CONFIRMED": "{name} confirmó haber recibido este pago:",
+        "CONTRIBUTION_DISPUTED": "{name} disputó este pago:",
+        "CONTRIBUTION_WAIVED": "{name} dispensó este pago:"
       }
     },
     "export": {

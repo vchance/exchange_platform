@@ -44,6 +44,10 @@ export function Ending({ exchange, otherName, actions }: Props) {
       {closeBy !== null && closeBy !== you && (
         <p>{fmt(w.closeRequestedByOther, { name: otherName, date: requestedOn })}</p>
       )}
+      {/* The service works out when the window ends, so both parties see one date. */}
+      {closeBy !== null && exchange.close_request_lapses_at && (
+        <p>{fmt(w.closeRequestLapses, { date: moment(exchange.close_request_lapses_at) })}</p>
+      )}
       {stated && closeBy !== null && <Notice>{w.statementAdded}</Notice>}
 
       <div className="actions">

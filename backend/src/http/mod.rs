@@ -15,6 +15,7 @@ use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 
 use crate::auth::{AuthRules, CodeSender};
+use crate::client_version::{self, MinimumClientVersions};
 use crate::domain::Rules;
 use crate::error::{ErrorBody, ErrorCode};
 
@@ -43,6 +44,9 @@ pub struct Settings {
     pub consent_version: String,
     /// Which header, if any, names the requester's address.
     pub proxies: TrustedProxies,
+    /// The oldest build of each client that may still change anything
+    /// (`crate::client_version`). None required unless configured.
+    pub min_client_versions: MinimumClientVersions,
 }
 
 #[derive(Clone)]
@@ -62,7 +66,11 @@ pub fn router(state: AppState, web: Option<WebApp>) -> Router {
     let api = Router::new()
         .route("/healthz", get(health::live))
         .route("/readyz", get(health::ready))
-        .nest("/v1", v1::router());
+        .nest("/v1", v1::router())
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            client_version::refuse_old_clients,
+        ));
     let app = match web {
         Some(web) => api.fallback_service(web.router()),
         None => api,
@@ -138,7 +146,7 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
         safety::unblock,
         safety::blocked_people,
     ),
-    components(schemas(ErrorBody, ErrorCode))
+    components(schemas(ErrorBody, ErrorCode, MinimumClientVersions))
 )]
 struct ApiDoc;
 

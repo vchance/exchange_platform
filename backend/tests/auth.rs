@@ -94,6 +94,7 @@ impl App {
                 rules: Default::default(),
                 consent_version: "test".to_owned(),
                 proxies: TrustedProxies::none(),
+                min_client_versions: Default::default(),
             }),
             code_sender: outbox.clone(),
         };

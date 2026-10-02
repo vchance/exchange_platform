@@ -778,14 +778,15 @@ async fn what_was_waiting_to_be_sent_to_a_removed_claimant_is_not_sent() {
     let sam = app.user("Sam Stranger").await;
     claim(&app, &sam, &deal.invitation).await.ok();
 
-    // Ana changes her offer while Sam is in Ben's place. Sam is told, as
-    // the other party would be; the worker has not sent it yet.
+    // Ana changes her offer while Sam is in Ben's place. Sam is told, in the
+    // words for someone not yet confirmed, who can sign or leave and nothing
+    // else; the worker has not sent it yet.
     let mut changed = fence_job(deal.repair, deal.payment);
     changed["contributions"][1]["amount_minor"] = json!(45000);
     app.send(&deal.ana, exchange, changed).await.ok();
     assert_eq!(
         queued(&app, &sam, exchange).await,
-        [("REVISION_SENT".to_owned(), None)]
+        [("REVISION_SENT_UNCONFIRMED".to_owned(), None)]
     );
     // Sam had started on an answer, kept for them alone.
     app.call(

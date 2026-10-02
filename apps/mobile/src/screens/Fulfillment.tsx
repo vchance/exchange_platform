@@ -2,15 +2,19 @@ import type { components } from '@exchange/api-client';
 import {
   moveCommand,
   movesFor,
+  moveTextWording,
+  moveWording,
   noteFor,
   NOTE_MAX_CHARS,
+  statusWording,
+  waitingLong,
   type Actions as ExchangeActions,
   type Move,
   type Slot,
 } from '@exchange/shared';
 import { useState } from 'react';
 
-import { Actions, Button, Failure, P, Panel, TextField } from '../components/ui';
+import { Actions, Button, Failure, Notice, P, Panel, TextField } from '../components/ui';
 import { useI18n } from '../lib/context';
 
 type Contribution = components['schemas']['ContributionDto'];
@@ -19,6 +23,8 @@ type Status = components['schemas']['Status'];
 interface Props {
   contribution: Contribution;
   status: Status;
+  /** When it came to stand this way, RFC 3339; the service says. */
+  since: string | null;
   you: Slot;
   /** The other party's name, for telling the person who an action affects. */
   otherName: string;
@@ -31,25 +37,36 @@ interface Props {
  * Where one contribution stands and what the reader can do about it: the
  * provider marks it delivered, the recipient confirms, disputes or waives
  * (DESIGN.md §5.2). A claim is never a confirmation, and the two are worded
- * differently so neither party mistakes one for the other.
+ * differently so neither party mistakes one for the other. Money is paid
+ * outside the product and only recorded here, so for money the words are for
+ * paying and receiving, never for delivering (DESIGN.md §11).
  */
-export function Fulfillment({ contribution, status, you, otherName, active, actions }: Props) {
-  const { wording } = useI18n();
+export function Fulfillment({ contribution, status, since, you, otherName, active, actions }: Props) {
+  const { wording, fmt, moment } = useI18n();
   const w = wording.exchange;
+  const money = contribution.type === 'MONEY';
   const role = contribution.from === you ? 'PROVIDER' : 'RECIPIENT';
   const moves = active ? movesFor(status, role) : [];
   const panelOf = (move: Move) => `move:${contribution.id}:${move}`;
   const opened = moves.find((move) => actions.panel === panelOf(move));
+  // A claim nobody answers stays a claim (DESIGN.md §5.2). After a while the
+  // provider is pointed to the way out, rather than left waiting.
+  const stuck = active && role === 'PROVIDER' && waitingLong(status, since);
 
   return (
     <>
-      <P style={{ fontWeight: '600' }}>{wording.contributionStatus[status]}</P>
+      <P style={{ fontWeight: '600' }}>{statusWording(wording, status, money)}</P>
+      {stuck && since ? (
+        <Notice quiet>
+          {fmt(money ? w.waitingLongMoney : w.waitingLong, { name: otherName, date: moment(since) })}
+        </Notice>
+      ) : null}
       {moves.length > 0 && (
         <Actions>
           {moves.map((move) => (
             <Button
               key={move}
-              label={w.moves[move]}
+              label={moveWording(wording, move, money)}
               expanded={opened === move}
               disabled={actions.busy}
               onPress={() => actions.open(panelOf(move))}
@@ -61,6 +78,7 @@ export function Fulfillment({ contribution, status, you, otherName, active, acti
         <MovePanel
           key={opened}
           move={opened}
+          money={money}
           contribution={contribution.id}
           otherName={otherName}
           actions={actions}
@@ -72,18 +90,20 @@ export function Fulfillment({ contribution, status, you, otherName, active, acti
 
 interface MovePanelProps {
   move: Move;
+  money: boolean;
   contribution: string;
   otherName: string;
   actions: ExchangeActions;
 }
 
 /** The second look before a move is sent, with the note it takes or needs. */
-function MovePanel({ move, contribution, otherName, actions }: MovePanelProps) {
+function MovePanel({ move, money, contribution, otherName, actions }: MovePanelProps) {
   const { wording, fmt } = useI18n();
   const w = wording.exchange;
   const [note, setNote] = useState('');
   const [missing, setMissing] = useState(false);
   const { takes, label } = noteFor(move);
+  const title = moveWording(wording, move, money);
 
   function submit() {
     const command = moveCommand(move, contribution, note);
@@ -92,8 +112,8 @@ function MovePanel({ move, contribution, otherName, actions }: MovePanelProps) {
   }
 
   return (
-    <Panel title={w.moves[move]}>
-      <P>{fmt(w.moveText[move], { name: otherName })}</P>
+    <Panel title={title}>
+      <P>{fmt(moveTextWording(wording, move, money), { name: otherName })}</P>
       {takes && (
         <TextField
           label={w[label]}
@@ -110,12 +130,7 @@ function MovePanel({ move, contribution, otherName, actions }: MovePanelProps) {
       )}
       <Failure code={actions.failure} />
       <Actions>
-        <Button
-          variant="primary"
-          label={w.moves[move]}
-          disabled={actions.busy}
-          onPress={submit}
-        />
+        <Button variant="primary" label={title} disabled={actions.busy} onPress={submit} />
         <Button label={wording.common.cancel} disabled={actions.busy} onPress={actions.close} />
       </Actions>
     </Panel>

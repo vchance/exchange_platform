@@ -26,9 +26,9 @@
 //! like any other (the same way a block ends open offers, `crate::safety`):
 //!
 //! * A draft never sent has no history and nobody else in it. Its working
-//!   copy is deleted and the name on it blanked. The rules have no command
-//!   that closes a draft, and the service may not delete an exchange row, so
-//!   an empty draft remains that nobody can open.
+//!   copy is deleted and the name on it blanked. Discarding a draft is its
+//!   initiator's own act (`Command::Discard`), and the service may not
+//!   delete an exchange row, so an empty draft remains that nobody can open.
 //! * In a negotiation, the offer on the table is withdrawn if the departing
 //!   party sent it and declined if the other did, which closes the exchange
 //!   with nothing agreed. The one exception is someone who had opened an

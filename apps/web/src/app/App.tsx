@@ -1,10 +1,17 @@
 import type { Account, ErrorCode } from '@exchange/api-client'
-import { directionOf, languages, pickLanguage, type Language, type Wording } from '@exchange/shared'
+import {
+  directionOf,
+  isClientTooOld,
+  languages,
+  pickLanguage,
+  type Language,
+  type Wording,
+} from '@exchange/shared'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { AccountDeleted } from '../components/AccountDeleted'
 import { Failure, PageHeading } from '../components/ui'
-import { api, failureCode, onSignedOut } from '../lib/api'
+import { api, failureCode, onClientTooOld, onSignedOut, WEB_CLIENT } from '../lib/api'
 import { InvitationPage } from '../screens/InvitationPage'
 import {
   createI18n,
@@ -76,6 +83,28 @@ export function App({ initialLanguage, initialWording }: Props) {
   // A session can end at any time: it expires, or is signed out elsewhere.
   useEffect(() => onSignedOut(() => setAccount(null)), [setAccount])
 
+  // A page left open can fall behind the service. It asks at startup how old
+  // a build may be, and is told again if the service refuses a change from
+  // it; either way it stops offering changes it cannot make.
+  const [outdated, setOutdated] = useState(false)
+  useEffect(() => onClientTooOld(() => setOutdated(true)), [])
+  useEffect(() => {
+    let cancelled = false
+    api.meta().then(
+      (meta) => {
+        if (!cancelled && isClientTooOld(meta.minimum_client_versions, WEB_CLIENT)) {
+          setOutdated(true)
+        }
+      },
+      () => {
+        // Nothing to compare against; the service's refusals still apply.
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   // The wording, `lang`, `dir` and every format change together, once the
   // new language's wording has arrived.
   const [shown, setShown] = useState({ language: initialLanguage, wording: initialWording })
@@ -136,13 +165,13 @@ export function App({ initialLanguage, initialWording }: Props) {
   return (
     <I18nContext value={i18n}>
       <SessionContext value={session}>
-        <Shell />
+        <Shell outdated={outdated} />
       </SessionContext>
     </I18nContext>
   )
 }
 
-function Shell() {
+function Shell({ outdated }: { outdated: boolean }) {
   const { wording, language, setLanguage } = useI18n()
   const { account } = useSession()
   const pathname = usePathname()
@@ -150,7 +179,9 @@ function Shell() {
   const current = (name: string) => (route.name === name ? 'page' : undefined)
 
   let page: ReactNode
-  switch (route.name) {
+  if (outdated) {
+    page = <Outdated />
+  } else switch (route.name) {
     case 'invitation':
       page = <InvitationPage />
       break
@@ -265,6 +296,26 @@ function NotFound() {
       <p>
         <Link to={paths.home}>{wording.common.goHome}</Link>
       </p>
+    </>
+  )
+}
+
+/**
+ * This build is older than the service accepts changes from. On the web the
+ * update is a reload, so that is what is offered, and nothing else is: a page
+ * that cannot act must not look as if it can.
+ */
+function Outdated() {
+  const { wording } = useI18n()
+  return (
+    <>
+      <PageHeading>{wording.errors.CLIENT_TOO_OLD}</PageHeading>
+      <p>{wording.service.outdatedWeb}</p>
+      <div className="actions">
+        <button type="button" className="primary" onClick={() => window.location.reload()}>
+          {wording.service.reload}
+        </button>
+      </div>
     </>
   )
 }

@@ -9,7 +9,7 @@
 //! `domain::reminder` says when one is due.
 
 use super::contribution::Action;
-use super::exchange::{Actor, Event, Exchange, NotAgreed, Outcome, Unresolved};
+use super::exchange::{Actor, Counterparty, Event, Exchange, NotAgreed, Outcome, Unresolved};
 use super::revision::Slot;
 
 /// One thing a party can be told. The name is what is stored with a queued
@@ -27,6 +27,10 @@ pub enum Notice {
     ClaimantLeft,
     /// A proposal or counteroffer during negotiation.
     RevisionSent,
+    /// The initiator changed their offer while whoever opened the invitation
+    /// is still unconfirmed (DESIGN.md §8): that person can sign or leave,
+    /// and is told so rather than offered answers they cannot give.
+    RevisionSentUnconfirmed,
     AmendmentProposed,
     /// The other party signed, but it waits on the initiator confirming them.
     AcceptanceWaiting,
@@ -64,12 +68,13 @@ pub enum Notice {
 }
 
 impl Notice {
-    pub const ALL: [Notice; 33] = [
+    pub const ALL: [Notice; 34] = [
         Notice::InvitationClaimed,
         Notice::InvitationClaimedUnconfirmed,
         Notice::CounterpartyConfirmed,
         Notice::ClaimantLeft,
         Notice::RevisionSent,
+        Notice::RevisionSentUnconfirmed,
         Notice::AmendmentProposed,
         Notice::AcceptanceWaiting,
         Notice::AgreementInForce,
@@ -107,6 +112,7 @@ impl Notice {
             Notice::CounterpartyConfirmed => "COUNTERPARTY_CONFIRMED",
             Notice::ClaimantLeft => "CLAIMANT_LEFT",
             Notice::RevisionSent => "REVISION_SENT",
+            Notice::RevisionSentUnconfirmed => "REVISION_SENT_UNCONFIRMED",
             Notice::AmendmentProposed => "AMENDMENT_PROPOSED",
             Notice::AcceptanceWaiting => "ACCEPTANCE_WAITING",
             Notice::AgreementInForce => "AGREEMENT_IN_FORCE",
@@ -167,6 +173,11 @@ fn notice(before: &Exchange, event: &Event) -> Option<Notice> {
         Event::CounterpartyRejected { .. } => return None,
         Event::CounterpartyReleased { .. } => Notice::ClaimantLeft,
         Event::RevisionSent { .. } if amending => Notice::AmendmentProposed,
+        // The reader is whoever opened the invitation, not yet confirmed by
+        // the initiator who sent this: they cannot decline it or counter it.
+        Event::RevisionSent { by: Slot::A, .. } if before.counterparty == Counterparty::Claimed => {
+            Notice::RevisionSentUnconfirmed
+        }
         Event::RevisionSent { .. } => Notice::RevisionSent,
         // Nobody needs telling by itself: it only ever accompanies the new
         // revision or the closure that replaced it.
@@ -194,6 +205,8 @@ fn notice(before: &Exchange, event: &Event) -> Option<Notice> {
             Outcome::NotAgreed(NotAgreed::Withdrawn) => Notice::ClosedWithdrawn,
             Outcome::NotAgreed(NotAgreed::Declined) => Notice::ClosedDeclined,
             Outcome::NotAgreed(NotAgreed::Expired) => Notice::ClosedExpired,
+            // A draft was only ever its initiator's, who did this themselves.
+            Outcome::NotAgreed(NotAgreed::Discarded) => return None,
             Outcome::Completed => Notice::ClosedCompleted,
             Outcome::EndedByAgreement => Notice::ClosedEndedByAgreement,
             Outcome::Unresolved(Unresolved::CloseRequest) => Notice::ClosedUnresolved,
@@ -382,8 +395,9 @@ mod tests {
         );
         assert_eq!(
             s.run(A, send(2, fence_job())),
-            to_b(Notice::RevisionSent),
-            "the initiator may change their offer before confirming, which also supersedes revision 1"
+            to_b(Notice::RevisionSentUnconfirmed),
+            "the initiator may change their offer before confirming, which also supersedes \
+             revision 1; the unconfirmed reader is told what they can do with it"
         );
         assert_eq!(
             s.run(B, Command::Accept { revision: rev(2) }),
@@ -402,6 +416,17 @@ mod tests {
             to_a(Notice::RevisionSent),
             "a counteroffer"
         );
+        assert_eq!(
+            s.run(A, send(3, fence_job())),
+            to_b(Notice::RevisionSent),
+            "a confirmed counterparty is offered every answer"
+        );
+    }
+
+    #[test]
+    fn discarding_a_draft_tells_nobody() {
+        let mut s = Scenario::draft();
+        assert_eq!(s.run(A, Command::Discard), vec![]);
     }
 
     #[test]

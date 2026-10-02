@@ -182,6 +182,12 @@ An invitation link that names nobody can be opened by whoever holds it, so the p
 
 Someone the invitation named, or whom the initiator has confirmed, is a party and none of this applies to them. `backend/src/domain/exchange.rs` has the rules and `backend/tests/claimant.rs` runs them end to end; `backend/migrations/README.md` says how a signature stays tied to whoever held the place when it was made.
 
+## A client that is too old
+
+The web app and the mobile apps keep working against newer services until the service says otherwise. `GET /v1/meta` carries `minimum_client_versions`, the oldest build of each client (`web`, `ios`, `android`) that may still change anything; every client compares itself against it at startup and shows that it must be updated when it is below. Each request also names the client and its build in an `X-Client-Version` header, such as `ios/1.4.0`, and the service refuses a change from one below the minimum with `CLIENT_TOO_OLD`, leaving reading alone. The minimums are `MIN_CLIENT_VERSION_WEB`, `MIN_CLIENT_VERSION_IOS` and `MIN_CLIENT_VERSION_ANDROID` in the environment, dotted whole numbers; unset means no minimum, which is the default. `backend/src/client_version.rs` has the rule and `packages/shared/src/client-version.ts` the clients' copy of it.
+
+A draft that was never sent can be thrown away from the composer. It goes through the rules like everything else, as `DISCARD`, and closes the exchange as `NOT_AGREED` with the reason `DISCARDED`, so it leaves the person's list and the record says what happened.
+
 ## Deleting an account
 
 A person can delete their account from the account screen of the web app and of the mobile app (`DESIGN.md` §4.1), and from the profile step of an account that was never set up. `backend/src/deletion.rs` says in full what deleting does and why; `backend/tests/deletion.rs` checks each part against a real database.

@@ -17,6 +17,7 @@ use axum::extract::ConnectInfo;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderName, Method, Request, StatusCode};
 use exchange_backend::auth::{AuthRules, CodeSender, LogSender, generate_token, token_hash};
+use exchange_backend::client_version::MinimumClientVersions;
 use exchange_backend::db;
 use exchange_backend::domain::Rules;
 use exchange_backend::http::{self, AppState, Settings, TrustedProxies};
@@ -151,7 +152,14 @@ impl App {
         rules: Rules,
         code_sender: Arc<dyn CodeSender>,
     ) -> Self {
-        Self::start_behind(database_name, rules, code_sender, TrustedProxies::none()).await
+        Self::start_configured(
+            database_name,
+            rules,
+            code_sender,
+            TrustedProxies::none(),
+            MinimumClientVersions::default(),
+        )
+        .await
     }
 
     /// With the given view of proxy headers. Every request the helpers make
@@ -161,6 +169,38 @@ impl App {
         rules: Rules,
         code_sender: Arc<dyn CodeSender>,
         proxies: TrustedProxies,
+    ) -> Self {
+        Self::start_configured(
+            database_name,
+            rules,
+            code_sender,
+            proxies,
+            MinimumClientVersions::default(),
+        )
+        .await
+    }
+
+    /// Requiring clients to be at least the given versions.
+    pub async fn start_requiring(
+        database_name: &'static str,
+        min_client_versions: MinimumClientVersions,
+    ) -> Self {
+        Self::start_configured(
+            database_name,
+            Rules::default(),
+            Arc::new(LogSender),
+            TrustedProxies::none(),
+            min_client_versions,
+        )
+        .await
+    }
+
+    async fn start_configured(
+        database_name: &'static str,
+        rules: Rules,
+        code_sender: Arc<dyn CodeSender>,
+        proxies: TrustedProxies,
+        min_client_versions: MinimumClientVersions,
     ) -> Self {
         let (owner_url, app_url) = database(database_name).await;
         let db = connect(app_url).await;
@@ -173,6 +213,7 @@ impl App {
                 rules: rules.clone(),
                 consent_version: CONSENT_VERSION.to_owned(),
                 proxies,
+                min_client_versions,
             }),
             code_sender,
         };

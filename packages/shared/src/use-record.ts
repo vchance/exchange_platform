@@ -11,15 +11,23 @@ import { readWholeRecord, type HistoryPage, type RecordDocument } from './record
  */
 
 export interface HistoryReading {
-  /** `null` until the first answer. */
+  /**
+   * `null` until the first answer. Its events are every one read so far,
+   * oldest first; `earlier` is set while there is history before them.
+   */
   page: HistoryPage | null
   failure: ErrorCode | null
+  /** Reads the page before the earliest shown and adds it in front. */
+  readEarlier(): Promise<void>
+  readingEarlier: boolean
 }
 
 /**
- * The latest of an exchange's history. Every change to an exchange adds to
- * its history, so it is read again whenever the exchange on screen is a newer
- * version. Until the new one arrives, the one already shown stays.
+ * The latest of an exchange's history, and as much before it as the person
+ * asks for. Every change to an exchange adds to its history, so the latest
+ * page is read again whenever the exchange on screen is a newer version;
+ * what was read before it stays, and until the new page arrives, so does
+ * what is shown.
  */
 export function useHistory(
   api: Pick<ExchangeApi, 'history'>,
@@ -27,14 +35,26 @@ export function useHistory(
 ): HistoryReading {
   const [page, setPage] = useState<HistoryPage | null>(null)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
+  const [readingEarlier, setReadingEarlier] = useState(false)
   const { id, version } = exchange
+  // The page on screen, for joining a new reading onto without a render.
+  const shown = useRef<HistoryPage | null>(null)
 
   useEffect(() => {
     let cancelled = false
     api.history(id).then(
       (found) => {
         if (cancelled) return
-        setPage(found)
+        // The earlier pages already read stay in front of the latest.
+        const first = found.events[0]?.sequence ?? Number.POSITIVE_INFINITY
+        const earlier = (shown.current?.events ?? []).filter((event) => event.sequence < first)
+        const joined: HistoryPage = {
+          ...found,
+          events: [...earlier, ...found.events],
+          earlier: earlier.length > 0 ? (shown.current?.earlier ?? null) : found.earlier,
+        }
+        shown.current = joined
+        setPage(joined)
         setFailure(null)
       },
       (error: unknown) => {
@@ -46,7 +66,31 @@ export function useHistory(
     }
   }, [api, id, version])
 
-  return { page, failure }
+  const readEarlier = useCallback(async () => {
+    const current = shown.current
+    if (!current || current.earlier == null || readingEarlier) return
+    setReadingEarlier(true)
+    try {
+      const found = await api.history(id, current.earlier)
+      // The page may have been replaced by a newer reading meanwhile; what
+      // was read goes in front of whatever is shown now.
+      const latest = shown.current ?? current
+      const joined: HistoryPage = {
+        ...latest,
+        events: [...found.events, ...latest.events],
+        earlier: found.earlier,
+      }
+      shown.current = joined
+      setPage(joined)
+      setFailure(null)
+    } catch (error) {
+      setFailure(failureCode(error))
+    } finally {
+      setReadingEarlier(false)
+    }
+  }, [api, id, readingEarlier])
+
+  return { page, failure, readEarlier, readingEarlier }
 }
 
 export interface RecordReading {

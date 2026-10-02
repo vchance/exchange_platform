@@ -17,6 +17,8 @@ interface Props {
   reader: Schemas['Slot'] | null;
   /** How a moment in time is written here. */
   when(instant: string): string;
+  /** The ids of the money contributions, which are spoken of in words for paying and receiving. */
+  money?: ReadonlySet<string>;
 }
 
 /**
@@ -29,7 +31,7 @@ interface Props {
  * To a screen reader each entry is one stop, read whole and in the order it
  * is shown: when, what happened, then what was written with it.
  */
-export function EventList({ events, parties, reader, when }: Props) {
+export function EventList({ events, parties, reader, when, money }: Props) {
   const { wording, fmt } = useI18n();
   const colors = useColors();
   const w = wording.record;
@@ -37,7 +39,7 @@ export function EventList({ events, parties, reader, when }: Props) {
   return (
     <View role="list" style={styles.list}>
       {events.map((event) => {
-        const { message, values } = eventMessage(event, w.events, reader, parties);
+        const { message, values } = eventMessage(event, w.events, reader, parties, money);
         return (
           <View
             key={event.sequence}

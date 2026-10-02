@@ -266,7 +266,11 @@ fn event(row: &PgRow) -> Option<RecordEvent> {
                     .iter()
                     .filter_map(|(id, value)| Some((id.parse().ok()?, status(value)?)))
                     .filter(|(_, status)| *status != Status::Removed)
-                    .map(|(id, status)| ContributionStatus { id, status })
+                    .map(|(id, status)| ContributionStatus {
+                        id,
+                        status,
+                        since: None,
+                    })
                     .collect()
             });
         }

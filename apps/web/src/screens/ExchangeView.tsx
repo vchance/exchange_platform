@@ -3,12 +3,14 @@ import {
   consentShown,
   isInvitationSpent,
   isUnconfirmedClaimant,
+  moneyIds,
   otherPartyName,
   remainingRequired,
   statusesOf,
+  useHistory,
   type ClosedReason,
 } from '@exchange/shared'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
@@ -54,10 +56,16 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
   const you = exchange.you
   const open = exchange.open_revision ?? null
   const inForce = exchange.in_force_revision ?? null
-  const writtenName = otherPartyName(exchange)
+  // Read here rather than in the history section: an exchange closed without
+  // agreement has no revision to read names from, and the history names the
+  // parties as the last terms did.
+  const history = useHistory(api, exchange)
+  const writtenName = otherPartyName(exchange, history.page?.parties)
   // In a sentence, someone with no name yet is "the other party".
   const otherName = writtenName || wording.party.other
   const active = exchange.state === 'ACTIVE'
+  // Money is spoken of in words for paying and receiving (DESIGN.md §11).
+  const money = useMemo(() => moneyIds([open?.terms, inForce?.terms]), [open, inForce])
 
   // A newer version found while the person is in the middle of something is
   // held back and offered, not swapped in under them.
@@ -105,6 +113,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
   }, [refused])
 
   const statuses = statusesOf(exchange)
+  const since = new Map(exchange.contributions.map((item) => [item.id, item.since ?? null]))
   const remaining = remainingRequired(exchange)
 
   return (
@@ -171,6 +180,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
               <Fulfillment
                 contribution={contribution}
                 status={statuses.get(contribution.id) ?? 'PENDING'}
+                since={since.get(contribution.id) ?? null}
                 you={you}
                 otherName={otherName}
                 active={active}
@@ -193,7 +203,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
 
       {active && <Ending exchange={exchange} otherName={otherName} actions={actions} />}
 
-      <History exchange={exchange} />
+      <History exchange={exchange} reading={history} money={money} />
 
       <ExchangeSafety exchange={exchange} otherName={otherName} actions={actions} reload={reload} />
 
