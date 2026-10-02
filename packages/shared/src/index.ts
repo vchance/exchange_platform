@@ -33,3 +33,5 @@ export type {
 } from './draft'
 export { isOverdue, movesFor, todayIn } from './fulfillment'
 export type { Move, Role } from './fulfillment'
+export { REPORT_DETAILS_MAX_CHARS, REPORT_REASONS } from './safety'
+export type { ReportReason } from './safety'

@@ -5,6 +5,7 @@ import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { PageHeading } from '../components/ui'
 import { api } from '../lib/api'
+import { BlockedPeople } from './BlockedPeople'
 import { ProfileForm } from './ProfileForm'
 
 /** The account: what it is verified with, its name and language, and signing out. */
@@ -46,6 +47,7 @@ export default function AccountPage() {
         )}
       </dl>
       <ProfileForm account={account} first={false} />
+      <BlockedPeople />
       <hr />
       <div className="actions">
         <button type="button" disabled={leaving} onClick={signOut}>

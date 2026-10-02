@@ -271,6 +271,39 @@ export interface Wording {
     ownInvitation: string
     alreadyResponded: string
   }
+  /** Reporting an exchange and blocking the other party (DESIGN.md §9). */
+  safety: {
+    heading: string
+    report: string
+    reportProposal: string
+    reportIntro: string
+    reportProposalIntro: string
+    reasonLegend: string
+    /** One entry per reason a report can give. */
+    reasons: Record<Schemas['ReportReason'], string>
+    reasonRequired: string
+    detailsLabel: string
+    detailsRequiredLabel: string
+    detailsHint: string
+    detailsRequired: string
+    sendReport: string
+    reportSent: string
+    tooManyReports: string
+    block: string
+    /** What blocking does, said before it is done: one sentence each. */
+    blockStops: string
+    blockEnds: string
+    blockKeeps: string
+    blockQuiet: string
+    confirmBlock: string
+    blocked: string
+    unblock: string
+    unblocked: string
+    blockedHeading: string
+    blockedIntro: string
+    blockedEmpty: string
+    blockedSince: string
+  }
   exchange: {
     title: string
     titleNoName: string
