@@ -43,6 +43,276 @@
         }
       }
     },
+    "/v1/auth/codes": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sends a one-time code to an email address or phone number. Answers the\nsame way whether or not an account exists for it.",
+        "operationId": "request_code",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestCode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "A code was sent"
+          },
+          "422": {
+            "description": "Not an email address or phone number",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many codes requested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/session": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Signs out: the session stops working everywhere it was held.",
+        "operationId": "delete_session",
+        "responses": {
+          "204": {
+            "description": "Signed out"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/sessions": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Signs in with a one-time code, creating the account on first use.",
+        "operationId": "create_session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSession"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionCreated"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The code is wrong, expired or used up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The account is suspended",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "The signed-in account.",
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "The account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Changes the display name or language, or records that the holder is an adult.",
+        "operationId": "update_me",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAccount"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The updated account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/identifiers": {
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Verifies a second identifier and attaches it to the account, or replaces\nthe one of the same kind. An account with both a verified email and a\nverified phone can meet the higher risk tier.",
+        "operationId": "add_identifier",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddIdentifier"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The updated account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the code is wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The identifier belongs to another account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not an email address or phone number",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/meta": {
       "get": {
         "tags": [
@@ -67,6 +337,99 @@
   },
   "components": {
     "schemas": {
+      "Account": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "language",
+          "adult_confirmed"
+        ],
+        "properties": {
+          "adult_confirmed": {
+            "type": "boolean",
+            "description": "The holder has confirmed they are 18 or over. Required before signing."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Empty until the person has chosen one."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "language": {
+            "$ref": "#/components/schemas/Language"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AddIdentifier": {
+        "type": "object",
+        "required": [
+          "identifier",
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The one-time code sent to it."
+          },
+          "identifier": {
+            "type": "string",
+            "description": "An email address, or a phone number in international form."
+          }
+        }
+      },
+      "CreateSession": {
+        "type": "object",
+        "required": [
+          "identifier",
+          "code",
+          "delivery"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The one-time code sent to the identifier."
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/Delivery"
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "language": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Language",
+                "description": "Used only when this creates the account."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Delivery": {
+        "type": "string",
+        "description": "How the client wants to hold the session.",
+        "enum": [
+          "COOKIE",
+          "TOKEN"
+        ]
+      },
       "ErrorBody": {
         "type": "object",
         "required": [
@@ -86,10 +449,27 @@
           "WRONG_ACTOR",
           "ACTION_NOT_ALLOWED",
           "CONTRIBUTION_LOCKED",
+          "REVISION_EXPIRED",
+          "COUNTERPARTY_NOT_CONFIRMED",
+          "INVALID_REVISION",
+          "INVALID_REQUEST",
+          "INVALID_IDENTIFIER",
+          "INVALID_CODE",
+          "TOO_MANY_REQUESTS",
+          "UNAUTHENTICATED",
+          "ACCOUNT_SUSPENDED",
+          "IDENTIFIER_IN_USE",
           "CLIENT_TOO_OLD",
           "NOT_FOUND",
           "SERVICE_UNAVAILABLE",
           "INTERNAL"
+        ]
+      },
+      "Language": {
+        "type": "string",
+        "enum": [
+          "en",
+          "es"
         ]
       },
       "Meta": {
@@ -104,6 +484,65 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "RequestCode": {
+        "type": "object",
+        "required": [
+          "identifier"
+        ],
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "description": "An email address, or a phone number in international form."
+          }
+        }
+      },
+      "SessionCreated": {
+        "type": "object",
+        "required": [
+          "account"
+        ],
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/Account"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present for `TOKEN` delivery only."
+          }
+        }
+      },
+      "UpdateAccount": {
+        "type": "object",
+        "properties": {
+          "adult_confirmed": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Only `true` is meaningful: a confirmation cannot be taken back."
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "1 to 100 characters."
+          },
+          "language": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Language"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }

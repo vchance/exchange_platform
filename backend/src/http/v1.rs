@@ -1,12 +1,18 @@
-use axum::routing::get;
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use super::AppState;
+use super::{AppState, account, auth};
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/meta", get(meta))
+    Router::new()
+        .route("/meta", get(meta))
+        .route("/auth/codes", post(auth::request_code))
+        .route("/auth/sessions", post(auth::create_session))
+        .route("/auth/session", delete(auth::delete_session))
+        .route("/me", get(account::me).patch(account::update_me))
+        .route("/me/identifiers", post(account::add_identifier))
 }
 
 #[derive(Serialize, ToSchema)]

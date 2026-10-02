@@ -4,7 +4,8 @@ use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use crate::domain::contribution::Refusal;
+use crate::domain::exchange::Refusal;
+use crate::domain::identity::InvalidIdentifier;
 
 /// Stable codes for every refusal the API can return. Clients map these to
 /// wording in the user's language and never parse message text
@@ -21,6 +22,26 @@ pub enum ErrorCode {
     ActionNotAllowed,
     /// An accepted contribution cannot be changed.
     ContributionLocked,
+    /// The revision ran out before it was accepted.
+    RevisionExpired,
+    /// The initiator must confirm who the counterparty is first.
+    CounterpartyNotConfirmed,
+    /// The revision breaks a rule and was not sent.
+    InvalidRevision,
+    /// The request body is missing, malformed or out of range.
+    InvalidRequest,
+    /// Not a usable email address or phone number.
+    InvalidIdentifier,
+    /// The one-time code is wrong, expired or used up. Deliberately one code
+    /// for all three, so a guesser learns nothing.
+    InvalidCode,
+    /// Too many one-time codes requested for this identifier.
+    TooManyRequests,
+    /// No valid session.
+    Unauthenticated,
+    AccountSuspended,
+    /// The email address or phone number belongs to another account.
+    IdentifierInUse,
     /// The client build is too old to act and must update.
     ClientTooOld,
     NotFound,
@@ -45,6 +66,31 @@ impl ApiError {
     }
 }
 
+impl From<ErrorCode> for ApiError {
+    fn from(code: ErrorCode) -> Self {
+        use ErrorCode::*;
+        let status = match code {
+            InvalidRequest | InvalidIdentifier | InvalidRevision => {
+                StatusCode::UNPROCESSABLE_ENTITY
+            }
+            InvalidCode | Unauthenticated => StatusCode::UNAUTHORIZED,
+            WrongActor | AccountSuspended => StatusCode::FORBIDDEN,
+            NotFound => StatusCode::NOT_FOUND,
+            TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
+            StaleRevision
+            | ActionNotAllowed
+            | ContributionLocked
+            | RevisionExpired
+            | CounterpartyNotConfirmed
+            | IdentifierInUse => StatusCode::CONFLICT,
+            ClientTooOld => StatusCode::UPGRADE_REQUIRED,
+            ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            Internal => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        Self::new(status, code)
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         (self.status, Json(ErrorBody { code: self.code })).into_response()
@@ -53,16 +99,29 @@ impl IntoResponse for ApiError {
 
 impl From<Refusal> for ApiError {
     fn from(refusal: Refusal) -> Self {
-        match refusal {
-            Refusal::WrongParty => Self::new(StatusCode::FORBIDDEN, ErrorCode::WrongActor),
-            Refusal::NotAllowed => Self::new(StatusCode::CONFLICT, ErrorCode::ActionNotAllowed),
-        }
+        let code = match refusal {
+            Refusal::WrongActor => ErrorCode::WrongActor,
+            Refusal::NotAllowed => ErrorCode::ActionNotAllowed,
+            Refusal::StaleRevision => ErrorCode::StaleRevision,
+            Refusal::RevisionExpired => ErrorCode::RevisionExpired,
+            Refusal::CounterpartyNotConfirmed => ErrorCode::CounterpartyNotConfirmed,
+            Refusal::ContributionLocked(_) => ErrorCode::ContributionLocked,
+            Refusal::UnknownContribution(_) => ErrorCode::NotFound,
+            Refusal::InvalidRevision(_) => ErrorCode::InvalidRevision,
+        };
+        code.into()
+    }
+}
+
+impl From<InvalidIdentifier> for ApiError {
+    fn from(_: InvalidIdentifier) -> Self {
+        ErrorCode::InvalidIdentifier.into()
     }
 }
 
 impl From<sqlx::Error> for ApiError {
     fn from(error: sqlx::Error) -> Self {
         tracing::error!(%error, "database error");
-        Self::new(StatusCode::INTERNAL_SERVER_ERROR, ErrorCode::Internal)
+        ErrorCode::Internal.into()
     }
 }

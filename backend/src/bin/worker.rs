@@ -3,16 +3,14 @@
 
 use std::time::Duration;
 
-use exchange_backend::config::Config;
-use exchange_backend::{db, telemetry};
+use exchange_backend::{config, db, telemetry};
 
 const TICK: Duration = Duration::from_secs(5);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     telemetry::init();
-    let config = Config::from_env()?;
-    let _db = db::pool(&config.database_url)?;
+    let _db = db::pool(&config::database_url()?)?;
 
     let mut ticker = tokio::time::interval(TICK);
     tracing::info!("worker started");

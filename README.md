@@ -47,6 +47,8 @@ $PG/psql -h 127.0.0.1 -d postgres \
 
 `exchange` owns the schema and runs migrations. `exchange_app` is what the API and worker connect as; it can add to the agreement history but not change or delete it.
 
+In development, one-time codes are not sent anywhere: with `CODE_DELIVERY=log` the API writes each code to its own log, which is where you read it to sign in.
+
 The API starts without a database: `/healthz` and `/v1/meta` respond, and `/readyz` returns 503 until PostgreSQL is reachable. The web dev server proxies API paths to the service, so the browser talks to one origin.
 
 On a physical device the mobile app cannot reach the development machine as `localhost`; set `EXPO_PUBLIC_API_URL` to the machine's LAN address.
@@ -71,17 +73,17 @@ On a physical device the mobile app cannot reach the development machine as `loc
 ## Conventions
 
 - **Rules live on the server.** Clients may check input shape; the service decides everything else.
-- **State machines are pure functions** in `backend/src/domain`, tested against every row of the tables in `DESIGN.md` §5. `contribution.rs` is the pattern to follow.
+- **State machines are pure functions** in `backend/src/domain`, tested against every row of the tables in `DESIGN.md` §5. `exchange.rs` is the entry point: `decide` takes an exchange, an actor, a command and the time, and returns events and the new state or a typed refusal.
 - **Refusals are typed.** The API returns a stable `ErrorCode`; clients map it to wording. Adding a code in `backend/src/error.rs` and regenerating the client makes both languages fail to typecheck until they cover it.
 - **Mobile dependencies** are added with `npx expo install <package>` from `apps/mobile`, which picks versions that match the Expo SDK.
 - **One React version** across the repository, pinned to the one the Expo SDK uses.
 
 ## Not built yet
 
-The scaffold and the database schema (`backend/migrations/`) exist. Still to build, in rough order:
+The scaffold, the database schema (`backend/migrations/`), the domain rules (`backend/src/domain/`) and sign-in (`backend/src/auth.rs`, `backend/src/http/`) exist. Still to build, in rough order:
 
-1. The exchange state machine and revision rules (§5.1, §6, §7).
-2. Accounts, one-time codes, sessions and invitations (§8), with their tables.
+1. The exchange API: endpoints that load an exchange, run the domain rules in `backend/src/domain`, and store the events. This includes creating, viewing and claiming invitations.
+2. A real email and SMS provider for one-time codes.
 3. Routing in both apps, universal and app links, push, Wallet passes.
 
 Before any of the Wallet or store work can start, the Apple and Google accounts in `DESIGN.md` §11 need creating.

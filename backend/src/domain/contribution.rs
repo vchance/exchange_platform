@@ -15,9 +15,10 @@ pub enum Status {
     Removed,
 }
 
-/// The acting party's role relative to one contribution.
+/// The acting party's role relative to one contribution. Which party holds which
+/// role differs per contribution: the provider of one is the recipient of another.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Party {
+pub enum Role {
     /// Owes the contribution.
     Provider,
     /// Receives the contribution.
@@ -47,16 +48,16 @@ pub enum Refusal {
 ///
 /// Notes required by the design (a dispute reason, a re-claim note) are
 /// checked where the request is validated, not here.
-pub fn transition(status: Status, action: Action, by: Party) -> Result<Status, Refusal> {
+pub fn transition(status: Status, action: Action, by: Role) -> Result<Status, Refusal> {
     use Action::*;
     use Status::*;
 
     let (next, allowed) = match (status, action) {
-        (Pending | Disputed, Claim) => (Claimed, Party::Provider),
-        (Claimed, RetractClaim) => (Pending, Party::Provider),
-        (Pending | Claimed | Disputed, Confirm) => (Accepted, Party::Recipient),
-        (Claimed, Dispute) => (Disputed, Party::Recipient),
-        (Pending | Claimed | Disputed, Waive) => (Waived, Party::Recipient),
+        (Pending | Disputed, Claim) => (Claimed, Role::Provider),
+        (Claimed, RetractClaim) => (Pending, Role::Provider),
+        (Pending | Claimed | Disputed, Confirm) => (Accepted, Role::Recipient),
+        (Claimed, Dispute) => (Disputed, Role::Recipient),
+        (Pending | Claimed | Disputed, Waive) => (Waived, Role::Recipient),
         _ => return Err(Refusal::NotAllowed),
     };
 
@@ -86,68 +87,68 @@ mod tests {
         Action::Dispute,
         Action::Waive,
     ];
-    const PARTIES: [Party; 2] = [Party::Provider, Party::Recipient];
+    const ROLES: [Role; 2] = [Role::Provider, Role::Recipient];
 
     /// Every row of the table in DESIGN.md §5.2.
-    const TABLE: [(Status, Action, Party, Status); 10] = [
+    const TABLE: [(Status, Action, Role, Status); 10] = [
         (
             Status::Pending,
             Action::Claim,
-            Party::Provider,
+            Role::Provider,
             Status::Claimed,
         ),
         (
             Status::Pending,
             Action::Confirm,
-            Party::Recipient,
+            Role::Recipient,
             Status::Accepted,
         ),
         (
             Status::Claimed,
             Action::Confirm,
-            Party::Recipient,
+            Role::Recipient,
             Status::Accepted,
         ),
         (
             Status::Claimed,
             Action::Dispute,
-            Party::Recipient,
+            Role::Recipient,
             Status::Disputed,
         ),
         (
             Status::Claimed,
             Action::RetractClaim,
-            Party::Provider,
+            Role::Provider,
             Status::Pending,
         ),
         (
             Status::Disputed,
             Action::Claim,
-            Party::Provider,
+            Role::Provider,
             Status::Claimed,
         ),
         (
             Status::Disputed,
             Action::Confirm,
-            Party::Recipient,
+            Role::Recipient,
             Status::Accepted,
         ),
         (
             Status::Pending,
             Action::Waive,
-            Party::Recipient,
+            Role::Recipient,
             Status::Waived,
         ),
         (
             Status::Claimed,
             Action::Waive,
-            Party::Recipient,
+            Role::Recipient,
             Status::Waived,
         ),
         (
             Status::Disputed,
             Action::Waive,
-            Party::Recipient,
+            Role::Recipient,
             Status::Waived,
         ),
     ];
@@ -167,7 +168,7 @@ mod tests {
     fn everything_outside_the_table_is_refused() {
         for status in STATUSES {
             for action in ACTIONS {
-                for by in PARTIES {
+                for by in ROLES {
                     let in_table = TABLE
                         .iter()
                         .any(|&(s, a, p, _)| (s, a, p) == (status, action, by));
@@ -185,11 +186,11 @@ mod tests {
     #[test]
     fn the_other_party_is_told_it_is_not_theirs() {
         assert_eq!(
-            transition(Status::Claimed, Action::Confirm, Party::Provider),
+            transition(Status::Claimed, Action::Confirm, Role::Provider),
             Err(Refusal::WrongParty)
         );
         assert_eq!(
-            transition(Status::Pending, Action::Claim, Party::Recipient),
+            transition(Status::Pending, Action::Claim, Role::Recipient),
             Err(Refusal::WrongParty)
         );
     }
@@ -198,7 +199,7 @@ mod tests {
     fn final_statuses_accept_no_action() {
         for status in [Status::Accepted, Status::Waived, Status::Removed] {
             for action in ACTIONS {
-                for by in PARTIES {
+                for by in ROLES {
                     assert_eq!(transition(status, action, by), Err(Refusal::NotAllowed));
                 }
             }

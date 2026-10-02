@@ -30,4 +30,10 @@ Erasure and retention deletes (`DESIGN.md` §14) are still open with counsel. Un
 
 `backend/tests/schema.rs` checks each of these against a real database.
 
+## 0002_auth
+
+One-time codes and sessions (`DESIGN.md` §8). A code is stored as a keyed hash (HMAC under `APP_SECRET`), because six digits are too few to protect with a plain hash; a session token is 256 random bits and stored as a SHA-256 hash. `backend/tests/auth.rs` exercises both through the HTTP endpoints.
+
+## Outside the database
+
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.
