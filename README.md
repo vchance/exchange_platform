@@ -118,9 +118,10 @@ On the web, an exchange's page ends with its history, and `/exchanges/{id}/recor
 
 The scaffold, the database schema (`backend/migrations/`), the domain rules (`backend/src/domain/`), sign-in (`backend/src/auth.rs`), the exchange API (`backend/src/exchanges/`, `backend/src/http/`) and the web app's screens (`apps/web/src/`) exist: two people can take an exchange from a draft to completion in a browser. Still to build, in rough order:
 
-1. The mobile app's screens. On the web: report and block; Wallet buttons. Emailing each signer their copy of the record when an agreement comes into force (`DESIGN.md` §14.1); until then a party reads, prints or downloads it.
+1. The mobile app's screens. On the web: Wallet buttons. Emailing each signer their copy of the record when an agreement comes into force (`DESIGN.md` §14.1); until then a party reads, prints or downloads it.
 2. A real email and SMS provider, for one-time codes and for notifications. Notifications are already queued and delivered (`backend/src/notifications/`), but only to the log.
 3. Universal and app links, push, Wallet passes.
+4. Somewhere for staff to read reports and act on them. Report and block exist in the API and on the web (`backend/src/safety.rs`, `DESIGN.md` §9), and a report is stored with who made it, about which exchange and which party, and why; but there is no staff sign-in yet, so nothing reads them.
 
 `DESIGN.md` §13.4 lists what the exchange API deliberately leaves out for now.
 

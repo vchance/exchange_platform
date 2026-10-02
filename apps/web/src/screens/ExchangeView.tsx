@@ -14,6 +14,7 @@ import { useActions, type Actions } from '../lib/actions'
 import { api, failureCode, type RevisionView, type Slot } from '../lib/api'
 import { consentShown } from '../lib/consent'
 import { Ending } from './Ending'
+import { ExchangeSafety } from './ExchangeSafety'
 import { Fulfillment } from './Fulfillment'
 import { History } from './History'
 
@@ -194,6 +195,8 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       {active && <Ending exchange={exchange} otherName={otherName} actions={actions} />}
 
       <History exchange={exchange} />
+
+      <ExchangeSafety exchange={exchange} otherName={otherName} actions={actions} reload={reload} />
 
       {exchange.state !== 'CLOSED' && (
         <div className="actions">

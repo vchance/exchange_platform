@@ -172,6 +172,40 @@
         }
       }
     },
+    "/v1/blocks": {
+      "get": {
+        "tags": [
+          "safety"
+        ],
+        "summary": "The people the caller has blocked, most recently blocked first.",
+        "operationId": "blocked_people",
+        "responses": {
+          "200": {
+            "description": "Each by an exchange shared with them",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BlockedPerson"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/exchanges": {
       "get": {
         "tags": [
@@ -306,6 +340,164 @@
           },
           "404": {
             "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchanges/{id}/block": {
+      "get": {
+        "tags": [
+          "safety"
+        ],
+        "summary": "Whether the caller has blocked the other party of this exchange.",
+        "operationId": "block_status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's own block, if any",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "safety"
+        ],
+        "summary": "Blocks the other party of this exchange. Neither of the two can then join\nan exchange the other starts. Whatever is waiting to be signed between\nthem is withdrawn or declined; an agreement in force stays in force. The\nother party is not told.",
+        "operationId": "block",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Blocked"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nobody has joined the exchange yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "safety"
+        ],
+        "summary": "Removes the caller's block on the other party of this exchange.",
+        "operationId": "unblock",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Not blocked any more"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nobody has joined the exchange yet",
             "content": {
               "application/json": {
                 "schema": {
@@ -683,6 +875,91 @@
         }
       }
     },
+    "/v1/exchanges/{id}/reports": {
+      "post": {
+        "tags": [
+          "safety"
+        ],
+        "summary": "Reports an exchange, and with it the other party, for review. The other\nparty is not told. Reporting the same exchange again while the first\nreport is open changes nothing and is answered the same way.",
+        "operationId": "report_exchange",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Received"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nobody has joined the exchange yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Details too long, or missing for `OTHER`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reports today",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/exchanges/{id}/revisions": {
       "post": {
         "tags": [
@@ -858,6 +1135,70 @@
           },
           "404": {
             "description": "The link is not valid, or no longer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invitations/report": {
+      "post": {
+        "tags": [
+          "safety"
+        ],
+        "summary": "Reports the proposal behind an invitation link, and with it the person\nwho sent it. No sign-in needed: the token is the proof of having received\nit, as for the preview, and travels in the body for the same reason. A\nlink that shows no preview takes no report.",
+        "operationId": "report_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewInvitationReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Received"
+          },
+          "404": {
+            "description": "The link is not valid, or no longer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The link is the caller's own",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Details too long, or missing for `OTHER`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reports today",
             "content": {
               "application/json": {
                 "schema": {
@@ -1105,6 +1446,50 @@
           "identifier": {
             "type": "string",
             "description": "An email address, or a phone number in international form."
+          }
+        }
+      },
+      "BlockStatus": {
+        "type": "object",
+        "description": "Whether the caller has blocked the other party of an exchange. Says\nnothing about whether the other party has blocked the caller.",
+        "required": [
+          "blocked",
+          "name"
+        ],
+        "properties": {
+          "blocked": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string",
+            "description": "The other party's name as the exchange writes it. An exchange closed\nbefore anything was agreed shows no terms to read it from."
+          }
+        }
+      },
+      "BlockedPerson": {
+        "type": "object",
+        "description": "Someone the caller has blocked, named as an exchange the two share names\nthem. The exchange is also how to unblock them.",
+        "required": [
+          "exchange_id",
+          "display_code",
+          "name",
+          "blocked_at"
+        ],
+        "properties": {
+          "blocked_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "display_code": {
+            "type": "string"
+          },
+          "exchange_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Their name as written in that exchange."
           }
         }
       },
@@ -1946,6 +2331,47 @@
           }
         }
       },
+      "NewInvitationReport": {
+        "type": "object",
+        "description": "A report on the proposal behind an invitation link, from someone who need\nnot be signed in. The token is their proof of having received it.",
+        "required": [
+          "token",
+          "reason"
+        ],
+        "properties": {
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "As for a report on an exchange."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ReportReason"
+          },
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "NewReport": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the reporter wants a reviewer to know. Optional, except with the\nreason `OTHER`. At most 2,000 characters."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ReportReason"
+          }
+        }
+      },
       "Notices": {
         "type": "object",
         "description": "What a reader of the document needs to be told, in its language.",
@@ -2456,6 +2882,19 @@
             "$ref": "#/components/schemas/RevisionStanding"
           }
         }
+      },
+      "ReportReason": {
+        "type": "string",
+        "description": "Why an exchange is being reported. A fixed list, so that a reviewer can\ntell what kind of harm a report is about before reading it.",
+        "enum": [
+          "HARASSMENT",
+          "PROHIBITED_TRADE",
+          "SCAM",
+          "IMPERSONATION",
+          "UNDERAGE",
+          "UNWANTED",
+          "OTHER"
+        ]
       },
       "RequestCode": {
         "type": "object",

@@ -42,7 +42,7 @@ export function failureCode(error: unknown): ErrorCode {
 // Same origin: the dev server proxies API paths to the Rust service, and in
 // production the service serves the app. The session is an HTTP-only cookie
 // the browser attaches by itself; no token is ever held by the page.
-const client = createApiClient('')
+export const client = createApiClient('')
 const keys = idempotencyKeys()
 
 let signedOut: () => void = () => {}
@@ -58,7 +58,7 @@ interface Reply<T> {
   response: Response
 }
 
-async function send<T>(request: () => Promise<Reply<T>>): Promise<T> {
+export async function send<T>(request: () => Promise<Reply<T>>): Promise<T> {
   let reply: Reply<T>
   try {
     reply = await request()
