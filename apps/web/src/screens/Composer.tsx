@@ -1,20 +1,29 @@
 import type { components, ErrorCode, ExchangeView as Exchange } from '@exchange/api-client'
 import {
+  baseRevision,
   buildTerms,
+  canCompose,
+  composerKind,
+  CONTRIBUTION_TYPES,
+  createDraftSaver,
   decimalForInput,
   draftFromTerms,
-  emptyDraft,
+  dueOf,
   fractionDigitsOf,
+  lockedContributions,
   newContribution,
-  NOTE_MAX_CHARS,
+  otherSlot,
   parseDecimal,
-  readDraft,
+  problemText as problemMessage,
+  revisionToSend,
+  startingDraft,
   toMinorUnits,
   type Draft,
   type DraftContribution,
   type DraftDue,
   type Problem,
   type ProblemField,
+  type SaveState,
 } from '@exchange/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -26,14 +35,8 @@ import { InvitationFor } from '../components/InvitationLink'
 import { TermsView } from '../components/TermsView'
 import { Field, PageHeading, Written, type ControlProps } from '../components/ui'
 import { api, failureCode, type RevisionSent, type Slot } from '../lib/api'
-import { consentShown } from '../lib/consent'
 
 type ContributionType = components['schemas']['ContributionType']
-
-const TYPES: readonly ContributionType[] = ['ITEM', 'SERVICE', 'TASK', 'MONEY', 'OTHER']
-
-/** How long after the last keystroke the working copy is saved. */
-const SAVE_AFTER_MS = 700
 
 interface Props {
   exchange: Exchange
@@ -54,9 +57,8 @@ interface Props {
 export default function Composer(props: Props) {
   const { wording } = useI18n()
   const { exchange } = props
-  const base = exchange.open_revision ?? exchange.in_force_revision ?? null
 
-  if (exchange.state === 'CLOSED' || (exchange.state !== 'DRAFT' && !base)) {
+  if (!canCompose(exchange)) {
     return (
       <>
         <PageHeading>{wording.composer.titleCounter}</PageHeading>
@@ -76,20 +78,15 @@ function Editor({ exchange, reload, onSent }: Props) {
   const w = wording.composer
 
   const you = exchange.you
-  const other: Slot = you === 'A' ? 'B' : 'A'
-  const kind =
-    exchange.state === 'DRAFT' ? 'first' : exchange.state === 'ACTIVE' ? 'amend' : 'counter'
+  const other = otherSlot(you)
+  const kind = composerKind(exchange)
   // What a counteroffer or an amendment starts from: the terms on the table.
-  const base = exchange.open_revision ?? exchange.in_force_revision ?? null
+  const base = baseRevision(exchange)
   const digits = fractionDigitsOf(exchange.currency)
 
-  const [draft, setDraft] = useState<Draft>(() => {
-    const stored = readDraft(exchange.draft)
-    if (stored) return stored
-    return base
-      ? draftFromTerms(base.terms, base.id, digits)
-      : emptyDraft(account?.display_name ?? '')
-  })
+  const [draft, setDraft] = useState<Draft>(() =>
+    startingDraft(exchange, account?.display_name ?? '', digits),
+  )
   // Bumped to rebuild the inputs when the whole working copy is replaced.
   const [generation, setGeneration] = useState(0)
   const [step, setStep] = useState<'edit' | 'sign'>('edit')
@@ -99,7 +96,7 @@ function Editor({ exchange, reload, onSent }: Props) {
   const [boundTo, setBoundTo] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  const [saveState, setSaveState] = useState<SaveState>('idle')
   const [added, setAdded] = useState<string | null>(null)
 
   // The working copy was started from terms that have since been replaced.
@@ -108,52 +105,23 @@ function Editor({ exchange, reload, onSent }: Props) {
   // ---- Saving the working copy ----------------------------------------------
 
   const latest = useRef(draft)
-  const dirty = useRef(false)
-  const sent = useRef(false)
-  const timer = useRef<number | undefined>(undefined)
-  const saving = useRef<Promise<void> | null>(null)
   const exchangeId = exchange.id
-
-  function schedule() {
-    window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => void save(), SAVE_AFTER_MS)
-  }
-
-  // One save at a time, so an older copy can never land after a newer one.
-  async function save() {
-    if (saving.current || !dirty.current || sent.current) return
-    dirty.current = false
-    setSaveState('saving')
-    let saved = true
-    saving.current = api.saveDraft(exchangeId, latest.current).catch(() => {
-      saved = false
-    })
-    await saving.current
-    saving.current = null
-    if (!saved) {
-      dirty.current = true
-      setSaveState('failed')
-    } else if (dirty.current) schedule()
-    else setSaveState('saved')
-  }
+  // One save at a time, a moment after the typing pauses.
+  const [saver] = useState(() =>
+    createDraftSaver({
+      save: (copy) => api.saveDraft(exchangeId, copy),
+      onState: setSaveState,
+    }),
+  )
 
   function edit(next: Draft) {
     latest.current = next
-    dirty.current = true
     setDraft(next)
-    schedule()
+    saver.changed(next)
   }
 
   // Leaving the page keeps what was typed in the last moment.
-  useEffect(
-    () => () => {
-      window.clearTimeout(timer.current)
-      if (dirty.current && !sent.current) {
-        api.saveDraft(exchangeId, latest.current).catch(() => {})
-      }
-    },
-    [exchangeId],
-  )
+  useEffect(() => () => saver.leave(), [saver])
 
   // ---- Editing -----------------------------------------------------------------
 
@@ -178,16 +146,7 @@ function Editor({ exchange, reload, onSent }: Props) {
 
   const built = useMemo(() => buildTerms(draft, digits, base?.terms), [draft, digits, base])
   const problems = checked && !built.ok ? built.problems : []
-  const exampleNumber = decimalForInput('1.5', language)
-  const exampleAmount = decimalForInput('25.50', language)
-
-  function problemText(problem: Problem): string {
-    const message = w.problems[problem.code]
-    if (problem.code === 'NOTE_TOO_LONG') return fmt(message, { max: NOTE_MAX_CHARS })
-    if (problem.code === 'QUANTITY_INVALID') return fmt(message, { example: exampleNumber })
-    if (problem.code === 'AMOUNT_INVALID') return fmt(message, { example: exampleAmount })
-    return message
-  }
+  const problemText = (problem: Problem) => problemMessage(problem, wording, language)
 
   function errorFor(field: ProblemField, contribution?: string): string | null {
     const found = problems.find(
@@ -226,22 +185,17 @@ function Editor({ exchange, reload, onSent }: Props) {
     setFailure(null)
     // The service drops the working copy when the revision is sent. A save
     // still on its way must not put it back afterwards.
-    window.clearTimeout(timer.current)
-    dirty.current = false
-    await saving.current
+    await saver.settle()
     try {
-      const result = await api.sendRevision(exchange.id, {
-        expected_version: exchange.version,
-        terms: built.terms,
-        note: built.note,
-        consent: consentShown(language),
-        invitation: kind === 'first' ? { bound_to: boundTo.trim() || null } : null,
-      })
-      sent.current = true
+      const result = await api.sendRevision(
+        exchange.id,
+        revisionToSend(exchange, built, language, boundTo),
+      )
+      saver.sent()
       onSent(result)
     } catch (error) {
       const code = failureCode(error)
-      dirty.current = true
+      saver.resume()
       if (code === 'VERSION_CONFLICT') {
         // The exchange moved on. Nothing was sent; show what it is now and
         // keep what was written.
@@ -291,11 +245,7 @@ function Editor({ exchange, reload, onSent }: Props) {
   }
 
   // An accepted contribution is locked: an amendment may not touch it.
-  const locked = new Set(
-    exchange.state === 'ACTIVE'
-      ? exchange.contributions.filter((item) => item.status === 'ACCEPTED').map((item) => item.id)
-      : [],
-  )
+  const locked = lockedContributions(exchange)
   const nameOf = (slot: Slot) => (slot === 'A' ? draft.partyA : draft.partyB)
   const setName = (slot: Slot, name: string) =>
     change(slot === 'A' ? { partyA: name } : { partyB: name })
@@ -427,7 +377,7 @@ function Editor({ exchange, reload, onSent }: Props) {
                         changeItem(item.id, { type: event.target.value as ContributionType })
                       }
                     >
-                      {TYPES.map((type) => (
+                      {CONTRIBUTION_TYPES.map((type) => (
                         <option key={type} value={type}>
                           {wording.contributionTypes[type]}
                         </option>
@@ -651,12 +601,6 @@ function Editor({ exchange, reload, onSent }: Props) {
       </form>
     </>
   )
-}
-
-function dueOf(kind: DraftDue['kind']): DraftDue {
-  if (kind === 'DATE') return { kind, date: '' }
-  if (kind === 'AFTER_CONTRIBUTION') return { kind, contribution: '' }
-  return { kind: 'ON_AGREEMENT' }
 }
 
 interface DecimalInputProps extends ControlProps {

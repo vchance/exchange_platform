@@ -1,5 +1,5 @@
 import type { components } from '@exchange/api-client'
-import { movesFor, NOTE_MAX_CHARS, type Move } from '@exchange/shared'
+import { moveCommand, movesFor, noteFor, NOTE_MAX_CHARS, type Move } from '@exchange/shared'
 import { useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
@@ -80,26 +80,13 @@ function MovePanel({ move, contribution, otherName, actions }: MovePanelProps) {
   const [note, setNote] = useState('')
   const [missing, setMissing] = useState(false)
 
-  // A dispute must say why, and a claim after a dispute must say what was
-  // done about it. A first claim may carry a note; nothing else takes one.
-  const needsNote = move === 'DISPUTE' || move === 'RECLAIM'
-  const takesNote = needsNote || move === 'CLAIM'
-  const label =
-    move === 'DISPUTE' ? w.reasonLabel : move === 'RECLAIM' ? w.remedyLabel : w.noteLabel
+  const { takes: takesNote, label } = noteFor(move)
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    const written = note.trim()
-    if (needsNote && written === '') {
-      setMissing(true)
-      return
-    }
-    void actions.run({
-      type: 'CONTRIBUTION',
-      contribution,
-      action: move === 'RECLAIM' ? 'CLAIM' : move,
-      note: takesNote && written !== '' ? written : null,
-    })
+    const command = moveCommand(move, contribution, note)
+    if (command) void actions.run(command)
+    else setMissing(true)
   }
 
   return (
@@ -107,7 +94,7 @@ function MovePanel({ move, contribution, otherName, actions }: MovePanelProps) {
       <form noValidate onSubmit={submit}>
         <p>{fmt(w.moveText[move], { name: otherName })}</p>
         {takesNote && (
-          <Field label={label} hint={w.noteRecord} error={missing ? w.noteRequired : null}>
+          <Field label={w[label]} hint={w.noteRecord} error={missing ? w.noteRequired : null}>
             {(control) => (
               <textarea
                 {...control}

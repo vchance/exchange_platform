@@ -85,7 +85,8 @@ function SignIn() {
     setResent(false)
     try {
       // The language on screen becomes a new account's language.
-      setAccount(await api.signIn(sentTo, code.trim(), language))
+      const session = await api.signIn(sentTo, code.trim(), language)
+      setAccount(session.account)
     } catch (error) {
       setFailure(failureCode(error))
       setBusy(false)

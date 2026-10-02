@@ -19,12 +19,27 @@ interface Separators {
   decimal: string
 }
 
+/**
+ * How a language separates thousands and decimals, read off a number it has
+ * formatted. `formatToParts` would say so directly, but the JavaScript engine
+ * in the mobile apps does not have it on iOS, so the same number is formatted
+ * with and without grouping and the two are compared.
+ */
 function separators(language: string): Separators {
-  const parts = new Intl.NumberFormat(language, { useGrouping: 'always' }).formatToParts(1234567.5)
-  return {
-    group: parts.find((part) => part.type === 'group')?.value ?? '',
-    decimal: parts.find((part) => part.type === 'decimal')?.value ?? '.',
+  const grouped = new Intl.NumberFormat(language, { useGrouping: 'always' }).format(1234567.5)
+  const plain = new Intl.NumberFormat(language, { useGrouping: false }).format(1234567.5)
+
+  // The number ends in its one decimal digit; the decimal separator is before it.
+  const decimal = plain.length >= 2 ? plain[plain.length - 2] : '.'
+  // The first character the grouped form has that the plain one lacks.
+  let group = ''
+  for (let index = 0; index < grouped.length; index += 1) {
+    if (grouped[index] !== plain[index]) {
+      group = grouped[index]
+      break
+    }
   }
+  return { group, decimal }
 }
 
 /**

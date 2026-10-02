@@ -1,0 +1,249 @@
+import type {
+  Account,
+  ApiClient,
+  Command,
+  components,
+  ErrorCode,
+  ExchangeSummary,
+  ExchangeView,
+} from '@exchange/api-client'
+
+import { idempotencyKeys } from './idempotency'
+
+type Schemas = components['schemas']
+export type InvitationPreview = Schemas['InvitationPreview']
+export type RevisionSent = Schemas['RevisionSent']
+export type RevisionView = Schemas['RevisionView']
+export type SendRevision = Schemas['SendRevision']
+export type SessionCreated = Schemas['SessionCreated']
+export type Slot = Schemas['Slot']
+
+/**
+ * A refusal from the service, or no answer from it. Screens show
+ * `wording.errors[code]`; nothing reads message text (DESIGN.md §13.3).
+ */
+export class ApiFailure extends Error {
+  readonly code: ErrorCode
+  /** No reply from the service itself, so whether the request took effect is unknown. */
+  readonly unanswered: boolean
+
+  constructor(code: ErrorCode, unanswered = false) {
+    super(code)
+    this.name = 'ApiFailure'
+    this.code = code
+    this.unanswered = unanswered
+  }
+}
+
+/** The error code to show for anything a request can throw. */
+export function failureCode(error: unknown): ErrorCode {
+  return error instanceof ApiFailure ? error.code : 'INTERNAL'
+}
+
+/**
+ * How a client holds its session (DESIGN.md §8). A browser asks for a cookie
+ * its page cannot read and never sees a token. An app asks for the token,
+ * keeps it in the device's secure storage, and says here how to read it back.
+ */
+export type SessionHolding =
+  | { delivery: 'COOKIE' }
+  | { delivery: 'TOKEN'; token(): string | null }
+
+export interface ExchangeApiOptions {
+  client: ApiClient
+  session: SessionHolding
+  /** Makes an idempotency key. It must be unguessable; the default needs `crypto.randomUUID`. */
+  newKey?: () => string
+}
+
+interface Reply<T> {
+  data?: T
+  error?: unknown
+  response: Response
+}
+
+export type ExchangeApi = ReturnType<typeof createExchangeApi>
+
+/**
+ * Every call the screens make, the same for the web app and the mobile app.
+ * What differs between them is where the service is and how the session is
+ * held, and both are given here.
+ */
+export function createExchangeApi({ client, session, newKey }: ExchangeApiOptions) {
+  const keys = idempotencyKeys(newKey)
+  let signedOut: () => void = () => {}
+
+  /** The session token, for a client that holds one. A cookie travels by itself. */
+  function token(): string | null {
+    return session.delivery === 'TOKEN' ? session.token() : null
+  }
+
+  function headers(): Record<string, string> | undefined {
+    const held = token()
+    return held ? { Authorization: `Bearer ${held}` } : undefined
+  }
+
+  async function send<T>(request: () => Promise<Reply<T>>): Promise<T> {
+    let reply: Reply<T>
+    try {
+      reply = await request()
+    } catch {
+      throw new ApiFailure('SERVICE_UNAVAILABLE', true)
+    }
+    if (reply.response.ok) return reply.data as T
+
+    const body = reply.error
+    const code =
+      typeof body === 'object' &&
+      body !== null &&
+      typeof (body as { code?: unknown }).code === 'string'
+        ? ((body as { code: string }).code as ErrorCode)
+        : null
+    // An error that is not the service's own came from something in between.
+    if (code === null) throw new ApiFailure('SERVICE_UNAVAILABLE', true)
+    if (code === 'UNAUTHENTICATED') signedOut()
+    throw new ApiFailure(code)
+  }
+
+  /**
+   * Sends a change to an exchange with an idempotency key: a fresh one for
+   * each attempt, the same one again when retrying a request that went
+   * unanswered.
+   */
+  async function change<T>(
+    path: string,
+    body: unknown,
+    request: (key: string) => Promise<Reply<T>>,
+  ): Promise<T> {
+    const fingerprint = `${path} ${JSON.stringify(body)}`
+    const key = keys.keyFor(fingerprint)
+    try {
+      const result = await send(() => request(key))
+      keys.answered(fingerprint)
+      return result
+    } catch (error) {
+      if (error instanceof ApiFailure && error.unanswered) keys.unanswered(fingerprint, key)
+      else keys.answered(fingerprint)
+      throw error
+    }
+  }
+
+  return {
+    /** Registers what to do when the service says the session is no longer valid. */
+    onSignedOut(handler: () => void): void {
+      signedOut = handler
+    },
+
+    /** The signed-in account, or `null` when nobody is signed in. */
+    async me(): Promise<Account | null> {
+      // Without a token there is no session to ask about.
+      if (session.delivery === 'TOKEN' && token() === null) return null
+      let reply: Reply<Account>
+      try {
+        reply = await client.GET('/v1/me', { headers: headers() })
+      } catch {
+        throw new ApiFailure('SERVICE_UNAVAILABLE', true)
+      }
+      if (reply.response.status === 401) return null
+      return send(async () => reply)
+    },
+
+    requestCode(identifier: string): Promise<void> {
+      return send(() => client.POST('/v1/auth/codes', { body: { identifier } }))
+    },
+
+    /**
+     * Signs in, creating the account the first time. For a token session the
+     * reply carries the token, once; keeping it is the caller's job.
+     */
+    signIn(identifier: string, code: string, language: string): Promise<SessionCreated> {
+      return send(() =>
+        client.POST('/v1/auth/sessions', {
+          body: { identifier, code, delivery: session.delivery, language },
+        }),
+      )
+    },
+
+    signOut(): Promise<void> {
+      return send(() => client.DELETE('/v1/auth/session', { headers: headers() }))
+    },
+
+    updateMe(update: Schemas['UpdateAccount']): Promise<Account> {
+      return send(() => client.PATCH('/v1/me', { headers: headers(), body: update }))
+    },
+
+    listExchanges(): Promise<ExchangeSummary[]> {
+      return send(() => client.GET('/v1/exchanges', { headers: headers() }))
+    },
+
+    createExchange(timezone: string): Promise<ExchangeView> {
+      return send(() => client.POST('/v1/exchanges', { headers: headers(), body: { timezone } }))
+    },
+
+    getExchange(id: string): Promise<ExchangeView> {
+      return send(() =>
+        client.GET('/v1/exchanges/{id}', { headers: headers(), params: { path: { id } } }),
+      )
+    },
+
+    /** Saves the working copy. It is private to its author and binds nobody. */
+    saveDraft(id: string, draft: object): Promise<void> {
+      return send(() =>
+        client.PUT('/v1/exchanges/{id}/draft', {
+          headers: headers(),
+          params: { path: { id } },
+          // The service stores it as given; the generated type cannot say so.
+          body: { body: draft as Record<string, never> },
+        }),
+      )
+    },
+
+    sendRevision(id: string, body: SendRevision): Promise<RevisionSent> {
+      return change(`revisions/${id}`, body, (key) =>
+        client.POST('/v1/exchanges/{id}/revisions', {
+          headers: headers(),
+          params: { path: { id }, header: { 'Idempotency-Key': key } },
+          body,
+        }),
+      )
+    },
+
+    /** Every change names the version it was based on (DESIGN.md §13.4). */
+    runCommand(id: string, expectedVersion: number, command: Command): Promise<ExchangeView> {
+      const body = { expected_version: expectedVersion, command }
+      return change(`commands/${id}`, body, (key) =>
+        client.POST('/v1/exchanges/{id}/commands', {
+          headers: headers(),
+          params: { path: { id }, header: { 'Idempotency-Key': key } },
+          body,
+        }),
+      )
+    },
+
+    /** Replaces the invitation link and returns the new token, which is shown once. */
+    async reissueInvitation(id: string, boundTo: string | null): Promise<string> {
+      const issued = await send(() =>
+        client.POST('/v1/exchanges/{id}/invitation', {
+          headers: headers(),
+          params: { path: { id } },
+          body: { bound_to: boundTo },
+        }),
+      )
+      return issued.invitation_token
+    },
+
+    // The invitation token travels in the body, so it never appears in a URL
+    // the service might log.
+    previewInvitation(invitation: string): Promise<InvitationPreview> {
+      return send(() =>
+        client.POST('/v1/invitations/preview', { headers: headers(), body: { token: invitation } }),
+      )
+    },
+
+    claimInvitation(invitation: string): Promise<ExchangeView> {
+      return send(() =>
+        client.POST('/v1/invitations/claim', { headers: headers(), body: { token: invitation } }),
+      )
+    },
+  }
+}

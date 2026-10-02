@@ -70,9 +70,20 @@ function placeholder(inner: string, values: MessageValues, language: string): st
   const branches = pluralBranches(rest.slice(rest.indexOf(',') + 1))
   const chosen =
     branches.get(`=${value}`) ??
-    branches.get(new Intl.PluralRules(language).select(value)) ??
+    branches.get(pluralCategory(value, language)) ??
     branches.get('other')
   return chosen === undefined ? `{${inner}}` : render(chosen, values, language, value)
+}
+
+/**
+ * Which of the language's plural forms a number takes. The JavaScript engine
+ * in the mobile apps has no `Intl.PluralRules`; the mobile app supplies one
+ * from the same Unicode data before anything is shown. Should it ever be
+ * missing all the same, `other` is the form every message has.
+ */
+function pluralCategory(value: number, language: string): string {
+  if (typeof Intl.PluralRules !== 'function') return 'other'
+  return new Intl.PluralRules(language).select(value)
 }
 
 /** Reads `one {…} other {…}` into its branches. */

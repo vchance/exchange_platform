@@ -1,7 +1,7 @@
+import { invitationLink } from '@exchange/shared'
 import { useState } from 'react'
 
 import { useI18n } from '../app/context'
-import { paths } from '../app/routes'
 import { Field, Notice } from './ui'
 
 /**
@@ -47,7 +47,7 @@ export function InvitationLink({ token }: { token: string }) {
   const { wording, language } = useI18n()
   const w = wording.invitationLink
   const [copied, setCopied] = useState<'yes' | 'failed' | null>(null)
-  const link = window.location.origin + paths.invitation(language, token)
+  const link = invitationLink(window.location.origin, language, token)
 
   async function copy() {
     try {

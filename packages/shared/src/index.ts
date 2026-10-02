@@ -1,7 +1,7 @@
 export { defaultLanguage, directionOf, languages, pickLanguage, wordingFor } from './language'
 export type { Language, LanguageInfo } from './language'
 export type { ClosedReason, Wording } from './wording/types'
-export { CONSENT_VERSION } from './consent'
+export { CONSENT_VERSION, consentShown } from './consent'
 export { formatMessage } from './message'
 export type { MessageValues } from './message'
 export {
@@ -31,5 +31,48 @@ export type {
   ProblemCode,
   ProblemField,
 } from './draft'
-export { isOverdue, movesFor, todayIn } from './fulfillment'
-export type { Move, Role } from './fulfillment'
+export {
+  isOverdue,
+  moveCommand,
+  movesFor,
+  noteFor,
+  otherPartyName,
+  otherSlot,
+  remainingRequired,
+  statusesOf,
+  todayIn,
+} from './fulfillment'
+export type { Move, MoveNote, Role } from './fulfillment'
+export { ApiFailure, createExchangeApi, failureCode } from './api'
+export type {
+  ExchangeApi,
+  ExchangeApiOptions,
+  InvitationPreview,
+  RevisionSent,
+  RevisionView,
+  SendRevision,
+  SessionCreated,
+  SessionHolding,
+  Slot,
+} from './api'
+export { idempotencyKeys } from './idempotency'
+export type { IdempotencyKeys } from './idempotency'
+export { sendCommand, useActions } from './actions'
+export type { Actions, CommandOutcome, CommandSender, FocusKeeper } from './actions'
+export { createI18n, isComplete } from './i18n'
+export type { I18n } from './i18n'
+export { invitationLink, invitationPath, invitationToken, invitationTokenIn } from './invitation'
+export {
+  baseRevision,
+  canCompose,
+  composerKind,
+  CONTRIBUTION_TYPES,
+  createDraftSaver,
+  dueOf,
+  lockedContributions,
+  problemText,
+  revisionToSend,
+  SAVE_AFTER_MS,
+  startingDraft,
+} from './composer'
+export type { ComposerKind, DraftSaver, SaveState } from './composer'

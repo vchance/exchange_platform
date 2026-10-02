@@ -1,7 +1,8 @@
-import type { components } from '@exchange/api-client'
+import type { Command, components, ExchangeView } from '@exchange/api-client'
 
 type Status = components['schemas']['Status']
 type Due = components['schemas']['DueDto']
+type Slot = components['schemas']['Slot']
 
 /*
  * Which fulfillment actions to offer, mirroring the table in DESIGN.md §5.2.
@@ -44,16 +45,87 @@ export function movesFor(status: Status, role: Role): Move[] {
   }
 }
 
+/**
+ * What a move has to say for itself. A dispute must say why, and a claim
+ * after a dispute must say what was done about it. A first claim may carry a
+ * note; nothing else takes one. `label` is which of the note labels in the
+ * wording goes over the field.
+ */
+export interface MoveNote {
+  takes: boolean
+  needs: boolean
+  label: 'reasonLabel' | 'remedyLabel' | 'noteLabel'
+}
+
+export function noteFor(move: Move): MoveNote {
+  const needs = move === 'DISPUTE' || move === 'RECLAIM'
+  return {
+    takes: needs || move === 'CLAIM',
+    needs,
+    label: move === 'DISPUTE' ? 'reasonLabel' : move === 'RECLAIM' ? 'remedyLabel' : 'noteLabel',
+  }
+}
+
+/**
+ * The command a move sends, or `null` when it needs a note and `written` has
+ * none. A note on a move that takes none is left out.
+ */
+export function moveCommand(move: Move, contribution: string, written: string): Command | null {
+  const note = written.trim()
+  const { takes, needs } = noteFor(move)
+  if (needs && note === '') return null
+  return {
+    type: 'CONTRIBUTION',
+    contribution,
+    action: move === 'RECLAIM' ? 'CLAIM' : move,
+    note: takes && note !== '' ? note : null,
+  }
+}
+
+/** The other side of the exchange. */
+export function otherSlot(you: Slot): Slot {
+  return you === 'A' ? 'B' : 'A'
+}
+
+/**
+ * The other party's name as it is written in the latest terms, or empty when
+ * nobody has been named yet.
+ */
+export function otherPartyName(exchange: ExchangeView): string {
+  const latest = (exchange.open_revision ?? exchange.in_force_revision)?.terms
+  if (!latest) return ''
+  return otherSlot(exchange.you) === 'A' ? latest.party_a_name : latest.party_b_name
+}
+
+/** Where each contribution of the agreement in force stands. */
+export function statusesOf(exchange: ExchangeView): Map<string, Status> {
+  return new Map(exchange.contributions.map((contribution) => [contribution.id, contribution.status]))
+}
+
+/**
+ * How many required contributions are neither accepted nor waived: what
+ * stands between the agreement in force and completion (DESIGN.md §5.1).
+ */
+export function remainingRequired(exchange: ExchangeView): number {
+  const inForce = exchange.in_force_revision
+  if (!inForce) return 0
+  const statuses = statusesOf(exchange)
+  return inForce.terms.contributions.filter((contribution) => {
+    const status = statuses.get(contribution.id)
+    return contribution.required && status !== 'ACCEPTED' && status !== 'WAIVED'
+  }).length
+}
+
 /** Today's calendar date, `YYYY-MM-DD`, in an IANA timezone. */
 export function todayIn(timezone: string, now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now)
-  const part = (type: string) => parts.find((found) => found.type === type)?.value ?? ''
-  return `${part('year')}-${part('month')}-${part('day')}`
+  // One field at a time, each from plain `format`: the engine in the mobile
+  // apps takes a formatted date apart less reliably than a browser does.
+  const field = (options: Intl.DateTimeFormatOptions, width: number) =>
+    new Intl.DateTimeFormat('en', { timeZone: timezone, ...options })
+      .format(now)
+      .replace(/\D/g, '')
+      .padStart(width, '0')
+  return `${field({ year: 'numeric' }, 4)}-${field({ month: '2-digit' }, 2)}-${field({ day: '2-digit' }, 2)}`
 }
 
 /**

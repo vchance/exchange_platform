@@ -1,5 +1,11 @@
-import type { components, ErrorCode, ExchangeView as Exchange } from '@exchange/api-client'
-import type { ClosedReason } from '@exchange/shared'
+import type { ErrorCode, ExchangeView as Exchange } from '@exchange/api-client'
+import {
+  consentShown,
+  otherPartyName,
+  remainingRequired,
+  statusesOf,
+  type ClosedReason,
+} from '@exchange/shared'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
@@ -11,12 +17,9 @@ import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
 import { Failure, Notice, PageHeading, Written } from '../components/ui'
 import { useActions, type Actions } from '../lib/actions'
-import { api, failureCode, type RevisionView, type Slot } from '../lib/api'
-import { consentShown } from '../lib/consent'
+import { api, failureCode, type RevisionView } from '../lib/api'
 import { Ending } from './Ending'
 import { Fulfillment } from './Fulfillment'
-
-type Status = components['schemas']['Status']
 
 /** How often an open exchange is checked for what the other party has done. */
 const CHECK_EVERY_MS = 20_000
@@ -43,11 +46,9 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
   const actions = useActions(exchange, onChange, reload)
 
   const you = exchange.you
-  const other: Slot = you === 'A' ? 'B' : 'A'
   const open = exchange.open_revision ?? null
   const inForce = exchange.in_force_revision ?? null
-  const latest = (open ?? inForce)?.terms
-  const writtenName = latest ? (other === 'A' ? latest.party_a_name : latest.party_b_name) : ''
+  const writtenName = otherPartyName(exchange)
   // In a sentence, someone with no name yet is "the other party".
   const otherName = writtenName || wording.party.other
   const active = exchange.state === 'ACTIVE'
@@ -97,15 +98,8 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
     if (refused) refusal.current?.scrollIntoView({ block: 'center' })
   }, [refused])
 
-  const statuses = new Map<string, Status>(
-    exchange.contributions.map((contribution) => [contribution.id, contribution.status]),
-  )
-  const remaining = inForce
-    ? inForce.terms.contributions.filter((contribution) => {
-        const status = statuses.get(contribution.id)
-        return contribution.required && status !== 'ACCEPTED' && status !== 'WAIVED'
-      }).length
-    : 0
+  const statuses = statusesOf(exchange)
+  const remaining = remainingRequired(exchange)
 
   return (
     <>

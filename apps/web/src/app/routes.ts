@@ -1,3 +1,8 @@
+import { invitationPath } from '@exchange/shared'
+
+// Reading the token back out of a link is the same on every client.
+export { invitationToken } from '@exchange/shared'
+
 /*
  * The app's addresses. Two of them are fixed points other things depend on:
  * an exchange lives at `/exchanges/{id}`, which notification emails link to,
@@ -46,11 +51,5 @@ export const paths = {
    * browser never sends, so it cannot end up in a server log; the path names
    * the sender's language so the link previews in it.
    */
-  invitation: (language: string, token: string) => `/${language}/i#${token}`,
-}
-
-/** The token from an invitation link's fragment, if it has one. */
-export function invitationToken(hash: string): string | null {
-  const token = hash.replace(/^#/, '').trim()
-  return /^[A-Za-z0-9_-]{16,}$/.test(token) ? token : null
+  invitation: invitationPath,
 }
