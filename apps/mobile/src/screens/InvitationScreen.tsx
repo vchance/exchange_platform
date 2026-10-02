@@ -242,7 +242,18 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
 
       {preview && (
         <>
-          <P>{fmt(able ? w.introSignedIn : w.intro, { name: sender })}</P>
+          {/* Whoever holds a link that names nobody can open it, so its sender
+              confirms them before they can do more than sign (DESIGN.md §8). */}
+          {preview.bound ? (
+            <P>{fmt(able ? w.introSignedIn : w.intro, { name: sender })}</P>
+          ) : (
+            <P>
+              {fmt(
+                able ? wording.claimant.invitationIntroSignedIn : wording.claimant.invitationIntro,
+                { name: sender },
+              )}
+            </P>
+          )}
           <P>{w.notBinding}</P>
 
           <Card>

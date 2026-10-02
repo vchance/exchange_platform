@@ -2,6 +2,7 @@ import type { ErrorCode, ExchangeView as Exchange } from '@exchange/api-client';
 import {
   consentShown,
   failureCode,
+  isUnconfirmedClaimant,
   otherPartyName,
   remainingRequired,
   statusesOf,
@@ -36,6 +37,7 @@ import {
 import { useI18n } from '../lib/context';
 import { api } from '../lib/session';
 import { type, useColors } from '../lib/theme';
+import { ClaimantWaiting, ConfirmClaimant, NobodyYet } from './Claimant';
 import { Ending } from './Ending';
 import { Fulfillment } from './Fulfillment';
 
@@ -279,8 +281,7 @@ function Counterparty({
   onIssued,
   reload,
 }: CounterpartyProps) {
-  const { wording, fmt } = useI18n();
-  const w = wording.exchange;
+  const { wording } = useI18n();
   const link = wording.invitationLink;
   const initiator = exchange.you === 'A';
   const claimant = exchange.claimant ?? null;
@@ -291,7 +292,7 @@ function Counterparty({
     return (
       <Card>
         <Heading level={2}>{link.heading}</Heading>
-        {issued ? <InvitationLink key={issued} token={issued} /> : <P>{link.unclaimed}</P>}
+        {issued ? <InvitationLink key={issued} token={issued} /> : <NobodyYet exchange={exchange} />}
         <P>{link.reissueIntro}</P>
         <Actions>
           <Button
@@ -308,32 +309,19 @@ function Counterparty({
   }
 
   if (initiator && exchange.counterparty === 'CLAIMED' && claimant) {
-    const signed = exchange.open_revision?.accepted_by.includes('B') ?? false;
     return (
-      <Card>
-        <Heading level={2}>{w.claimedHeading}</Heading>
-        <P>{fmt(w.claimedBody, { name: claimant.display_name, identifier: claimant.identifier })}</P>
-        {signed && <P>{w.claimedSigned}</P>}
-        <Actions>
-          <Button
-            variant="primary"
-            label={w.confirmCounterparty}
-            disabled={actions.busy}
-            onPress={() => void actions.run({ type: 'CONFIRM_COUNTERPARTY' })}
-          />
-        </Actions>
-        <Hint>{w.notThem}</Hint>
-      </Card>
+      <ConfirmClaimant
+        exchange={exchange}
+        claimant={claimant}
+        actions={actions}
+        // Straight on to making a link for the person who was meant.
+        onRejected={() => actions.open('reissue')}
+      />
     );
   }
 
-  if (!initiator && exchange.counterparty === 'CLAIMED') {
-    const signed = exchange.open_revision?.accepted_by.includes('B') ?? false;
-    return (
-      <Notice quiet>
-        {fmt(signed ? w.waitingConfirmationSigned : w.waitingConfirmation, { name: otherName })}
-      </Notice>
-    );
+  if (isUnconfirmedClaimant(exchange)) {
+    return <ClaimantWaiting exchange={exchange} otherName={otherName} actions={actions} />;
   }
   return null;
 }
@@ -470,13 +458,18 @@ function OpenRevision({ exchange, revision, otherName, actions, onRevise }: Open
                 onPress={() => actions.open('accept')}
               />
             )}
-            <Button label={w.counter} onPress={onRevise} />
-            <Button
-              label={w.decline}
-              expanded={actions.panel === 'decline'}
-              disabled={actions.busy}
-              onPress={() => actions.open('decline')}
-            />
+            {/* Someone the initiator has not confirmed can sign or leave (DESIGN.md §8). */}
+            {!isUnconfirmedClaimant(exchange) && (
+              <>
+                <Button label={w.counter} onPress={onRevise} />
+                <Button
+                  label={w.decline}
+                  expanded={actions.panel === 'decline'}
+                  disabled={actions.busy}
+                  onPress={() => actions.open('decline')}
+                />
+              </>
+            )}
           </Actions>
         </>
       )}
