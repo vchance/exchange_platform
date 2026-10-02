@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch or pull request replaces the run in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # What the checks are written against. Raise these on purpose, so a new
+  # compiler's lints never fail a change that has nothing to do with them.
+  RUST_TOOLCHAIN: "1.97"
+  NODE_VERSION: "26"
+
+jobs:
+  backend:
+    name: Backend and API client
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    env:
+      CARGO_TERM_COLOR: always
+      # No debug information: nothing here runs under a debugger, and leaving
+      # it out shortens the build and shrinks the cache.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      # The same two connections as .env.example.
+      DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/exchange
+      MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/exchange
+    services:
+      # The same database as docker-compose.yml. As the container's own user,
+      # `exchange` is a superuser here, so it may create the throwaway
+      # databases the API tests use.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: exchange
+          POSTGRES_PASSWORD: exchange
+          POSTGRES_DB: exchange
+        ports:
+          - 5432:5432
+        # Over TCP, which answers only once initialization has finished.
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d exchange"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt,clippy --no-self-update
+          rustup default "$RUST_TOOLCHAIN"
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: backend
+
+      # For the API client generator, the last step.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # A service container starts before the checkout, so it cannot mount the
+      # init script the way docker-compose.yml does.
+      - name: Create the application role
+        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d exchange < docker/postgres-init.sql
+
+      # Each check below runs even when an earlier one has failed, so one run
+      # reports everything that is wrong.
+      - name: Format
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        run: cargo fmt --check
+
+      - name: Clippy
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        run: cargo test --locked --no-fail-fast
+
+      # Here rather than in the TypeScript job because the generator runs the
+      # service's `openapi` binary, which the tests have just built.
+      - name: Generated API client is up to date
+        if: ${{ !cancelled() }}
+        run: |
+          npm run gen:api
+          if [ -n "$(git status --porcelain -- packages/api-client)" ]; then
+            git diff -- packages/api-client
+            echo "::error::packages/api-client does not match the service. Run 'npm run gen:api' and commit the result."
+            exit 1
+          fi
+
+  typescript:
+    name: TypeScript
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck and wording check
+        run: npm run typecheck
+
+      - name: Lint the web app
+        if: ${{ !cancelled() }}
+        run: npm run lint -w @exchange/web
+
+      - name: Build the web app
+        if: ${{ !cancelled() }}
+        run: npm run build:web

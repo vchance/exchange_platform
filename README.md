@@ -63,6 +63,15 @@ On a physical device the mobile app cannot reach the development machine as `loc
 | `cargo test` (in `backend/`) | Backend tests: the rules as pure functions, and the database, sign-in and exchange API against a running PostgreSQL. |
 | `cargo run --bin worker` (in `backend/`) | Background worker. |
 
+## CI
+
+GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Two jobs run side by side:
+
+- **Backend and API client**, against a PostgreSQL 17 container with the same two roles as local development: `cargo fmt --check`, `cargo clippy --all-targets` with warnings as errors, `cargo test`, and then `npm run gen:api`, which fails the job if it changes anything under `packages/api-client`. A stale client means the contract has drifted; regenerate it and commit the result.
+- **TypeScript**: `npm ci`, `npm run typecheck` (which includes the wording check), `npm run lint -w @exchange/web` and `npm run build:web`.
+
+The workflow names the Rust and Node versions it uses; raise them there when the project moves to newer ones.
+
 ## Backend binaries
 
 - `api` — the HTTP service.
