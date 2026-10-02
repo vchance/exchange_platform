@@ -47,11 +47,25 @@ async fn connect(url: &str) -> PgPool {
         .unwrap_or_else(|error| panic!("cannot connect to {url}: {error}"))
 }
 
+/// A short tag for this checkout. Several working copies of the repository
+/// can run their tests against one PostgreSQL at the same time; the tag keeps
+/// each from dropping the database another is using.
+fn checkout_tag() -> String {
+    // FNV-1a over the path of this copy of the backend.
+    let hash = env!("CARGO_MANIFEST_DIR")
+        .bytes()
+        .fold(0x811c_9dc5_u32, |hash, byte| {
+            (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+        });
+    format!("{hash:08x}")
+}
+
 /// Creates the binary's database once per run and returns the owner and
 /// application connection strings for it.
 async fn database(name: &'static str) -> &'static (String, String) {
     static URLS: OnceCell<(String, String)> = OnceCell::const_new();
     URLS.get_or_init(|| async move {
+        let name = &format!("{name}_{}", checkout_tag());
         let owner_url = env("MIGRATION_DATABASE_URL");
         let admin = connect(&owner_url).await;
         for statement in [
