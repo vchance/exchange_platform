@@ -12,6 +12,8 @@ export type Route =
   | { name: 'exchange'; id: string }
   /** Writing a counteroffer or an amendment. */
   | { name: 'revise'; id: string }
+  /** The whole record of an exchange, laid out for reading and printing. */
+  | { name: 'record'; id: string }
   | { name: 'notFound' }
 
 const UUID = '[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}'
@@ -19,6 +21,7 @@ const LANGUAGE_TAG = '[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*'
 
 const EXCHANGE = new RegExp(`^/exchanges/(${UUID})$`)
 const REVISE = new RegExp(`^/exchanges/(${UUID})/revise$`)
+const RECORD = new RegExp(`^/exchanges/(${UUID})/record$`)
 const INVITATION = new RegExp(`^/(${LANGUAGE_TAG})/i$`)
 
 export function matchRoute(pathname: string): Route {
@@ -31,6 +34,8 @@ export function matchRoute(pathname: string): Route {
   if (invitation) return { name: 'invitation', language: invitation[1] }
   const revise = REVISE.exec(path)
   if (revise) return { name: 'revise', id: revise[1].toLowerCase() }
+  const record = RECORD.exec(path)
+  if (record) return { name: 'record', id: record[1].toLowerCase() }
   const exchange = EXCHANGE.exec(path)
   if (exchange) return { name: 'exchange', id: exchange[1].toLowerCase() }
   return { name: 'notFound' }
@@ -41,6 +46,7 @@ export const paths = {
   account: '/account',
   exchange: (id: string) => `/exchanges/${id}`,
   revise: (id: string) => `/exchanges/${id}/revise`,
+  record: (id: string) => `/exchanges/${id}/record`,
   /**
    * The link an initiator shares. The token goes in the fragment, which a
    * browser never sends, so it cannot end up in a server log; the path names

@@ -482,6 +482,126 @@
     "sendStatement": "Agregar al registro",
     "statementAdded": "Tu declaración se agregó al registro."
   },
+  "record": {
+    "historyHeading": "Historial",
+    "historyEmpty": "Todavía no ha pasado nada.",
+    "historyEarlier": "Las entradas anteriores están en el registro completo.",
+    "open": "Abrir el registro completo",
+    "openHint": "Todo lo que se envió, se firmó y se registró en este intercambio, para leerlo, imprimirlo o descargarlo.",
+    "title": "Registro del intercambio {code}",
+    "back": "Volver al intercambio",
+    "print": "Imprimir o guardar como PDF",
+    "download": "Descargar una copia (JSON)",
+    "fileName": "registro-de-intercambio-{code}",
+    "madeFor": "Esta copia se hizo para {name} el {date}.",
+    "timesIn": "Las horas se muestran en la zona horaria {timezone}.",
+    "summaryHeading": "Resumen",
+    "started": "Iniciado el {date}",
+    "closedOn": "Cerrado el {date}",
+    "agreementIs": "El acuerdo es la versión {number}.",
+    "agreementNone": "Ninguna versión ha sido firmada por ambas partes.",
+    "waiting": "La versión {number} está pendiente de firma.",
+    "endProposed": "{name} propuso terminar el intercambio de común acuerdo.",
+    "closeRequested": "El {date}, {name} pidió cerrar el intercambio sin acuerdo.",
+    "closedReasons": {
+      "WITHDRAWN": "La propuesta fue retirada por la parte que la envió.",
+      "DECLINED": "La propuesta fue rechazada.",
+      "EXPIRED": "La propuesta venció antes de que ambas partes la firmaran.",
+      "CLOSE_REQUEST": "Una de las partes pidió cerrarlo y se acabó el plazo para responder. Cada elemento conservó el estado que tenía.",
+      "INACTIVE": "Se cerró después de mucho tiempo sin actividad. Cada elemento conservó el estado que tenía."
+    },
+    "aboutHeading": "Acerca de este registro",
+    "itemsHeading": "Cómo está cada elemento del acuerdo",
+    "itemFrom": "Aportado por {name}",
+    "since": "Desde el {date}",
+    "signaturesHeading": "Firmas",
+    "verifiedBy": "Cómo se verificó a quien firmó: {method}",
+    "verifiedAt": "Código ingresado el {date}.",
+    "consentShown": "Texto de consentimiento mostrado antes de firmar: versión {version}, en el idioma {language}.",
+    "versionsNone": "No se ha enviado nada.",
+    "versionHeading": "Versión {number}",
+    "versionSent": "Enviada por {name} el {date}. Abierta para firma hasta el {expires}.",
+    "versionAnswers": "Enviada en respuesta a la versión {number}.",
+    "versionStatus": {
+      "OPEN": "Pendiente de la firma de ambas partes.",
+      "IN_FORCE": "Firmada por ambas partes. Este es el acuerdo.",
+      "REPLACED": "Firmada por ambas partes. Fue el acuerdo hasta que una versión posterior la reemplazó.",
+      "SUPERSEDED": "Reemplazada por una versión posterior antes de que ambas partes la firmaran.",
+      "VOIDED": "Seguía sin la firma de ambas partes cuando se cerró el intercambio.",
+      "DECLINED": "Rechazada.",
+      "WITHDRAWN": "Retirada por la parte que la envió.",
+      "EXPIRED": "Venció antes de que ambas partes la firmaran."
+    },
+    "versionReplacedBy": "La versión {number} ocupó su lugar.",
+    "versionSignedBy": "Firmada por {name} el {date}.",
+    "eventsHeading": "Todo lo que pasó, en orden",
+    "noteLabels": {
+      "message": "Mensaje enviado con ella",
+      "note": "Nota",
+      "reason": "Motivo indicado",
+      "statement": "Declaración"
+    },
+    "events": {
+      "you": {
+        "COUNTERPARTY_CLAIMED": "Abriste la invitación y te uniste al intercambio.",
+        "COUNTERPARTY_CONFIRMED": "Confirmaste que la persona que se unió es a quien invitaste.",
+        "REVISION_SENT": "Enviaste la versión {number} y, al enviarla, la firmaste.",
+        "REVISION_ACCEPTED": "Firmaste la versión {number}.",
+        "REVISION_DECLINED": "Rechazaste la versión {number}.",
+        "REVISION_WITHDRAWN": "Retiraste la versión {number}.",
+        "CONTRIBUTION_CLAIMED": "Marcaste esto como entregado:",
+        "CONTRIBUTION_CLAIM_RETRACTED": "Deshiciste «entregado» para esto:",
+        "CONTRIBUTION_CONFIRMED": "Confirmaste haber recibido esto:",
+        "CONTRIBUTION_DISPUTED": "Disputaste esto:",
+        "CONTRIBUTION_WAIVED": "Dispensaste esto:",
+        "END_PROPOSED": "Propusiste terminar el intercambio de común acuerdo.",
+        "END_PROPOSAL_CANCELLED": "Dejaste sin efecto la propuesta de terminar el intercambio de común acuerdo.",
+        "CLOSE_REQUESTED": "Pediste cerrar el intercambio sin acuerdo.",
+        "CLOSE_REQUEST_RETRACTED": "Retiraste la solicitud de cerrar el intercambio.",
+        "STATEMENT_ADDED": "Agregaste una declaración."
+      },
+      "named": {
+        "COUNTERPARTY_CLAIMED": "{name} abrió la invitación y se unió al intercambio.",
+        "COUNTERPARTY_CONFIRMED": "{name} confirmó que la persona que se unió es a quien invitó.",
+        "REVISION_SENT": "{name} envió la versión {number} y, al enviarla, la firmó.",
+        "REVISION_ACCEPTED": "{name} firmó la versión {number}.",
+        "REVISION_DECLINED": "{name} rechazó la versión {number}.",
+        "REVISION_WITHDRAWN": "{name} retiró la versión {number}.",
+        "CONTRIBUTION_CLAIMED": "{name} marcó esto como entregado:",
+        "CONTRIBUTION_CLAIM_RETRACTED": "{name} deshizo «entregado» para esto:",
+        "CONTRIBUTION_CONFIRMED": "{name} confirmó haber recibido esto:",
+        "CONTRIBUTION_DISPUTED": "{name} disputó esto:",
+        "CONTRIBUTION_WAIVED": "{name} dispensó esto:",
+        "END_PROPOSED": "{name} propuso terminar el intercambio de común acuerdo.",
+        "END_PROPOSAL_CANCELLED": "{name} dejó sin efecto la propuesta de terminar el intercambio de común acuerdo.",
+        "CLOSE_REQUESTED": "{name} pidió cerrar el intercambio sin acuerdo.",
+        "CLOSE_REQUEST_RETRACTED": "{name} retiró la solicitud de cerrar el intercambio.",
+        "STATEMENT_ADDED": "{name} agregó una declaración."
+      },
+      "neutral": {
+        "REVISION_SUPERSEDED": "La versión {number} quedó sin efecto antes de que ambas partes la firmaran.",
+        "REVISION_EXPIRED": "La versión {number} venció antes de que ambas partes la firmaran.",
+        "AGREEMENT_IN_FORCE": "La versión {number}, ya firmada por ambas partes, pasó a ser el acuerdo.",
+        "INACTIVITY_PROMPTED": "Después de mucho tiempo sin actividad, se preguntó a ambas partes si el intercambio seguía en curso."
+      },
+      "closed": {
+        "NOT_AGREED": "El intercambio se cerró sin acuerdo.",
+        "COMPLETED": "El intercambio se completó: todos los elementos obligatorios habían sido confirmados o dispensados.",
+        "ENDED_BY_AGREEMENT": "El intercambio se terminó de común acuerdo. Se dispensó todo lo que seguía pendiente.",
+        "UNRESOLVED": "El intercambio se cerró sin resolver. Cada elemento conservó el estado que tenía."
+      }
+    },
+    "export": {
+      "about": "Esta es una copia del registro de un intercambio, tal como lo tenía el servicio cuando se hizo la copia. Lo que escribieron las partes aparece exactamente como lo escribieron.",
+      "signatures": "Cada firma la hizo una persona que había iniciado sesión en una cuenta. La única comprobación de quién es esa persona fue un solo código de un solo uso, enviado a una dirección de correo electrónico o a un número de teléfono, que ingresó al iniciar sesión. Eso pudo ocurrir algún tiempo antes de firmar. No se pidió ninguna otra prueba de identidad.",
+      "statements": "Marcar algo como entregado, confirmarlo, disputarlo o dispensarlo, y cada nota, motivo y declaración, son lo que las propias partes registraron. El servicio los guardó tal como se hicieron y no comprobó si alguno es cierto.",
+      "contentHash": "La huella de una versión es el resumen SHA-256, escrito en hexadecimal, de sus términos firmados como JSON canónico (RFC 8785) en UTF-8. En una copia descargada, los términos firmados son la parte «signed» de cada revisión y la huella es su «content_hash», así que cualquiera puede calcularla de nuevo y comparar. El mensaje enviado con una versión y la fecha hasta la que sigue abierta no forman parte de lo que se firma.",
+      "verification": {
+        "EMAIL_OTP": "Un solo código de un solo uso enviado a una dirección de correo electrónico. No se comprobó nada más sobre quien firmó.",
+        "PHONE_OTP": "Un solo código de un solo uso enviado por mensaje de texto a un número de teléfono. No se comprobó nada más sobre quien firmó."
+      }
+    }
+  },
   "errors": {
     "STALE_REVISION": "Los términos cambiaron mientras los revisabas. Revisa la versión más reciente.",
     "WRONG_ACTOR": "Solo la otra parte puede hacer esto.",

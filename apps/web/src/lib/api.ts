@@ -149,6 +149,18 @@ export const api = {
     return send(() => client.GET('/v1/exchanges/{id}', { params: { path: { id } } }))
   },
 
+  /** The latest of an exchange's history, with what the parties wrote along the way. */
+  history(id: string): Promise<Schemas['HistoryPage']> {
+    return send(() => client.GET('/v1/exchanges/{id}/history', { params: { path: { id } } }))
+  },
+
+  /** One part of an exchange's record: the first, or the one starting at `from`. */
+  recordPart(id: string, from: Schemas['Continuation'] | null): Promise<Schemas['RecordDocument']> {
+    return send(() =>
+      client.GET('/v1/exchanges/{id}/record', { params: { path: { id }, query: from ?? {} } }),
+    )
+  },
+
   /** Saves the working copy. It is private to its author and binds nobody. */
   saveDraft(id: string, draft: object): Promise<void> {
     return send(() =>

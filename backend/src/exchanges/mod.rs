@@ -2,5 +2,6 @@
 //! that connect the two to the rules in `crate::domain`.
 
 pub mod dto;
+pub mod record;
 pub mod repo;
 pub mod service;

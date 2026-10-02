@@ -15,6 +15,7 @@ pub mod auth;
 pub mod exchanges;
 pub mod extract;
 pub mod health;
+pub mod record;
 pub mod safety;
 pub mod v1;
 
@@ -63,6 +64,8 @@ pub fn router(state: AppState) -> Router {
         exchanges::save_draft,
         exchanges::send_revision,
         exchanges::run_command,
+        record::history,
+        record::record,
         exchanges::reissue_invitation,
         exchanges::preview_invitation,
         exchanges::claim_invitation,

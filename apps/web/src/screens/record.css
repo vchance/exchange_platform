@@ -1,0 +1,68 @@
+/*
+ * The record page, on screen and on paper. Printing it is how a party gets a
+ * PDF, so the print rules below are part of the feature: the paper holds the
+ * record and nothing of the app around it.
+ */
+
+.record-signature + .record-signature {
+  margin-block-start: 0.75rem;
+}
+
+.record-signature > p {
+  margin-block-end: 0.25rem;
+}
+
+@page {
+  margin: 16mm;
+}
+
+@media print {
+  /* Ink on white, whatever the screen was showing. */
+  :root:has(.record-page) {
+    color-scheme: light;
+  }
+
+  body:has(.record-page) header.site,
+  body:has(.record-page) .skip,
+  .record-page .no-print {
+    display: none;
+  }
+
+  body:has(.record-page) main {
+    max-inline-size: none;
+    padding: 0;
+  }
+
+  .record-page {
+    font-size: 10.5pt;
+  }
+
+  .record-page a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* A version runs over pages; a box around it would be cut at each one. */
+  .record-page .card {
+    padding: 0.75rem 0 0;
+    border: 0;
+    border-block-start: 1px solid var(--line);
+    border-radius: 0;
+  }
+
+  /* A heading stays with what it heads, and short things stay whole. */
+  .record-page h1,
+  .record-page h2,
+  .record-page h3,
+  .record-page .label {
+    break-after: avoid;
+  }
+
+  .record-page .record-version-head,
+  .record-page .history-entry,
+  .record-page .contribution,
+  .record-page .record-signature,
+  .record-page .written {
+    break-inside: avoid;
+  }
+}
