@@ -1109,3 +1109,61 @@ async fn exchange_state_and_outcome_must_agree() {
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn a_reminder_is_recorded_once_and_then_neither_changed_nor_removed() {
+    let mut tx = app().await;
+    let a = agreement(&mut tx).await;
+    let b = agreement(&mut tx).await;
+    let record = |exchange: Uuid, contribution: Uuid, kind: &'static str, due: &'static str| {
+        sqlx::query(
+            "INSERT INTO contribution_reminder (exchange_id, contribution_id, kind, due_date)
+             VALUES ($1, $2, $3, $4::date)",
+        )
+        .bind(exchange)
+        .bind(contribution)
+        .bind(kind)
+        .bind(due)
+    };
+
+    record(a.exchange, a.item, "DUE_SOON", "2026-11-01")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    // The same reminder about the same date, again.
+    refused!(
+        tx,
+        UNIQUE,
+        record(a.exchange, a.item, "DUE_SOON", "2026-11-01")
+    );
+    // The other kind, and the same kind about a date the contribution was
+    // moved to, are different reminders.
+    for (kind, due) in [("OVERDUE", "2026-11-01"), ("DUE_SOON", "2026-11-20")] {
+        record(a.exchange, a.item, kind, due)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
+
+    refused!(tx, CHECK, record(a.exchange, a.item, "LATE", "2026-11-01"));
+    // Another exchange's contribution.
+    refused!(
+        tx,
+        FOREIGN_KEY,
+        record(a.exchange, b.item, "OVERDUE", "2026-11-01")
+    );
+
+    // The service can only add: a row changed or removed would be a
+    // reminder that could go out again.
+    for statement in [
+        "UPDATE contribution_reminder SET due_date = due_date + 1",
+        "DELETE FROM contribution_reminder",
+        "TRUNCATE contribution_reminder",
+    ] {
+        let error = refused!(tx, INSUFFICIENT_PRIVILEGE, sqlx::query(statement));
+        assert!(
+            error.to_string().contains("permission denied"),
+            "{statement}: {error}"
+        );
+    }
+}

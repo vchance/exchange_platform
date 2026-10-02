@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { I18nContext } from '../../lib/context';
 import { api } from '../../lib/session';
 import { ClaimantWaiting, ConfirmClaimant, NobodyYet } from '../Claimant';
+import { ExchangeSafety } from '../ExchangeSafety';
 
 jest.mock('expo-secure-store', () => ({}));
 jest.mock('expo-crypto', () => ({ randomUUID: () => '00000000-0000-4000-8000-000000000000' }));
@@ -95,6 +96,7 @@ const show = (ui: React.ReactElement) => render(<I18nContext value={i18n}>{ui}</
 afterEach(() => {
   jest.restoreAllMocks();
   mockDismissTo.mockReset();
+  mockReload.mockClear();
 });
 
 test('the initiator can confirm whoever opened the link, in one press', async () => {
@@ -190,5 +192,52 @@ test('leaving that is refused says why and stays on the exchange', async () => {
   await fireEvent.press(screen.getByText(c.confirmLeave));
 
   await waitFor(() => expect(screen.getByText(wording.errors.ACTION_NOT_ALLOWED)).toBeTruthy());
+  expect(mockDismissTo).not.toHaveBeenCalled();
+});
+
+function Blocking({ claimant }: { claimant: boolean }) {
+  const actions = useFakeActions(async () => true);
+  return (
+    <ExchangeSafety
+      exchange={exchange(
+        claimant ? { you: 'B', claimant: null } : { you: 'B', counterparty: 'CONFIRMED' },
+      )}
+      otherName="Ana Ruiz"
+      actions={actions}
+      reload={mockReload}
+    />
+  );
+}
+const mockReload = jest.fn(async () => null);
+
+test('a block by an unconfirmed claimant says it takes them out, and then does', async () => {
+  jest.spyOn(api, 'blockStatus').mockResolvedValue({ blocked: false, name: 'Ana Ruiz' });
+  const block = jest.spyOn(api, 'block').mockResolvedValue(undefined);
+  await show(<Blocking claimant />);
+
+  await fireEvent.press(await screen.findByText(fill(wording.safety.block, 'Ana Ruiz')));
+  expect(screen.getByText(c.blockLeaves)).toBeTruthy();
+  // They have nothing to decline and no agreement to keep.
+  expect(screen.queryByText(wording.safety.blockEnds)).toBeNull();
+  expect(screen.queryByText(wording.safety.blockKeeps)).toBeNull();
+
+  await fireEvent.press(screen.getByText(fill(wording.safety.confirmBlock, 'Ana Ruiz')));
+  await waitFor(() => expect(mockDismissTo).toHaveBeenCalledWith('/'));
+  expect(block).toHaveBeenCalledWith(ID);
+  // The exchange is gone for them: there is nothing to read again.
+  expect(mockReload).not.toHaveBeenCalled();
+});
+
+test('a block by a party is the block it always was', async () => {
+  jest.spyOn(api, 'blockStatus').mockResolvedValue({ blocked: false, name: 'Ana Ruiz' });
+  jest.spyOn(api, 'block').mockResolvedValue(undefined);
+  await show(<Blocking claimant={false} />);
+
+  await fireEvent.press(await screen.findByText(fill(wording.safety.block, 'Ana Ruiz')));
+  expect(screen.getByText(wording.safety.blockEnds)).toBeTruthy();
+  expect(screen.queryByText(c.blockLeaves)).toBeNull();
+
+  await fireEvent.press(screen.getByText(fill(wording.safety.confirmBlock, 'Ana Ruiz')));
+  await waitFor(() => expect(mockReload).toHaveBeenCalled());
   expect(mockDismissTo).not.toHaveBeenCalled();
 });

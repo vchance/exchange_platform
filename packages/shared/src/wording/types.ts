@@ -37,6 +37,9 @@ export type NotificationKind =
   | 'CLOSE_REQUEST_RETRACTED'
   | 'STATEMENT_ADDED'
   | 'INACTIVITY_PROMPTED'
+  | 'DUE_SOON'
+  | 'OVERDUE_TO_DELIVER'
+  | 'OVERDUE_TO_RECEIVE'
   | 'CLOSED_WITHDRAWN'
   | 'CLOSED_DECLINED'
   | 'CLOSED_EXPIRED'
@@ -100,11 +103,18 @@ export interface Wording {
     unreachable: string
   }
   /**
-   * What the service sends when the other party does something. The clients
-   * never show these; they live here so that everything the product says is
-   * in one file per language. A message may use `{code}` (the exchange's
-   * display code) and `{productName}`, and never carries anything from the
-   * agreement itself (DESIGN.md §12).
+   * What the service sends when the other party does something, when an
+   * agreement comes into force, and to remind a party that something is due
+   * soon or overdue. The clients never show these; they live here so that
+   * everything the product says is in one file per language. A message may
+   * use `{code}` (the exchange's display code), `{productName}` and
+   * `{recordLink}` (the exchange's record, to read, print or download), and
+   * never carries anything from the agreement itself (DESIGN.md §12).
+   *
+   * `AGREEMENT_IN_FORCE` and `AMENDMENT_IN_FORCE` go to both signers and
+   * must give `{recordLink}`: they are how each is told where their signed
+   * copy is (DESIGN.md §14.1). A reminder may cover several contributions at
+   * once and names none of them.
    */
   notifications: {
     email: {
@@ -387,6 +397,18 @@ export interface Wording {
       paste: string
       open: string
       invalid: string
+    }
+    /**
+     * The record screen, where it differs from the web's page: there is no
+     * printing, and the copy leaves through the system's share sheet.
+     */
+    record: {
+      openHint: string
+      share: string
+      /** Said beside the share button: what the copy holds and who can then read it. */
+      shareHint: string
+      shareUnavailable: string
+      shareFailed: string
     }
     date: {
       choose: string

@@ -68,6 +68,10 @@ function Navigation() {
               name="exchanges/[id]/revise"
               options={{ title: wording.exchange.titleNoName }}
             />
+            <Stack.Screen
+              name="exchanges/[id]/record"
+              options={{ title: wording.exchange.titleNoName }}
+            />
             <Stack.Screen name="[language]/i" options={{ headerShown: false }} />
             <Stack.Screen name="+not-found" options={{ title: wording.common.notFoundTitle }} />
           </Stack>

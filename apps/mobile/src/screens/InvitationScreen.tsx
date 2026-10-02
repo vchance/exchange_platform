@@ -29,6 +29,7 @@ import { useI18n, useSession } from '../lib/context';
 import { forgetInvitation, holdInvitation, useHeldInvitation } from '../lib/invitation';
 import { api } from '../lib/session';
 import { AccountSetup } from './AccountSetup';
+import { InvitationReport } from './InvitationReport';
 
 /**
  * Where an invitation is opened. The link's token reaches this screen in
@@ -288,6 +289,7 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
               />
             </Actions>
           )}
+          <InvitationReport token={token} />
         </>
       )}
     </Screen>

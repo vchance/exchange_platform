@@ -1,12 +1,15 @@
-import type { components, ErrorCode } from '@exchange/api-client'
+import type { components } from '@exchange/api-client'
 import {
-  readWholeRecord,
+  recordFile,
+  recordMoments,
   termsOfRevision,
+  useRecord,
+  verificationText,
   type ClosedReason,
   type RecordDocument,
   type RecordRevision,
 } from '@exchange/shared'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
@@ -14,7 +17,7 @@ import { paths } from '../app/routes'
 import { EventList } from '../components/EventList'
 import { TermsView } from '../components/TermsView'
 import { Failure, PageHeading, Written } from '../components/ui'
-import { api, failureCode } from '../lib/api'
+import { api } from '../lib/api'
 import './record.css'
 
 type Slot = components['schemas']['Slot']
@@ -27,24 +30,8 @@ type Slot = components['schemas']['Slot']
  */
 export default function RecordPage({ id }: { id: string }) {
   const { wording } = useI18n()
-  const [record, setRecord] = useState<RecordDocument | null>(null)
-  const [failure, setFailure] = useState<ErrorCode | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    // A long record comes in parts; the page shows it whole.
-    readWholeRecord((from) => api.recordPart(id, from)).then(
-      (found) => {
-        if (!cancelled) setRecord(found)
-      },
-      (error: unknown) => {
-        if (!cancelled) setFailure(failureCode(error))
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [id])
+  // A long record comes in parts; the page shows it whole.
+  const { record, failure } = useRecord(api, id)
 
   if (record) return <Record record={record} />
   if (!failure) return <p>{wording.common.loading}</p>
@@ -59,33 +46,14 @@ export default function RecordPage({ id }: { id: string }) {
   )
 }
 
-/**
- * Writes a moment with its seconds and its time zone, in the exchange's own
- * zone: a record is read later and by other people, so a time in it cannot
- * depend on where its reader happens to be.
- */
-function momentsIn(language: string, timezone: string): (instant: string) => string {
-  const style = { dateStyle: 'long', timeStyle: 'long' } as const
-  let format: Intl.DateTimeFormat
-  try {
-    format = new Intl.DateTimeFormat(language, { ...style, timeZone: timezone })
-  } catch {
-    // A zone this browser does not know. The zone is written with each time.
-    format = new Intl.DateTimeFormat(language, { ...style, timeZone: 'UTC' })
-  }
-  return (instant) => {
-    const parsed = new Date(instant)
-    return Number.isNaN(parsed.getTime()) ? instant : format.format(parsed)
-  }
-}
-
 /** Hands the record to the browser as a file to keep. */
 function download(record: RecordDocument, name: string) {
-  const file = new Blob([`${JSON.stringify(record, null, 2)}\n`], { type: 'application/json' })
+  const copy = recordFile(record, name)
+  const file = new Blob([copy.text], { type: copy.type })
   const address = URL.createObjectURL(file)
   const link = document.createElement('a')
   link.href = address
-  link.download = `${name}.json`
+  link.download = copy.name
   document.body.append(link)
   link.click()
   link.remove()
@@ -97,7 +65,7 @@ function Record({ record }: { record: RecordDocument }) {
   const { wording, fmt, language } = useI18n()
   const w = wording.record
   const { exchange, parties } = record
-  const when = useMemo(() => momentsIn(language, exchange.timezone), [language, exchange.timezone])
+  const when = useMemo(() => recordMoments(language, exchange.timezone), [language, exchange.timezone])
   const code = exchange.display_code
   const reason = exchange.closed_reason
 
@@ -296,10 +264,7 @@ function Version({ revision, name, when }: VersionProps) {
             </p>
             <p className="hint">
               {fmt(w.verifiedBy, {
-                // A method newer than this build is described by the record itself.
-                method:
-                  w.export.verification[signature.verification.method] ??
-                  signature.verification.description,
+                method: verificationText(signature.verification, w.export.verification),
               })}
               <br />
               {fmt(w.verifiedAt, { date: when(signature.verification.verified_at) })}
@@ -324,9 +289,7 @@ function Version({ revision, name, when }: VersionProps) {
             </p>
             <p className="hint">
               {fmt(w.verifiedBy, {
-                method:
-                  w.export.verification[signature.verification.method] ??
-                  signature.verification.description,
+                method: verificationText(signature.verification, w.export.verification),
               })}
               <br />
               {fmt(w.verifiedAt, { date: when(signature.verification.verified_at) })}

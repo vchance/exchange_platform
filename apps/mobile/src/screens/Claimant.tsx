@@ -2,6 +2,7 @@ import type { components, ErrorCode, ExchangeView as Exchange } from '@exchange/
 import {
   isInvitationSpent,
   leaveExchange,
+  verificationText,
   type Actions as ExchangeActions,
 } from '@exchange/shared';
 import { useRouter } from 'expo-router';
@@ -173,4 +174,50 @@ export function ClaimantWaiting({ exchange, otherName, actions }: WaitingProps) 
       )}
     </>
   );
+}
+
+interface VoidSignatureProps {
+  signature: components['schemas']['VoidSignature'];
+  when(instant: string): string;
+}
+
+/**
+ * In the record: a signature left by someone who opened the invitation and
+ * was removed, or left, before being confirmed. It is kept because it
+ * happened; it names nobody and counts for nothing.
+ */
+export function VoidSignature({ signature, when }: VoidSignatureProps) {
+  const { wording, fmt } = useI18n();
+  const w = wording.record;
+  return (
+    <>
+      <P>
+        {fmt(wording.claimant.voidSignature, {
+          date: when(signature.signed_at),
+          since: when(signature.void_since),
+        })}
+      </P>
+      <Hint>
+        {fmt(w.verifiedBy, {
+          method: verificationText(signature.verification, w.export.verification),
+        })}
+      </Hint>
+      <Hint>{fmt(w.verifiedAt, { date: when(signature.verification.verified_at) })}</Hint>
+      <Hint>
+        {fmt(w.consentShown, {
+          version: signature.consent.version,
+          language: signature.consent.language,
+        })}
+      </Hint>
+    </>
+  );
+}
+
+/**
+ * On the list of blocked people: an exchange the reader has left still names
+ * whom they blocked, and is not theirs to open.
+ */
+export function LeftExchangeNote() {
+  const { wording } = useI18n();
+  return <Hint>{wording.claimant.blockedAfterLeaving}</Hint>;
 }

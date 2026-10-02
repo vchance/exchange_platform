@@ -1,9 +1,12 @@
 //! Who is told what when an exchange changes (DESIGN.md §12).
 //!
-//! [`notification`] reads a decision and says which message it calls for and
-//! which parties should get it. Whether a party can be reached at all (the
-//! slot may be unclaimed, the account may have no email address) is not known
-//! here; that is decided where the message is stored.
+//! [`notifications`] reads a decision and says which messages it calls for
+//! and which parties should get each. Whether a party can be reached at all
+//! (the slot may be unclaimed, the account may have no email address) is not
+//! known here; that is decided where the message is stored.
+//!
+//! Reminders are messages too, but no decision causes them:
+//! `domain::reminder` says when one is due.
 
 use super::contribution::Action;
 use super::exchange::{Actor, Event, Exchange, NotAgreed, Outcome, Unresolved};
@@ -43,6 +46,14 @@ pub enum Notice {
     CloseRequestRetracted,
     StatementAdded,
     InactivityPrompted,
+    /// A reminder to the party who owes something that it is due soon. This
+    /// and the next two are not about an event; `domain::reminder` says when
+    /// they are sent.
+    DueSoon,
+    /// A reminder to the party who owes something that it is overdue.
+    OverdueToDeliver,
+    /// A reminder to the party something is owed to that it is overdue.
+    OverdueToReceive,
     ClosedWithdrawn,
     ClosedDeclined,
     ClosedExpired,
@@ -53,7 +64,7 @@ pub enum Notice {
 }
 
 impl Notice {
-    pub const ALL: [Notice; 30] = [
+    pub const ALL: [Notice; 33] = [
         Notice::InvitationClaimed,
         Notice::InvitationClaimedUnconfirmed,
         Notice::CounterpartyConfirmed,
@@ -77,6 +88,9 @@ impl Notice {
         Notice::CloseRequestRetracted,
         Notice::StatementAdded,
         Notice::InactivityPrompted,
+        Notice::DueSoon,
+        Notice::OverdueToDeliver,
+        Notice::OverdueToReceive,
         Notice::ClosedWithdrawn,
         Notice::ClosedDeclined,
         Notice::ClosedExpired,
@@ -111,6 +125,9 @@ impl Notice {
             Notice::CloseRequestRetracted => "CLOSE_REQUEST_RETRACTED",
             Notice::StatementAdded => "STATEMENT_ADDED",
             Notice::InactivityPrompted => "INACTIVITY_PROMPTED",
+            Notice::DueSoon => "DUE_SOON",
+            Notice::OverdueToDeliver => "OVERDUE_TO_DELIVER",
+            Notice::OverdueToReceive => "OVERDUE_TO_RECEIVE",
             Notice::ClosedWithdrawn => "CLOSED_WITHDRAWN",
             Notice::ClosedDeclined => "CLOSED_DECLINED",
             Notice::ClosedExpired => "CLOSED_EXPIRED",
@@ -185,27 +202,59 @@ fn notice(before: &Exchange, event: &Event) -> Option<Notice> {
     })
 }
 
-/// The one message a decision calls for, and who should get it.
+/// The messages a decision calls for, and who should get each.
 ///
-/// One command can record several events (a confirmation that completes the
-/// exchange is a contribution change and a closure), but a person wants one
-/// message about it, not one per event. The events are recorded in the order
-/// they follow from each other, so the last one worth saying is where things
-/// ended up, and that is what is said.
+/// **The news.** One command can record several events (a confirmation that
+/// completes the exchange is a contribution change and a closure), but a
+/// person wants one message about it, not one per event. The events are
+/// recorded in the order they follow from each other, so the last one worth
+/// saying is where things ended up, and that is what is said. Everyone but
+/// the actor is told: the actor already knows what they did, and what the
+/// worker does on a timer is news to both parties.
 ///
-/// Everyone but the actor is told: the actor already knows what they did, and
-/// what the worker does on a timer is news to both parties.
-pub fn notification(before: &Exchange, actor: Actor, events: &[Event]) -> Option<Notification> {
-    let (event, notice) = events
+/// **Each signer's copy.** An agreement coming into force, the first or an
+/// amended one, is the exception to "the actor already knows": that message
+/// goes to both parties, the one whose signature completed it included,
+/// because it is also where each signer is told that the signed agreement is
+/// on record and where to read, print or download it (DESIGN.md §14.1). It
+/// is the same message for both and not a second one beside the news, so
+/// that one event still produces one message per person.
+///
+/// The two coincide unless the agreement that came into force also completed
+/// the exchange. Then the signers get their copy and the other party is also
+/// told of the closure: two events, and a message about each.
+pub fn notifications(before: &Exchange, actor: Actor, events: &[Event]) -> Vec<Notification> {
+    let mut found = Vec::new();
+
+    let in_force = events
+        .iter()
+        .position(|event| matches!(event, Event::AgreementInForce { .. }));
+    if let Some(event) = in_force
+        && let Some(notice) = notice(before, &events[event])
+    {
+        found.push(Notification {
+            event,
+            notice,
+            to: vec![Slot::A, Slot::B],
+        });
+    }
+
+    let news = events
         .iter()
         .enumerate()
         .rev()
-        .find_map(|(index, event)| Some((index, notice(before, event)?)))?;
-    let to = match actor {
-        Actor::Party(slot) => vec![slot.other()],
-        Actor::System => vec![Slot::A, Slot::B],
-    };
-    Some(Notification { event, notice, to })
+        .find_map(|(index, event)| Some((index, notice(before, event)?)));
+    if let Some((event, notice)) = news
+        && Some(event) != in_force
+    {
+        let to = match actor {
+            Actor::Party(slot) => vec![slot.other()],
+            Actor::System => vec![Slot::A, Slot::B],
+        };
+        found.push(Notification { event, notice, to });
+    }
+
+    found
 }
 
 #[cfg(test)]
@@ -275,36 +324,46 @@ mod tests {
             actor: Actor,
             command: Command,
             now: OffsetDateTime,
-        ) -> Option<(Notice, Vec<Slot>)> {
+        ) -> Vec<(Notice, Vec<Slot>)> {
             let decision = decide(&self.exchange, actor, command.clone(), now, &self.rules)
                 .unwrap_or_else(|refusal| panic!("{command:?} was refused: {refusal}"));
-            let found = notification(&self.exchange, actor, &decision.events);
-            if let Some(found) = &found {
+            let found = notifications(&self.exchange, actor, &decision.events);
+            for found in &found {
                 assert_eq!(
                     notice(&self.exchange, &decision.events[found.event]),
                     Some(found.notice),
                     "the message names the event it is about"
                 );
             }
+            // One event never brings one person two messages.
+            let mut told = BTreeSet::new();
+            for found in &found {
+                for slot in &found.to {
+                    assert!(told.insert((found.event, *slot)), "{found:?}");
+                }
+            }
             self.exchange = decision.exchange;
-            found.map(|found| (found.notice, found.to))
+            found
+                .into_iter()
+                .map(|found| (found.notice, found.to))
+                .collect()
         }
 
-        fn run(&mut self, actor: Actor, command: Command) -> Option<(Notice, Vec<Slot>)> {
+        fn run(&mut self, actor: Actor, command: Command) -> Vec<(Notice, Vec<Slot>)> {
             self.run_at(actor, command, START)
         }
     }
 
-    fn to_a(notice: Notice) -> Option<(Notice, Vec<Slot>)> {
-        Some((notice, vec![Slot::A]))
+    fn to_a(notice: Notice) -> Vec<(Notice, Vec<Slot>)> {
+        vec![(notice, vec![Slot::A])]
     }
 
-    fn to_b(notice: Notice) -> Option<(Notice, Vec<Slot>)> {
-        Some((notice, vec![Slot::B]))
+    fn to_b(notice: Notice) -> Vec<(Notice, Vec<Slot>)> {
+        vec![(notice, vec![Slot::B])]
     }
 
-    fn to_both(notice: Notice) -> Option<(Notice, Vec<Slot>)> {
-        Some((notice, vec![Slot::A, Slot::B]))
+    fn to_both(notice: Notice) -> Vec<(Notice, Vec<Slot>)> {
+        vec![(notice, vec![Slot::A, Slot::B])]
     }
 
     #[test]
@@ -332,8 +391,9 @@ mod tests {
         );
         assert_eq!(
             s.run(A, Command::ConfirmCounterparty),
-            to_b(Notice::AgreementInForce),
-            "confirming brought the waiting acceptance into force"
+            to_both(Notice::AgreementInForce),
+            "confirming brought the waiting acceptance into force, and each signer is told \
+             where their copy is"
         );
 
         let mut s = Scenario::negotiating();
@@ -359,10 +419,10 @@ mod tests {
         // The initiator did it; the person removed gets no message, signed
         // or not.
         let mut s = unconfirmed();
-        assert_eq!(s.run(A, Command::RejectCounterparty), None);
+        assert_eq!(s.run(A, Command::RejectCounterparty), vec![]);
         let mut s = unconfirmed();
         s.run(B, Command::Accept { revision: rev(1) });
-        assert_eq!(s.run(A, Command::RejectCounterparty), None);
+        assert_eq!(s.run(A, Command::RejectCounterparty), vec![]);
     }
 
     #[test]
@@ -384,7 +444,8 @@ mod tests {
         );
         assert_eq!(
             s.run(B, Command::Accept { revision: rev(1) }),
-            to_a(Notice::AgreementInForce)
+            to_both(Notice::AgreementInForce),
+            "the one who signed last is told too: it is their copy as well"
         );
     }
 
@@ -486,7 +547,27 @@ mod tests {
                 Command::Accept { revision: rev(5) },
                 START + Duration::days(15)
             ),
-            to_a(Notice::AmendmentInForce)
+            to_both(Notice::AmendmentInForce),
+            "both signed the amended agreement, so both are told again where it is"
+        );
+    }
+
+    #[test]
+    fn an_amendment_that_completes_the_exchange_is_both_a_copy_and_a_closure() {
+        // The repair is confirmed; the amendment drops the payment, which
+        // leaves nothing required outstanding.
+        let mut s = Scenario::active();
+        s.run(B, act(1, Action::Confirm));
+        let mut amended = fence_job();
+        amended.contributions.truncate(1);
+        s.run(A, send(2, amended));
+
+        assert_eq!(
+            s.run(B, Command::Accept { revision: rev(2) }),
+            [
+                (Notice::AmendmentInForce, vec![Slot::A, Slot::B]),
+                (Notice::ClosedCompleted, vec![Slot::A]),
+            ]
         );
     }
 

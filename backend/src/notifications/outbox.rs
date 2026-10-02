@@ -1,6 +1,7 @@
 //! The transactional outbox for notifications (DESIGN.md §13, §13.2).
 //!
-//! [`enqueue`] runs inside the transaction that records an event.
+//! [`enqueue`] runs inside the transaction that records an event, and
+//! [`enqueue_reminder`] inside the one that records a reminder.
 //! [`deliver_due`] is the worker's side: claim a message, send it, record how
 //! that went.
 //!
@@ -12,18 +13,23 @@
 //!   as it is for someone to look at, with the last failure in `last_error`;
 //! * `completed_at` set and `last_error` empty: sent;
 //! * `completed_at` set and `last_error` set: closed without sending, because
-//!   there was no longer anyone to send it to.
+//!   there was no longer anyone to send it to or, for a reminder, because
+//!   what it said had stopped being true.
 
 use std::sync::Arc;
 
+use serde::Deserialize;
 use serde_json::{Value, json};
-use sqlx::{PgConnection, PgPool};
+use sqlx::{Connection, PgConnection, PgPool};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use super::wording::Wording;
+use super::wording::{Links, Wording};
 use super::{Email, EmailSender};
 use crate::domain::notification::Notice;
+use crate::domain::reminder;
+use crate::domain::revision::ContributionId;
+use crate::exchanges::reminders;
 
 /// The numbers behind delivery. Placeholders: none of these is a recorded
 /// design decision yet.
@@ -96,6 +102,39 @@ pub async fn enqueue(
     recipient: Uuid,
     notice: Notice,
 ) -> Result<(), sqlx::Error> {
+    let payload = json!({ "notice": notice.as_str() });
+    insert(conn, exchange, Some(event_sequence), recipient, payload).await
+}
+
+/// Queues an email reminding `recipient` of contributions that are due soon
+/// or overdue. Call it in the transaction that records the reminder, which
+/// is what keeps it from being queued twice: no event caused it, so the
+/// outbox's own key (one message per event per person) does not apply.
+///
+/// The contributions are stored by ID, with nothing they say. They are there
+/// so that the message can be checked again when it is sent, which may be
+/// after one of them was delivered.
+///
+/// As with [`enqueue`], an account that cannot be emailed gets no row.
+pub async fn enqueue_reminder(
+    conn: &mut PgConnection,
+    exchange: Uuid,
+    recipient: Uuid,
+    notice: Notice,
+    contributions: &[ContributionId],
+) -> Result<(), sqlx::Error> {
+    let contributions: Vec<Uuid> = contributions.iter().map(|id| id.0).collect();
+    let payload = json!({ "notice": notice.as_str(), "contributions": contributions });
+    insert(conn, exchange, None, recipient, payload).await
+}
+
+async fn insert(
+    conn: &mut PgConnection,
+    exchange: Uuid,
+    event_sequence: Option<i64>,
+    recipient: Uuid,
+    payload: Value,
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO outbox (kind, recipient_account_id, exchange_id, event_sequence, payload)
          SELECT 'EMAIL', id, $2, $3, $4 FROM account
@@ -104,7 +143,7 @@ pub async fn enqueue(
     .bind(recipient)
     .bind(exchange)
     .bind(event_sequence)
-    .bind(json!({ "notice": notice.as_str() }))
+    .bind(payload)
     .execute(conn)
     .await?;
     Ok(())
@@ -120,7 +159,8 @@ pub struct Delivered {
     pub failed: usize,
     /// Failures that were the last try.
     pub given_up: usize,
-    /// Closed unsent: the recipient could no longer be emailed.
+    /// Closed unsent: the recipient could no longer be emailed, or a
+    /// reminder was no longer true.
     pub dropped: usize,
 }
 
@@ -185,7 +225,13 @@ async fn deliver_next(
         return Ok(false);
     };
 
-    let attempt = match prepare(&mut tx, delivery, id, recipient, exchange, &payload).await? {
+    let row = Row {
+        id,
+        recipient,
+        exchange,
+        payload: &payload,
+    };
+    let attempt = match prepare(&mut tx, delivery, row, at).await? {
         Ok(email) => {
             match tokio::time::timeout(rules.send_timeout, delivery.sender.send(&email)).await {
                 Ok(Ok(())) => Attempt::Sent,
@@ -242,28 +288,34 @@ async fn deliver_next(
     Ok(true)
 }
 
+/// What a claimed row holds.
+struct Row<'a> {
+    id: i64,
+    recipient: Option<Uuid>,
+    exchange: Option<Uuid>,
+    payload: &'a Value,
+}
+
 /// Builds the email for a claimed row, or says why there is none to send.
 async fn prepare(
     conn: &mut PgConnection,
     delivery: &Delivery,
-    id: i64,
-    recipient: Option<Uuid>,
-    exchange: Option<Uuid>,
-    payload: &Value,
+    row: Row<'_>,
+    at: OffsetDateTime,
 ) -> Result<Result<Email, Attempt>, sqlx::Error> {
+    let payload = row.payload;
     // A row this build cannot read may have been written by a newer one, so
     // it is retried like any failure and, at worst, left for inspection.
+    let unreadable = || Attempt::Failed(format!("unreadable payload: {payload}"));
     let Some(notice) = payload["notice"].as_str().and_then(Notice::parse) else {
-        return Ok(Err(Attempt::Failed(format!(
-            "unreadable payload: {payload}"
-        ))));
+        return Ok(Err(unreadable()));
     };
     let code: Option<String> =
         sqlx::query_scalar("SELECT display_code FROM exchange WHERE id = $1")
-            .bind(exchange)
+            .bind(row.exchange)
             .fetch_optional(&mut *conn)
             .await?;
-    let (Some(exchange), Some(code)) = (exchange, code) else {
+    let (Some(exchange), Some(code)) = (row.exchange, code) else {
         return Ok(Err(Attempt::Failed("no such exchange".to_owned())));
     };
 
@@ -271,7 +323,7 @@ async fn prepare(
     // their address or language since, or left.
     let account: Option<(Option<String>, String)> =
         sqlx::query_as("SELECT email, language FROM account WHERE id = $1 AND status = 'ACTIVE'")
-            .bind(recipient)
+            .bind(row.recipient)
             .fetch_optional(&mut *conn)
             .await?;
     let Some((Some(to), language)) = account else {
@@ -280,13 +332,48 @@ async fn prepare(
         )));
     };
 
+    // A message about an event stays true: the event happened. A reminder
+    // says how things stand, and they may have changed while it waited, most
+    // of all when earlier tries failed. One that is no longer true is not
+    // sent.
+    if let Some(kind) = reminder::Kind::of(notice) {
+        let Ok(contributions) = Vec::<Uuid>::deserialize(&payload["contributions"]) else {
+            return Ok(Err(unreadable()));
+        };
+        // In a savepoint, so that a failure here (an exchange whose timezone
+        // the database cannot read, say) is this one message's failure, to be
+        // retried and in the end given up on, and not the end of the pass.
+        let mut check = conn.begin().await?;
+        let stands = reminders::still_true(&mut check, exchange, kind, &contributions, at).await;
+        match stands {
+            Ok(stands) => {
+                check.commit().await?;
+                if !stands {
+                    return Ok(Err(Attempt::Dropped(
+                        "not sent: what the reminder said is no longer true",
+                    )));
+                }
+            }
+            Err(error) => {
+                check.rollback().await?;
+                return Ok(Err(Attempt::Failed(format!(
+                    "the reminder could not be checked: {error}"
+                ))));
+            }
+        }
+    }
+
     let link = format!("{}/exchanges/{exchange}", delivery.web_origin);
-    let rendered = delivery.wording.email(&language, notice, &code, &link);
+    let links = Links {
+        exchange: &link,
+        record: &format!("{link}/record"),
+    };
+    let rendered = delivery.wording.email(&language, notice, &code, links);
     Ok(Ok(Email {
         to,
         subject: rendered.subject,
         body: rendered.body,
-        reference: id,
+        reference: row.id,
     }))
 }
 

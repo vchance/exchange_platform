@@ -11,6 +11,7 @@ pub mod exchange;
 pub mod identity;
 pub mod invitation;
 pub mod notification;
+pub mod reminder;
 pub mod revision;
 pub mod risk;
 
@@ -26,6 +27,10 @@ pub struct Rules {
     pub inactivity_prompt_after: Duration,
     /// Time after the prompt at which an idle exchange closes (§5.3).
     pub inactivity_close_after: Duration,
+    /// How long before its due date the party who owes a contribution is
+    /// reminded that it is due soon (§12). Counted in whole days, because a
+    /// due date is a calendar date. A placeholder.
+    pub due_soon_lead: Duration,
     /// Longest note, in characters: on a revision, a claim, a dispute, a close
     /// request or a statement (§6).
     pub note_max_chars: usize,
@@ -85,6 +90,7 @@ impl Default for Rules {
             close_response_window: Duration::days(7),
             inactivity_prompt_after: Duration::days(60),
             inactivity_close_after: Duration::days(30),
+            due_soon_lead: Duration::days(2),
             note_max_chars: 1000,
             tier_one_threshold_minor: 50_000,
             fresh_code_window: Duration::minutes(10),

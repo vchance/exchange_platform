@@ -43,12 +43,12 @@
           "body": "The other party has accepted the terms. Their acceptance takes effect once you confirm that they are the person you meant to invite."
         },
         "AGREEMENT_IN_FORCE": {
-          "subject": "Your agreement is in force ({code})",
-          "body": "Both of you have accepted the same terms, so the agreement is now in force. You can track what each of you delivers."
+          "subject": "Your agreement is signed and on record ({code})",
+          "body": "Both of you have signed the same terms, so the agreement is now in force and on record. Sign in to read, print or download your copy at any time: {recordLink}\n\nFrom here you can track what each of you delivers."
         },
         "AMENDMENT_IN_FORCE": {
-          "subject": "The change to your agreement was accepted ({code})",
-          "body": "The other party has accepted the change you proposed. It is now part of the agreement."
+          "subject": "The change to your agreement is signed and on record ({code})",
+          "body": "Both of you have signed the change, so it is now part of the agreement, and the agreement as it now stands is on record. Sign in to read, print or download your copy at any time: {recordLink}"
         },
         "AMENDMENT_DECLINED": {
           "subject": "The change you proposed was declined ({code})",
@@ -105,6 +105,18 @@
         "INACTIVITY_PROMPTED": {
           "subject": "Is your exchange still under way? ({code})",
           "body": "Nothing has happened in this exchange for some time. If neither of you does anything in it, it will be closed as unresolved."
+        },
+        "DUE_SOON": {
+          "subject": "Something you owe is due soon ({code})",
+          "body": "At least one of your contributions is due soon and has not been marked as delivered. Open the exchange to see which and when. Once you have delivered it, mark it as delivered there."
+        },
+        "OVERDUE_TO_DELIVER": {
+          "subject": "Something you owe is overdue ({code})",
+          "body": "At least one of your contributions is past its due date and has not been marked as delivered. Open the exchange to see which. If you have delivered it, mark it as delivered there; if the date no longer works, you can propose a change to the agreement. The other party has been told as well."
+        },
+        "OVERDUE_TO_RECEIVE": {
+          "subject": "Something owed to you is overdue ({code})",
+          "body": "At least one of the other party’s contributions is past its due date and has not been marked as delivered. Open the exchange to see which. If you have already received it, you can confirm it there. The other party has been reminded as well."
         },
         "CLOSED_WITHDRAWN": {
           "subject": "The offer was withdrawn ({code})",
@@ -429,6 +441,13 @@
       "paste": "Paste",
       "open": "Open the invitation",
       "invalid": "That isn’t an invitation link. Copy the whole link from the message it came in and paste it here."
+    },
+    "record": {
+      "openHint": "Everything that was sent, signed and recorded in this exchange, to read here and to share or save as a file.",
+      "share": "Share or save a copy (JSON)",
+      "shareHint": "The copy is a file holding everything on this screen, including the terms and both names. Anyone you send it to can read all of it.",
+      "shareUnavailable": "This device can’t share or save a file from here. You can download a copy on the web instead.",
+      "shareFailed": "The copy couldn’t be made ready to share. Try again."
     },
     "date": {
       "choose": "Choose a date",

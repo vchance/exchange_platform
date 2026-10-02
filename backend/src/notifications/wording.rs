@@ -57,6 +57,17 @@ pub enum WordingError {
     Layout(String),
 }
 
+/// Where a message sends its reader. Both are pages of the web app that ask
+/// the reader to sign in; neither lets anyone in by itself (invariant 1).
+#[derive(Clone, Copy, Debug)]
+pub struct Links<'a> {
+    /// The exchange. Every message ends with it.
+    pub exchange: &'a str,
+    /// The exchange's record, laid out to read, print or download. Given in
+    /// the messages that tell a signer their agreement is on record.
+    pub record: &'a str,
+}
+
 /// A message in one language, with its variables filled in.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rendered {
@@ -127,10 +138,10 @@ impl Wording {
     /// The email for a notice, in `language` (an account's preference) where
     /// that language has it and in the default language otherwise.
     ///
-    /// `code` is the exchange's display code and `link` opens the exchange.
+    /// `code` is the exchange's display code and `links` lead into it.
     /// Nothing else about the exchange can be put in: a message never carries
     /// what the parties agreed or wrote (DESIGN.md §12).
-    pub fn email(&self, language: &str, notice: Notice, code: &str, link: &str) -> Rendered {
+    pub fn email(&self, language: &str, notice: Notice, code: &str, links: Links<'_>) -> Rendered {
         let message_in = |language: &str| {
             let file = self.languages.get(language)?;
             let message = file.notifications.email.messages.get(notice.as_str())?;
@@ -144,7 +155,8 @@ impl Wording {
         let values = [
             ("productName", file.product_name.as_str()),
             ("code", code),
-            ("link", link),
+            ("link", links.exchange),
+            ("recordLink", links.record),
         ];
         let text = fill(&message.body, &values);
         let mut with_text = values.to_vec();
@@ -191,6 +203,11 @@ mod tests {
 
     const CODE: &str = "AB12-CD34";
     const LINK: &str = "https://app.test/exchanges/7";
+    const RECORD: &str = "https://app.test/exchanges/7/record";
+    const LINKS: Links<'static> = Links {
+        exchange: LINK,
+        record: RECORD,
+    };
 
     #[test]
     fn every_supported_language_has_every_message_with_nothing_left_unfilled() {
@@ -209,7 +226,7 @@ mod tests {
                     "{language} has no wording for {}",
                     notice.as_str()
                 );
-                let email = wording.email(language, notice, CODE, LINK);
+                let email = wording.email(language, notice, CODE, LINKS);
                 for text in [&email.subject, &email.body] {
                     assert!(
                         !text.contains('{') && !text.contains('}'),
@@ -219,6 +236,15 @@ mod tests {
                 }
                 assert!(!email.subject.trim().is_empty());
                 assert!(email.body.contains(LINK), "every message links back");
+                // An agreement coming into force is when each signer is told
+                // where their copy is (DESIGN.md §14.1).
+                let copy = matches!(notice, Notice::AgreementInForce | Notice::AmendmentInForce);
+                assert_eq!(
+                    email.body.contains(RECORD),
+                    copy,
+                    "{language} {}: the link to the record",
+                    notice.as_str()
+                );
             }
             // A wording file with a message the service never sends is a
             // translation nobody will read.
@@ -231,13 +257,13 @@ mod tests {
     #[test]
     fn a_message_is_in_the_language_asked_for() {
         let wording = Wording::embedded().unwrap();
-        let english = wording.email("en", Notice::DeliveryClaimed, CODE, LINK);
-        let spanish = wording.email("es", Notice::DeliveryClaimed, CODE, LINK);
+        let english = wording.email("en", Notice::DeliveryClaimed, CODE, LINKS);
+        let spanish = wording.email("es", Notice::DeliveryClaimed, CODE, LINKS);
         assert_ne!(english, spanish);
         assert!(english.subject.contains(CODE));
         // A regional tag gets its base language.
         assert_eq!(
-            wording.email("es-MX", Notice::DeliveryClaimed, CODE, LINK),
+            wording.email("es-MX", Notice::DeliveryClaimed, CODE, LINKS),
             spanish
         );
     }
@@ -245,13 +271,13 @@ mod tests {
     #[test]
     fn a_language_without_wording_falls_back_to_the_default() {
         let wording = Wording::embedded().unwrap();
-        let default = wording.email(languages::default(), Notice::DisputeOpened, CODE, LINK);
+        let default = wording.email(languages::default(), Notice::DisputeOpened, CODE, LINKS);
         assert_eq!(
-            wording.email("tlh", Notice::DisputeOpened, CODE, LINK),
+            wording.email("tlh", Notice::DisputeOpened, CODE, LINKS),
             default
         );
         assert_eq!(
-            wording.email("", Notice::DisputeOpened, CODE, LINK),
+            wording.email("", Notice::DisputeOpened, CODE, LINKS),
             default
         );
     }
@@ -284,12 +310,14 @@ mod tests {
         let wording =
             Wording::from_files(&THREE, "en", &[("en", &english), ("fr", &french)]).unwrap();
 
-        let email = wording.email("fr", Notice::EndProposed, CODE, LINK);
+        let email = wording.email("fr", Notice::EndProposed, CODE, LINKS);
         assert_eq!(email.subject, format!("Échange END_PROPOSED {CODE}"));
         assert_eq!(email.body, format!("Text. {LINK}"));
         // Listed, but with no file yet.
         assert_eq!(
-            wording.email("de", Notice::EndProposed, CODE, LINK).subject,
+            wording
+                .email("de", Notice::EndProposed, CODE, LINKS)
+                .subject,
             format!("Exchange END_PROPOSED {CODE}")
         );
     }
@@ -303,7 +331,7 @@ mod tests {
 
         assert_eq!(
             wording
-                .email("fr", Notice::CloseRequested, CODE, LINK)
+                .email("fr", Notice::CloseRequested, CODE, LINKS)
                 .subject,
             format!("Exchange CLOSE_REQUESTED {CODE}"),
             "the product name is the default language's too, not a mixture"

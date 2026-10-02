@@ -43,12 +43,12 @@
           "body": "La otra parte aceptó los términos. Su aceptación tendrá efecto cuando confirmes que es la persona a la que querías invitar."
         },
         "AGREEMENT_IN_FORCE": {
-          "subject": "Tu acuerdo está en vigor ({code})",
-          "body": "Ambas partes aceptaron los mismos términos, así que el acuerdo ya está en vigor. Puedes llevar el registro de lo que entrega cada parte."
+          "subject": "Tu acuerdo está firmado y registrado ({code})",
+          "body": "Ambas partes firmaron los mismos términos, así que el acuerdo ya está en vigor y quedó registrado. Inicia sesión para leer, imprimir o descargar tu copia cuando quieras: {recordLink}\n\nDesde ahora puedes llevar el registro de lo que entrega cada parte."
         },
         "AMENDMENT_IN_FORCE": {
-          "subject": "Se aceptó el cambio en tu acuerdo ({code})",
-          "body": "La otra parte aceptó el cambio que propusiste. Ya forma parte del acuerdo."
+          "subject": "El cambio en tu acuerdo está firmado y registrado ({code})",
+          "body": "Ambas partes firmaron el cambio, así que ya forma parte del acuerdo, y el acuerdo tal como queda ahora quedó registrado. Inicia sesión para leer, imprimir o descargar tu copia cuando quieras: {recordLink}"
         },
         "AMENDMENT_DECLINED": {
           "subject": "Se rechazó el cambio que propusiste ({code})",
@@ -105,6 +105,18 @@
         "INACTIVITY_PROMPTED": {
           "subject": "¿Tu intercambio sigue en marcha? ({code})",
           "body": "Hace tiempo que no pasa nada en este intercambio. Si ninguna de las partes hace algo en él, se cerrará como no resuelto."
+        },
+        "DUE_SOON": {
+          "subject": "Algo que debes entregar vence pronto ({code})",
+          "body": "Al menos una de tus contribuciones vence pronto y todavía no está marcada como entregada. Abre el intercambio para ver cuál y cuándo. Cuando la hayas entregado, márcala allí como entregada."
+        },
+        "OVERDUE_TO_DELIVER": {
+          "subject": "Algo que debes entregar está atrasado ({code})",
+          "body": "Al menos una de tus contribuciones ya pasó su fecha de vencimiento y no está marcada como entregada. Abre el intercambio para ver cuál. Si ya la entregaste, márcala allí como entregada; si la fecha ya no sirve, puedes proponer un cambio en el acuerdo. La otra parte también recibió un aviso."
+        },
+        "OVERDUE_TO_RECEIVE": {
+          "subject": "Algo que te deben está atrasado ({code})",
+          "body": "Al menos una de las contribuciones de la otra parte ya pasó su fecha de vencimiento y no está marcada como entregada. Abre el intercambio para ver cuál. Si ya la recibiste, puedes confirmarla allí. La otra parte también recibió un recordatorio."
         },
         "CLOSED_WITHDRAWN": {
           "subject": "Se retiró la oferta ({code})",
@@ -429,6 +441,13 @@
       "paste": "Pegar",
       "open": "Abrir la invitación",
       "invalid": "Eso no es un enlace de invitación. Copia el enlace completo del mensaje en el que llegó y pégalo aquí."
+    },
+    "record": {
+      "openHint": "Todo lo que se envió, se firmó y se registró en este intercambio, para leerlo aquí y para compartirlo o guardarlo como archivo.",
+      "share": "Compartir o guardar una copia (JSON)",
+      "shareHint": "La copia es un archivo con todo lo que hay en esta pantalla, incluidos los términos y los dos nombres. Cualquier persona a la que se la envíes podrá leerlo todo.",
+      "shareUnavailable": "Este dispositivo no puede compartir ni guardar un archivo desde aquí. Puedes descargar una copia en la web.",
+      "shareFailed": "No se pudo preparar la copia para compartirla. Inténtalo de nuevo."
     },
     "date": {
       "choose": "Elegir una fecha",

@@ -1,6 +1,6 @@
-import type { ErrorCode, ExchangeView } from '@exchange/api-client'
-import { isUnconfirmedClaimant, type ReportReason } from '@exchange/shared'
-import { useEffect, useRef, useState } from 'react'
+import type { ExchangeView } from '@exchange/api-client'
+import { hasOtherParty, isUnconfirmedClaimant, useExchangeSafety } from '@exchange/shared'
+import { useEffect, useRef } from 'react'
 
 import { useI18n } from '../app/context'
 import { navigate } from '../app/router'
@@ -9,7 +9,6 @@ import { Panel } from '../components/Panel'
 import { ReportForm } from '../components/ReportForm'
 import { Failure } from '../components/ui'
 import type { Actions } from '../lib/actions'
-import { failureCode } from '../lib/api'
 import { safetyApi } from '../lib/safety'
 
 interface Props {
@@ -19,11 +18,6 @@ interface Props {
   reload(): Promise<unknown>
 }
 
-const REPORT = 'safety-report'
-const BLOCK = 'safety-block'
-
-type Outcome = 'reported' | 'blocked' | 'unblocked'
-
 /**
  * Report and block, on every view of an exchange that has someone on the
  * other side (DESIGN.md §9). Each is said in full before it is done: what
@@ -32,7 +26,7 @@ type Outcome = 'reported' | 'blocked' | 'unblocked'
 export function ExchangeSafety(props: Props) {
   const { exchange } = props
   // Until someone has joined there is nobody to report and nobody to block.
-  if (exchange.state === 'DRAFT' || exchange.counterparty === 'UNCLAIMED') return null
+  if (!hasOtherParty(exchange)) return null
   return <Controls {...props} />
 }
 
@@ -40,34 +34,22 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
   const { wording, fmt } = useI18n()
   const w = wording.safety
 
-  // Whether this person has blocked the other party. `null` until known.
-  const [blocked, setBlocked] = useState<boolean | null>(null)
+  // Someone the initiator has not confirmed cannot decline. Blocking takes
+  // them out of the exchange instead (DESIGN.md §8, §9), and it is gone for
+  // them. The block is listed, and can be lifted, with the account.
+  const leaves = isUnconfirmedClaimant(exchange)
+  const safety = useExchangeSafety(
+    safetyApi,
+    exchange.id,
+    actions,
+    reload,
+    leaves ? () => navigate(paths.account) : undefined,
+  )
+  const { blocked, busy, failure, outcome } = safety
   // An exchange closed before anything was agreed shows no terms, and so no
   // names; the service still says who the other party was.
-  const [written, setWritten] = useState('')
-  const name = { name: written || otherName }
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<ErrorCode | null>(null)
-  const [outcome, setOutcome] = useState<Outcome | null>(null)
+  const name = { name: safety.name || otherName }
   const announced = useRef<HTMLParagraphElement>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    safetyApi.blockStatus(exchange.id).then(
-      (found) => {
-        if (cancelled) return
-        setBlocked(found.blocked)
-        setWritten(found.name)
-      },
-      () => {
-        // Not knowing, offer to block: blocking twice changes nothing.
-        if (!cancelled) setBlocked(false)
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [exchange.id])
 
   // What just happened takes the focus, because the button that did it may
   // no longer be on the page.
@@ -75,64 +57,7 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
     if (outcome) announced.current?.focus()
   }, [outcome])
 
-  function begin(panel: string) {
-    setFailure(null)
-    setOutcome(null)
-    actions.open(panel)
-  }
-
-  async function attempt(work: () => Promise<void>, done: Outcome, panel: boolean) {
-    setBusy(true)
-    setFailure(null)
-    setOutcome(null)
-    try {
-      await work()
-      if (panel) actions.close()
-      setOutcome(done)
-    } catch (error) {
-      setFailure(failureCode(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const report = (reason: ReportReason, details: string | null) =>
-    void attempt(() => safetyApi.reportExchange(exchange.id, reason, details), 'reported', true)
-
-  // Someone the initiator has not confirmed cannot decline. Blocking takes
-  // them out of the exchange instead (DESIGN.md §8, §9).
-  const leaves = isUnconfirmedClaimant(exchange)
-
-  const block = () =>
-    void attempt(
-      async () => {
-        await safetyApi.block(exchange.id)
-        if (leaves) {
-          // The exchange is gone for them. The block is listed, and can be
-          // lifted, with the account.
-          navigate(paths.account)
-          return
-        }
-        setBlocked(true)
-        // Blocking withdraws or declines what was waiting to be signed.
-        void reload()
-      },
-      'blocked',
-      true,
-    )
-
-  const unblock = () =>
-    void attempt(
-      async () => {
-        await safetyApi.unblock(exchange.id)
-        setBlocked(false)
-      },
-      'unblocked',
-      false,
-    )
-
   const waiting = busy || actions.busy
-  const mine = actions.panel === REPORT || actions.panel === BLOCK
 
   return (
     <section aria-labelledby="safety-heading">
@@ -150,43 +75,43 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
       <div className="actions">
         <button
           type="button"
-          aria-expanded={actions.panel === REPORT}
+          aria-expanded={safety.panel === 'report'}
           disabled={waiting}
-          onClick={() => begin(REPORT)}
+          onClick={() => safety.begin('report')}
         >
           {w.report}
         </button>
         {blocked === false && (
           <button
             type="button"
-            aria-expanded={actions.panel === BLOCK}
+            aria-expanded={safety.panel === 'block'}
             disabled={waiting}
-            onClick={() => begin(BLOCK)}
+            onClick={() => safety.begin('block')}
           >
             {fmt(w.block, name)}
           </button>
         )}
         {blocked === true && (
-          <button type="button" disabled={waiting} onClick={unblock}>
+          <button type="button" disabled={waiting} onClick={safety.unblock}>
             {fmt(w.unblock, name)}
           </button>
         )}
       </div>
-      {!mine && <Failure code={failure} />}
+      {safety.panel === null && <Failure code={failure} />}
 
-      {actions.panel === REPORT && (
+      {safety.panel === 'report' && (
         <Panel title={w.report}>
           <ReportForm
             intro={fmt(w.reportIntro, name)}
             busy={busy}
             failure={failure}
-            onSend={report}
+            onSend={safety.report}
             onCancel={actions.close}
           />
         </Panel>
       )}
 
-      {actions.panel === BLOCK && (
+      {safety.panel === 'block' && (
         <Panel title={fmt(w.block, name)}>
           <p>{fmt(w.blockStops, name)}</p>
           {leaves ? (
@@ -200,7 +125,7 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
           <p>{fmt(w.blockQuiet, name)}</p>
           <Failure code={failure} />
           <div className="actions">
-            <button type="button" className="primary" disabled={busy} onClick={block}>
+            <button type="button" className="primary" disabled={busy} onClick={safety.block}>
               {fmt(w.confirmBlock, name)}
             </button>
             <button type="button" disabled={busy} onClick={actions.close}>

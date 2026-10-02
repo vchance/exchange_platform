@@ -66,6 +66,18 @@ Nothing is deleted: a removed person's claim event, their signature and their ho
 
 `backend/tests/schema.rs` checks these against the database alone, and `backend/tests/claimant.rs` through the API.
 
+## 0007_reminders
+
+`contribution_reminder`: what each contribution has already been reminded about (`DESIGN.md` §12). A "due soon" or "overdue" reminder is not caused by an event, so the outbox's key of one message per event per person cannot stop it repeating; a row here, written in the same transaction that queues the emails, is what does. The key is the contribution, the kind of reminder and the due date it was about, so an amendment that moves the date makes the new date something not yet reminded about, and one that leaves it alone brings no second reminder.
+
+- The application role may read and add rows and nothing else: a row that could be changed or removed is a reminder that could go out twice.
+- It is not agreement history, so no trigger protects it from the schema owner. It does hold a date taken from the agreement, so the erasure and retention path, when it exists, has to remove these rows with the exchange they belong to.
+- A reminder writes nothing to `exchange` or `exchange_event`: the version, the history and the last activity stay as they were.
+
+The index on `exchange (timezone)` for active exchanges is for the worker, which reads the date in each timezone that has an active exchange and then looks through that timezone's exchanges.
+
+`backend/tests/schema.rs` checks the key and the grants; `backend/tests/reminders.rs` drives the worker's pass against a database of its own.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.
