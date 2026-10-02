@@ -3,6 +3,7 @@ import { createExchangeApi } from '@exchange/shared';
 import * as Crypto from 'expo-crypto';
 
 import { API_URL } from './config';
+import { recordSharer } from './record-sharer';
 import { tokenStore } from './token-store';
 
 /*
@@ -45,6 +46,8 @@ export async function keepSession(issued: string): Promise<void> {
 /** Stops acting as the account on this device. */
 export async function dropSession(): Promise<void> {
   token = null;
+  // A copy of a record made for sharing does not outlast the session it was made in.
+  recordSharer.forget();
   try {
     await tokenStore.clear();
   } catch {

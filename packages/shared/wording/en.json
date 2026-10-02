@@ -405,6 +405,13 @@
       "open": "Open the invitation",
       "invalid": "That isn’t an invitation link. Copy the whole link from the message it came in and paste it here."
     },
+    "record": {
+      "openHint": "Everything that was sent, signed and recorded in this exchange, to read here and to share or save as a file.",
+      "share": "Share or save a copy (JSON)",
+      "shareHint": "The copy is a file holding everything on this screen, including the terms and both names. Anyone you send it to can read all of it.",
+      "shareUnavailable": "This device can’t share or save a file from here. You can download a copy on the web instead.",
+      "shareFailed": "The copy couldn’t be made ready to share. Try again."
+    },
     "date": {
       "choose": "Choose a date",
       "change": "Due {date}. Change the date."
