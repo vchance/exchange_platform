@@ -143,6 +143,15 @@ Each party can read everything an exchange holds and take a copy away (`DESIGN.m
 
 On the web, an exchange's page ends with its history, and `/exchanges/{id}/record` lays the whole record out for reading and printing; the browser's "save as PDF" is the PDF, and a button downloads the JSON copy.
 
+## Deleting an account
+
+A person can delete their account from the account screen of the web app and of the mobile app (`DESIGN.md` §4.1), and from the profile step of an account that was never set up. `backend/src/deletion.rs` says in full what deleting does and why; `backend/tests/deletion.rs` checks each part against a real database.
+
+- **Proof.** A session is not enough. `POST /v1/me/deletion/codes` sends a one-time code to the account's own email address or phone number, and `POST /v1/me/deletion` takes it. A code sent for deleting cannot sign in, and a sign-in code cannot delete. `GET /v1/me/deletion` says beforehand what would happen to the exchanges the account is in.
+- **The account.** Every session ends, on every device. The row stays, marked deleted, without its email address, phone number, name or language, so the same address can sign up again as a new account that sees nothing of the old one. Its working data goes with it: codes, unsent working copies, idempotency keys, queued notifications, the blocks it made, and invitation links nobody took.
+- **Its exchanges.** Whatever happens to one happens through the rules, as commands in the departing party's name. A proposal still waiting to be signed is withdrawn or declined, which ends a negotiation with nothing agreed. An agreement in force gets a request to close, and the worker closes it as unresolved when the time to respond runs out; nothing is waived or accepted for the person leaving. Closed exchanges are not touched. While an exchange is still open, the other party's view of it says that the other party has left (`other_party_left`).
+- **What it leaves alone.** Revisions, signatures and events. The other party keeps the exchange and its record, with the names as the agreement wrote them. What becomes of a departed person's words in that history is not decided by this code.
+
 ## Not built yet
 
 The scaffold, the database schema (`backend/migrations/`), the domain rules (`backend/src/domain/`), sign-in (`backend/src/auth.rs`), the exchange API (`backend/src/exchanges/`, `backend/src/http/`), the web app's screens (`apps/web/src/`) and the mobile app's (`apps/mobile/src/`) exist: two people can take an exchange from a draft to completion in a browser or in the app. The mobile app has not yet been run on a device or a simulator. Still to build, in rough order:
