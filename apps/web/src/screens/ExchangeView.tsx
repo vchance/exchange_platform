@@ -15,6 +15,7 @@ import { api, failureCode, type RevisionView, type Slot } from '../lib/api'
 import { consentShown } from '../lib/consent'
 import { Ending } from './Ending'
 import { Fulfillment } from './Fulfillment'
+import { History } from './History'
 
 type Status = components['schemas']['Status']
 
@@ -191,6 +192,8 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       )}
 
       {active && <Ending exchange={exchange} otherName={otherName} actions={actions} />}
+
+      <History exchange={exchange} />
 
       {exchange.state !== 'CLOSED' && (
         <div className="actions">

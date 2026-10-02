@@ -26,6 +26,7 @@ const AccountSetup = lazy(() => import('../screens/AccountSetup'))
 const HomePage = lazy(() => import('../screens/HomePage'))
 const AccountPage = lazy(() => import('../screens/AccountPage'))
 const ExchangePage = lazy(() => import('../screens/ExchangePage'))
+const RecordPage = lazy(() => import('../screens/RecordPage'))
 
 interface Props {
   initialLanguage: Language
@@ -170,6 +171,13 @@ function Shell() {
       page = (
         <Gate>
           <ExchangePage key={route.id} id={route.id} revising={route.name === 'revise'} />
+        </Gate>
+      )
+      break
+    case 'record':
+      page = (
+        <Gate>
+          <RecordPage key={route.id} id={route.id} />
         </Gate>
       )
       break
