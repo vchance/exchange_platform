@@ -28,6 +28,7 @@ export function InvitationPage() {
   const [token] = useState(takeInvitationToken)
   const [preview, setPreview] = useState<InvitationPreview | null>(null)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
+  const [spent, setSpent] = useState(false)
   const [responding, setResponding] = useState(false)
   const claiming = useRef(false)
 
@@ -41,8 +42,8 @@ export function InvitationPage() {
       (error: unknown) => {
         if (cancelled) return
         const code = failureCode(error)
-        if (code === 'INVITATION_UNAVAILABLE') forgetInvitationToken()
-        setFailure(code)
+        if (code === 'INVITATION_UNAVAILABLE') setSpent(true)
+        else setFailure(code)
       },
     )
     return () => {
@@ -50,8 +51,35 @@ export function InvitationPage() {
     }
   }, [token])
 
-  // Once the person has asked to respond and has an account that can, claim.
   const able = account !== null && isComplete(account)
+
+  // A link that no longer shows its proposal has usually been used, and
+  // people come back to the message it arrived in. Claiming again with the
+  // account that already claimed it changes nothing and answers with the
+  // exchange, so the person who used the link is taken to it; anyone else
+  // gets the same refusal as before.
+  useEffect(() => {
+    if (!spent || !ready || !token) return
+    if (!able) {
+      forgetInvitationToken()
+      return
+    }
+    if (claiming.current) return
+    claiming.current = true
+    api.claimInvitation(token).then(
+      (exchange) => {
+        forgetInvitationToken()
+        navigate(paths.exchange(exchange.id), { replace: true })
+      },
+      (error: unknown) => {
+        forgetInvitationToken()
+        claiming.current = false
+        setFailure(failureCode(error))
+      },
+    )
+  }, [spent, ready, able, token])
+
+  // Once the person has asked to respond and has an account that can, claim.
   useEffect(() => {
     if (!responding || !able || !token || claiming.current) return
     claiming.current = true
@@ -81,52 +109,66 @@ export function InvitationPage() {
 
   const sender = preview?.revision.terms.party_a_name ?? ''
 
+  // A link that cannot be read is refused at the top of an otherwise empty
+  // page. A claim is refused next to the button that asked for it, which is
+  // below the whole proposal.
+  const refused: ErrorCode | null =
+    failure ?? (spent && ready && !able ? 'INVITATION_UNAVAILABLE' : null)
+  const refusal = refused && (
+    <>
+      {/* The only refusal a claim gives for this reason is opening one's own link. */}
+      {refused === 'ACTION_NOT_ALLOWED' ? (
+        <p className="notice notice-error" role="alert">
+          {w.ownInvitation}
+        </p>
+      ) : (
+        <Failure code={refused} />
+      )}
+      {refused === 'INVITATION_UNAVAILABLE' && !account && (
+        <p>
+          {w.alreadyResponded} <Link to={paths.home}>{wording.signIn.title}</Link>
+        </p>
+      )}
+      {refused === 'INVITATION_NOT_FOR_YOU' && account && (
+        <p>
+          <button
+            type="button"
+            onClick={() => {
+              setFailure(null)
+              api.signOut().then(
+                () => setAccount(null),
+                () => setAccount(null),
+              )
+            }}
+          >
+            {wording.nav.signOut}
+          </button>
+        </p>
+      )}
+      {account && (
+        <p>
+          <Link to={paths.home}>{wording.common.goHome}</Link>
+        </p>
+      )}
+    </>
+  )
+
   return (
     <>
       <PageHeading>{w.title}</PageHeading>
 
-      {failure && (
-        <>
-          {/* The only refusal a claim gives for this reason is opening one's own link. */}
-          {failure === 'ACTION_NOT_ALLOWED' ? (
-            <p className="notice notice-error" role="alert">
-              {w.ownInvitation}
-            </p>
-          ) : (
-            <Failure code={failure} />
-          )}
-          {failure === 'INVITATION_NOT_FOR_YOU' && account && (
-            <p>
-              <button
-                type="button"
-                onClick={() => {
-                  setFailure(null)
-                  api.signOut().then(
-                    () => setAccount(null),
-                    () => setAccount(null),
-                  )
-                }}
-              >
-                {wording.nav.signOut}
-              </button>
-            </p>
-          )}
-          {account && (
-            <p>
-              <Link to={paths.home}>{wording.common.goHome}</Link>
-            </p>
-          )}
-        </>
-      )}
-
-      {!preview && !failure && <p>{wording.common.loading}</p>}
+      {!preview && refusal}
+      {!preview && !refused && <p>{wording.common.loading}</p>}
 
       {preview && (
         <>
-          <p>{fmt(w.intro, { name: sender })}</p>
+          <p>{fmt(able ? w.introSignedIn : w.intro, { name: sender })}</p>
           <p>{w.notBinding}</p>
 
-          <section className="card" aria-label={fmt(wording.home.reference, { code: preview.display_code })}>
+          <section
+            className="card"
+            aria-label={fmt(wording.home.reference, { code: preview.display_code })}
+          >
             <p className="hint">{fmt(wording.home.reference, { code: preview.display_code })}</p>
             {preview.revision.note && (
               <>
@@ -140,6 +182,7 @@ export function InvitationPage() {
           </section>
 
           {preview.bound && <p>{w.bound}</p>}
+          {refusal}
 
           {responding && able && <p role="status">{w.opening}</p>}
           {responding && !able && (

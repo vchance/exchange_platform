@@ -88,6 +88,15 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
     }
   }, [exchange.id, exchange.state, onChange])
 
+  // A refusal with no panel left to show it in, such as one that reloaded the
+  // exchange, is shown at the top, and the top is brought into view: the
+  // person may be far down the page, looking at what they just pressed.
+  const refused = actions.panel === null ? actions.failure : null
+  const refusal = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (refused) refusal.current?.scrollIntoView({ block: 'center' })
+  }, [refused])
+
   const statuses = new Map<string, Status>(
     exchange.contributions.map((contribution) => [contribution.id, contribution.status]),
   )
@@ -113,7 +122,9 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
         <p>{wording.closedReasons[exchange.closed_reason as ClosedReason]}</p>
       )}
 
-      {actions.panel === null && <Failure code={actions.failure} />}
+      <div ref={refusal}>
+        <Failure code={refused} />
+      </div>
       {(actions.done || refreshed) && !newer && <Notice>{w.updated}</Notice>}
       {newer && (
         <div className="notice" role="status">
@@ -141,12 +152,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       />
 
       {open && (
-        <OpenRevision
-          exchange={exchange}
-          revision={open}
-          otherName={otherName}
-          actions={actions}
-        />
+        <OpenRevision exchange={exchange} revision={open} otherName={otherName} actions={actions} />
       )}
 
       {inForce && (
@@ -218,7 +224,14 @@ interface CounterpartyProps {
  * initiator can replace it; once someone has, the initiator confirms it is
  * who they meant before any signature takes effect.
  */
-function Counterparty({ exchange, otherName, actions, issued, onIssued, reload }: CounterpartyProps) {
+function Counterparty({
+  exchange,
+  otherName,
+  actions,
+  issued,
+  onIssued,
+  reload,
+}: CounterpartyProps) {
   const { wording, fmt } = useI18n()
   const w = wording.exchange
   const link = wording.invitationLink

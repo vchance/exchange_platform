@@ -20,7 +20,13 @@ test('an invitation page is /{language}/i for any language tag', () => {
 test('the other pages, and everything else', () => {
   expect(matchRoute('/')).toEqual({ name: 'home' })
   expect(matchRoute('/account')).toEqual({ name: 'account' })
-  for (const path of ['/exchanges', '/exchanges/not-an-id', `/exchanges/${ID}/other`, '/i', '/en/x']) {
+  for (const path of [
+    '/exchanges',
+    '/exchanges/not-an-id',
+    `/exchanges/${ID}/other`,
+    '/i',
+    '/en/x',
+  ]) {
     expect(matchRoute(path), path).toEqual({ name: 'notFound' })
   }
 })

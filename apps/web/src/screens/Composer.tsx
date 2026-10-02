@@ -77,7 +77,8 @@ function Editor({ exchange, reload, onSent }: Props) {
 
   const you = exchange.you
   const other: Slot = you === 'A' ? 'B' : 'A'
-  const kind = exchange.state === 'DRAFT' ? 'first' : exchange.state === 'ACTIVE' ? 'amend' : 'counter'
+  const kind =
+    exchange.state === 'DRAFT' ? 'first' : exchange.state === 'ACTIVE' ? 'amend' : 'counter'
   // What a counteroffer or an amendment starts from: the terms on the table.
   const base = exchange.open_revision ?? exchange.in_force_revision ?? null
   const digits = fractionDigitsOf(exchange.currency)
@@ -349,7 +350,11 @@ function Editor({ exchange, reload, onSent }: Props) {
       >
         <fieldset>
           <legend>{w.partiesLegend}</legend>
-          <Field label={w.yourName} id={`party-${you}`} error={errorFor(you === 'A' ? 'partyA' : 'partyB')}>
+          <Field
+            label={w.yourName}
+            id={`party-${you}`}
+            error={errorFor(you === 'A' ? 'partyA' : 'partyB')}
+          >
             {(control) => (
               <input
                 {...control}
@@ -404,7 +409,9 @@ function Editor({ exchange, reload, onSent }: Props) {
                     <select
                       {...control}
                       value={item.from}
-                      onChange={(event) => changeItem(item.id, { from: event.target.value as Slot })}
+                      onChange={(event) =>
+                        changeItem(item.id, { from: event.target.value as Slot })
+                      }
                     >
                       <option value={you}>{wording.party.you}</option>
                       <option value={other}>{wording.party.other}</option>
@@ -482,7 +489,7 @@ function Editor({ exchange, reload, onSent }: Props) {
                       />
                     )}
                   </Field>
-                  <Field label={w.unitLabel} hint={w.unitHint}>
+                  <Field label={w.unitLabel}>
                     {(control) => (
                       <input
                         {...control}
@@ -526,7 +533,11 @@ function Editor({ exchange, reload, onSent }: Props) {
                 </Field>
               )}
               {item.due.kind === 'AFTER_CONTRIBUTION' && (
-                <Field label={w.afterLabel} id={`${item.id}-after`} error={errorFor('after', item.id)}>
+                <Field
+                  label={w.afterLabel}
+                  id={`${item.id}-after`}
+                  error={errorFor('after', item.id)}
+                >
                   {(control) => (
                     <select
                       {...control}

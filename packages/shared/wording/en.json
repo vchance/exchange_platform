@@ -150,7 +150,6 @@
     "amountPreview": "That is {amount}.",
     "quantityLabel": "Quantity (optional)",
     "unitLabel": "Unit (optional)",
-    "unitHint": "Such as hours, boxes or kg.",
     "dueLabel": "When it is due",
     "dueOnAgreement": "When the agreement is signed",
     "dueOnDate": "On a date",
@@ -221,6 +220,7 @@
   "invitation": {
     "title": "You’ve been invited to an exchange",
     "intro": "{name} wants to agree this with you. Read it, then sign in to accept it, decline it or propose changes.",
+    "introSignedIn": "{name} wants to agree this with you. Read it, then respond to accept it, decline it or propose changes.",
     "notBinding": "Nothing binds you until you sign.",
     "expires": "This proposal is open until {date}.",
     "bound": "This invitation is for one particular person. Sign in with the email address or phone number it was sent to.",
@@ -230,7 +230,8 @@
     "opening": "Opening the exchange…",
     "missingTitle": "This link is incomplete",
     "missing": "The invitation link has lost its last part. Open it again from the message it came in, or ask the sender for a new one.",
-    "ownInvitation": "This is your own invitation link. Send it to the other party; you can’t use it yourself."
+    "ownInvitation": "This is your own invitation link. Send it to the other party; you can’t use it yourself.",
+    "alreadyResponded": "If you have already responded to it, it is among your exchanges."
   },
   "exchange": {
     "title": "Exchange with {name}",

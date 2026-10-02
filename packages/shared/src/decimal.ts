@@ -50,8 +50,7 @@ export function parseDecimal(text: string, language: string): string | null {
     digits = whole
   } else {
     const [first, ...others] = groups
-    const wellGrouped =
-      /^\d{1,3}$/.test(first) && others.every((part) => /^\d{3}$/.test(part))
+    const wellGrouped = /^\d{1,3}$/.test(first) && others.every((part) => /^\d{3}$/.test(part))
     if (!wellGrouped) return null
     digits = groups.join('')
   }

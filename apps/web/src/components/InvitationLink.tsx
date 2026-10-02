@@ -8,7 +8,13 @@ import { Field, Notice } from './ui'
  * Naming who an invitation is for, so that only an account verified with
  * that email address or phone number can use the link (DESIGN.md §8).
  */
-export function InvitationFor({ value, onChange }: { value: string; onChange(value: string): void }) {
+export function InvitationFor({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange(value: string): void
+}) {
   const { wording } = useI18n()
   return (
     <Field label={wording.invitationLink.forLabel} hint={wording.invitationLink.forHint}>
@@ -54,7 +60,9 @@ export function InvitationLink({ token }: { token: string }) {
 
   function share() {
     // Dismissing the share sheet rejects; there is nothing to do about it.
-    navigator.share({ title: wording.linkPreview.title, text: w.shareText, url: link }).catch(() => {})
+    navigator
+      .share({ title: wording.linkPreview.title, text: w.shareText, url: link })
+      .catch(() => {})
   }
 
   return (

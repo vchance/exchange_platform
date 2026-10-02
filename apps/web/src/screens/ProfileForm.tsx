@@ -20,7 +20,9 @@ export function ProfileForm({ account, first }: { account: Account; first: boole
   const w = wording.profile
 
   const [name, setName] = useState(account.display_name)
-  const [language, setLanguage] = useState<Language>(first ? shown : pickLanguage([account.language]))
+  const [language, setLanguage] = useState<Language>(
+    first ? shown : pickLanguage([account.language]),
+  )
   const [adult, setAdult] = useState(account.adult_confirmed)
   const [checked, setChecked] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -55,7 +57,11 @@ export function ProfileForm({ account, first }: { account: Account; first: boole
 
   return (
     <form onSubmit={submit} noValidate>
-      <Field label={w.nameLabel} hint={w.nameHint} error={checked && nameMissing ? w.nameRequired : null}>
+      <Field
+        label={w.nameLabel}
+        hint={w.nameHint}
+        error={checked && nameMissing ? w.nameRequired : null}
+      >
         {(control) => (
           <input
             {...control}

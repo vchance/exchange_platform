@@ -94,7 +94,10 @@ function SignIn() {
 
   if (!sentTo) {
     return (
+      // The two steps are separate forms with separate fields, so a browser
+      // offering to fill in the code is not looking at the address field.
       <form
+        key="identifier"
         noValidate
         onSubmit={(event) => {
           event.preventDefault()
@@ -127,7 +130,7 @@ function SignIn() {
   }
 
   return (
-    <form noValidate onSubmit={signIn}>
+    <form key="code" noValidate onSubmit={signIn}>
       <p>{fmt(w.codeSent, { identifier: sentTo })}</p>
       <Field label={w.codeLabel} hint={w.codeHint}>
         {(control) => (

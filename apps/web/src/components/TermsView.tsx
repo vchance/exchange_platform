@@ -74,14 +74,14 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
               {provided.map((contribution) => {
                 const status = statuses?.get(contribution.id)
                 const overdue =
-                  status !== undefined && today !== null && isOverdue(status, contribution.due, today)
+                  status !== undefined &&
+                  today !== null &&
+                  isOverdue(status, contribution.due, today)
                 return (
                   <li key={contribution.id} className="contribution">
                     <p className="tags">
                       <span className="tag">{wording.contributionTypes[contribution.type]}</span>
-                      <span className="tag">
-                        {contribution.required ? w.required : w.optional}
-                      </span>
+                      <span className="tag">{contribution.required ? w.required : w.optional}</span>
                       {overdue && <strong className="tag tag-alert">{w.overdue}</strong>}
                     </p>
                     <Written>{contribution.description}</Written>

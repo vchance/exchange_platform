@@ -143,7 +143,6 @@ export interface Wording {
     amountPreview: string
     quantityLabel: string
     unitLabel: string
-    unitHint: string
     dueLabel: string
     dueOnAgreement: string
     dueOnDate: string
@@ -209,6 +208,7 @@ export interface Wording {
   invitation: {
     title: string
     intro: string
+    introSignedIn: string
     notBinding: string
     expires: string
     bound: string
@@ -219,6 +219,7 @@ export interface Wording {
     missingTitle: string
     missing: string
     ownInvitation: string
+    alreadyResponded: string
   }
   exchange: {
     title: string

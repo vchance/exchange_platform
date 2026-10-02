@@ -69,7 +69,9 @@ async function send<T>(request: () => Promise<Reply<T>>): Promise<T> {
 
   const body = reply.error
   const code =
-    typeof body === 'object' && body !== null && typeof (body as { code?: unknown }).code === 'string'
+    typeof body === 'object' &&
+    body !== null &&
+    typeof (body as { code?: unknown }).code === 'string'
       ? ((body as { code: string }).code as ErrorCode)
       : null
   // An error that is not the service's own came from something in between.

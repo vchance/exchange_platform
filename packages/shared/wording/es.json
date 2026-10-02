@@ -150,7 +150,6 @@
     "amountPreview": "Es decir, {amount}.",
     "quantityLabel": "Cantidad (opcional)",
     "unitLabel": "Unidad (opcional)",
-    "unitHint": "Por ejemplo, horas, cajas o kg.",
     "dueLabel": "Cuándo vence",
     "dueOnAgreement": "Cuando se firme el acuerdo",
     "dueOnDate": "En una fecha",
@@ -221,6 +220,7 @@
   "invitation": {
     "title": "Te invitaron a un intercambio",
     "intro": "{name} quiere acordar esto contigo. Léelo y luego inicia sesión para aceptarlo, rechazarlo o proponer cambios.",
+    "introSignedIn": "{name} quiere acordar esto contigo. Léelo y luego responde para aceptarlo, rechazarlo o proponer cambios.",
     "notBinding": "Nada te obliga hasta que firmes.",
     "expires": "Esta propuesta está abierta hasta el {date}.",
     "bound": "Esta invitación es para una persona en particular. Inicia sesión con el correo electrónico o número de teléfono al que se envió.",
@@ -230,7 +230,8 @@
     "opening": "Abriendo el intercambio…",
     "missingTitle": "Este enlace está incompleto",
     "missing": "El enlace de invitación perdió su última parte. Ábrelo de nuevo desde el mensaje en el que llegó, o pide uno nuevo a quien te lo envió.",
-    "ownInvitation": "Este es tu propio enlace de invitación. Envíaselo a la otra parte; tú no puedes usarlo."
+    "ownInvitation": "Este es tu propio enlace de invitación. Envíaselo a la otra parte; tú no puedes usarlo.",
+    "alreadyResponded": "Si ya respondiste a esta invitación, está entre tus intercambios."
   },
   "exchange": {
     "title": "Intercambio con {name}",

@@ -125,6 +125,24 @@ export function entryPagesPlugin(wordingDirectory: string): Plugin {
       return renderEntryPage(html, page ?? pages[0])
     },
 
+    // A static host has to answer `/{language}/i` with that language's page,
+    // not with the app's own entry page as it does for other unknown paths.
+    // `vite preview` does not do that unasked, so it is told to here, which
+    // keeps a local preview of the build honest about what a link previews as.
+    configurePreviewServer(server) {
+      const paths = new Set(
+        readEntryPages(wordingDirectory)
+          .slice(1)
+          .map((page) => invitationPath(page.lang)),
+      )
+      server.middlewares.use((request, _response, next) => {
+        const [path, query] = (request.url ?? '').split('?')
+        const page = path.replace(/\/$/, '')
+        if (paths.has(page)) request.url = `${page}/index.html${query ? `?${query}` : ''}`
+        next()
+      })
+    },
+
     generateBundle(_options, bundle) {
       const built = bundle['index.html']
       if (!built || built.type !== 'asset') return

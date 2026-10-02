@@ -42,7 +42,7 @@ export function Ending({ exchange, otherName, actions }: Props) {
       {closeBy !== null && closeBy !== you && (
         <p>{fmt(w.closeRequestedByOther, { name: otherName, date: requestedOn })}</p>
       )}
-      {stated && <Notice>{w.statementAdded}</Notice>}
+      {stated && closeBy !== null && <Notice>{w.statementAdded}</Notice>}
 
       <div className="actions">
         {invited && (

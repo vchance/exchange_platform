@@ -1,11 +1,5 @@
 import type { Account, ErrorCode } from '@exchange/api-client'
-import {
-  directionOf,
-  languages,
-  pickLanguage,
-  type Language,
-  type Wording,
-} from '@exchange/shared'
+import { directionOf, languages, pickLanguage, type Language, type Wording } from '@exchange/shared'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { Failure, PageHeading } from '../components/ui'
@@ -204,7 +198,10 @@ function Shell() {
         )}
         <label className="language">
           <span className="visually-hidden">{wording.nav.language}</span>
-          <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
+          <select
+            value={language}
+            onChange={(event) => setLanguage(event.target.value as Language)}
+          >
             {languages.map((info) => (
               <option key={info.code} value={info.code} lang={info.code}>
                 {info.name}
@@ -213,7 +210,7 @@ function Shell() {
           </select>
         </label>
       </header>
-      <main id="content">
+      <main id="content" tabIndex={-1}>
         <Suspense fallback={<p>{wording.common.loading}</p>}>{page}</Suspense>
       </main>
     </>

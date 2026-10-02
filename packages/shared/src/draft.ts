@@ -72,7 +72,10 @@ export function newContribution(id: string, from: Slot): DraftContribution {
   }
 }
 
-function fromContribution(contribution: ContributionDto, fractionDigits: number): DraftContribution {
+function fromContribution(
+  contribution: ContributionDto,
+  fractionDigits: number,
+): DraftContribution {
   return {
     id: contribution.id,
     from: contribution.from,
@@ -203,8 +206,7 @@ export interface Problem {
 }
 
 export type Built =
-  | { ok: true; terms: RevisionTerms; note: string | null }
-  | { ok: false; problems: Problem[] }
+  { ok: true; terms: RevisionTerms; note: string | null } | { ok: false; problems: Problem[] }
 
 function isCalendarDate(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)

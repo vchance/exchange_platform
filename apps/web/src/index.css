@@ -42,8 +42,10 @@ body {
   outline-offset: 2px;
 }
 
-/* A heading focused after a page change is for orientation, not a control. */
-h1:focus {
+/* A heading focused after a page change, or the page reached by the skip
+   link, is for orientation and is not a control. */
+h1:focus,
+main:focus {
   outline: none;
 }
 
@@ -228,7 +230,10 @@ button.link {
   padding-inline: 0.25rem;
 }
 
-button:disabled {
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
