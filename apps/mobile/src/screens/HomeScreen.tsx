@@ -1,5 +1,5 @@
 import type { ErrorCode, ExchangeSummary } from '@exchange/api-client';
-import { failureCode } from '@exchange/shared';
+import { failureCode, groupExchanges } from '@exchange/shared';
 import { getCalendars } from 'expo-localization';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -30,11 +30,14 @@ function deviceTimezone(): string {
 }
 
 /**
- * The signed-in person's exchanges, most recently changed first, the way to
- * start one, and the way to open an invitation that did not open by itself.
+ * The signed-in person's exchanges, the way to start one, and the way to
+ * open an invitation that did not open by itself. What is in progress comes
+ * first, since that is what may be waiting on them; drafts they never sent
+ * come next; what is closed is kept but folded away, so it never buries the
+ * rest. Within a group, most recently changed first.
  */
 export function HomeScreen() {
-  const { wording, fmt, moment } = useI18n();
+  const { wording, fmt } = useI18n();
   const router = useRouter();
   const w = wording.home;
 
@@ -43,6 +46,7 @@ export function HomeScreen() {
   const [starting, setStarting] = useState(false);
   const [tooMany, setTooMany] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -77,6 +81,8 @@ export function HomeScreen() {
     }
   }
 
+  const groups = exchanges ? groupExchanges(exchanges) : null;
+
   return (
     <Screen
       refreshing={refreshing}
@@ -101,35 +107,72 @@ export function HomeScreen() {
 
       {!exchanges && !failure && <P>{wording.common.loading}</P>}
       {exchanges?.length === 0 && <P>{w.empty}</P>}
-      {exchanges?.map((exchange) => {
-        const state = exchange.closed_outcome
-          ? wording.outcomes[exchange.closed_outcome]
-          : wording.states[exchange.state];
-        const title = exchange.other_party_name
-          ? fmt(w.withParty, { name: exchange.other_party_name })
-          : w.noParty;
-        const reference = fmt(w.reference, { code: exchange.display_code });
-        const updated = fmt(w.updated, { date: moment(exchange.updated_at) });
-        return (
-          // One button per exchange; a screen reader reads what is written on it.
-          <Pressable
-            key={exchange.id}
-            accessibilityRole="button"
-            onPress={() => router.push(`/exchanges/${exchange.id}`)}
-            style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-            <Card>
-              {exchange.other_party_name ? <Written>{title}</Written> : <P>{title}</P>}
-              <Tags>
-                <Tag>{state}</Tag>
-              </Tags>
-              <Hint>{reference}</Hint>
-              <Hint>{updated}</Hint>
-            </Card>
-          </Pressable>
-        );
-      })}
+      {groups && (
+        <>
+          <Group heading={w.groupOpen} exchanges={groups.open} />
+          <Group heading={w.groupDrafts} exchanges={groups.drafts} />
+          {groups.closed.length > 0 && (
+            <>
+              <Heading level={2}>{w.groupClosed}</Heading>
+              <Actions>
+                <Button
+                  label={
+                    showClosed ? w.hideClosed : fmt(w.showClosed, { count: groups.closed.length })
+                  }
+                  expanded={showClosed}
+                  onPress={() => setShowClosed((shown) => !shown)}
+                />
+              </Actions>
+              {showClosed && <Cards exchanges={groups.closed} />}
+            </>
+          )}
+        </>
+      )}
     </Screen>
   );
+}
+
+function Group({ heading, exchanges }: { heading: string; exchanges: readonly ExchangeSummary[] }) {
+  if (exchanges.length === 0) return null;
+  return (
+    <>
+      <Heading level={2}>{heading}</Heading>
+      <Cards exchanges={exchanges} />
+    </>
+  );
+}
+
+function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
+  const { wording, fmt, moment } = useI18n();
+  const router = useRouter();
+  const w = wording.home;
+  return exchanges.map((exchange) => {
+    const state = exchange.closed_outcome
+      ? wording.outcomes[exchange.closed_outcome]
+      : wording.states[exchange.state];
+    const title = exchange.other_party_name
+      ? fmt(w.withParty, { name: exchange.other_party_name })
+      : w.noParty;
+    const reference = fmt(w.reference, { code: exchange.display_code });
+    const updated = fmt(w.updated, { date: moment(exchange.updated_at) });
+    return (
+      // One button per exchange; a screen reader reads what is written on it.
+      <Pressable
+        key={exchange.id}
+        accessibilityRole="button"
+        onPress={() => router.push(`/exchanges/${exchange.id}`)}
+        style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+        <Card>
+          {exchange.other_party_name ? <Written>{title}</Written> : <P>{title}</P>}
+          <Tags>
+            <Tag>{state}</Tag>
+          </Tags>
+          <Hint>{reference}</Hint>
+          <Hint>{updated}</Hint>
+        </Card>
+      </Pressable>
+    );
+  });
 }
 
 const styles = StyleSheet.create({

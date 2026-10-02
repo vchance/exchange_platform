@@ -3,7 +3,6 @@ import {
   failureCode,
   invitationTokenIn,
   isComplete,
-  LAUNCH_CURRENCY,
   type InvitationPreview,
 } from '@exchange/shared';
 import * as Clipboard from 'expo-clipboard';
@@ -265,8 +264,12 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
                 <Written>{preview.revision.note}</Written>
               </>
             ) : null}
-            {/* The preview names neither the exchange's currency nor its timezone. */}
-            <TermsView terms={preview.revision.terms} currency={LAUNCH_CURRENCY} you={null} />
+            <TermsView
+              terms={preview.revision.terms}
+              currency={preview.currency}
+              timezone={preview.timezone}
+              you={null}
+            />
             <Hint>{fmt(w.expires, { date: moment(preview.revision.expires_at) })}</Hint>
           </Card>
 

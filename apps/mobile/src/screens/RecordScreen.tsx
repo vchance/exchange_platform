@@ -1,7 +1,9 @@
 import type { ErrorCode } from '@exchange/api-client';
 import {
+  moneyIds,
   recordFile,
   recordMoments,
+  statusWording,
   termsOfRevision,
   useRecord,
   verificationText,
@@ -84,6 +86,8 @@ function Record({ record, failure, reload }: RecordProps) {
   const when = useMemo(() => recordMoments(language, exchange.timezone), [language, exchange.timezone]);
   const code = exchange.display_code;
   const reason = exchange.closed_reason;
+  // Money is spoken of in words for paying and receiving (DESIGN.md §11).
+  const money = useMemo(() => moneyIds(record.revisions.map(termsOfRevision)), [record]);
 
   const [refreshing, setRefreshing] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -190,7 +194,9 @@ function Record({ record, failure, reload }: RecordProps) {
               <Item key={contribution.id}>
                 <Written>{contribution.description}</Written>
                 <P>{fmt(w.itemFrom, { name: parties[contribution.from] })}</P>
-                <P style={styles.status}>{wording.contributionStatus[contribution.status]}</P>
+                <P style={styles.status}>
+                  {statusWording(wording, contribution.status, money.has(contribution.id))}
+                </P>
                 {contribution.since ? (
                   <Hint>{fmt(w.since, { date: when(contribution.since) })}</Hint>
                 ) : null}
@@ -214,7 +220,13 @@ function Record({ record, failure, reload }: RecordProps) {
       {record.events.length === 0 ? (
         <P>{w.historyEmpty}</P>
       ) : (
-        <EventList events={record.events} parties={parties} reader={null} when={when} />
+        <EventList
+          events={record.events}
+          parties={parties}
+          reader={null}
+          when={when}
+          money={money}
+        />
       )}
 
       <Actions>

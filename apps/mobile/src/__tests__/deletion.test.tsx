@@ -67,7 +67,14 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const text = await request.text();
   const body = text ? JSON.parse(text) : null;
   const authorization = request.headers.get('Authorization');
-  service.sent.push({ method: request.method, path, authorization, idempotencyKey: null, body });
+  service.sent.push({
+    method: request.method,
+    path,
+    authorization,
+    idempotencyKey: null,
+    clientVersion: request.headers.get('X-Client-Version'),
+    body,
+  });
   const [status, answer] = deletion(request.method, path, authorization === `Bearer ${TOKEN}`, body);
   return new Response(answer === null ? null : JSON.stringify(answer), {
     status,

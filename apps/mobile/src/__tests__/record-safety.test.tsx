@@ -267,10 +267,11 @@ describe('the record', () => {
         w.contributionStatus.PENDING,
         'Since October 2, 2026 at 11:10:00 AM CDT',
       ],
+      // Money is paid outside the product, and is spoken of as paid, not delivered.
       [
         'Payment for the repair',
         'Provided by Ben Ortiz',
-        w.contributionStatus.PENDING,
+        w.moneyStatus.PENDING,
         'Since October 2, 2026 at 11:10:00 AM CDT',
       ],
     ]);

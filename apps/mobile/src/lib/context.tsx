@@ -2,6 +2,7 @@ import type { Account, ErrorCode } from '@exchange/api-client';
 import {
   createI18n,
   failureCode,
+  isClientTooOld,
   pickLanguage,
   wordingFor,
   type I18n,
@@ -19,7 +20,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { api, dropSession, keepSession, restoreSession } from './session';
+import { api, CLIENT, dropSession, keepSession, restoreSession } from './session';
 
 export const I18nContext = createContext<I18n | null>(null);
 
@@ -45,6 +46,11 @@ export interface Session {
    */
   forget(): Promise<void>;
   retry(): void;
+  /**
+   * This build is older than the service accepts changes from: it must be
+   * updated, and until then nothing in it may offer a change (`CLIENT_TOO_OLD`).
+   */
+  outdated: boolean;
 }
 
 export const SessionContext = createContext<Session | null>(null);
@@ -115,6 +121,30 @@ export function AppProviders({ children }: { children: ReactNode }) {
     return () => api.onSignedOut(() => {});
   }, []);
 
+  // An installed app falls behind the service. It asks at startup how old a
+  // build may be, and is told again if the service refuses a change from it.
+  const [outdated, setOutdated] = useState(false);
+  useEffect(() => {
+    api.onClientTooOld(() => setOutdated(true));
+    return () => api.onClientTooOld(() => {});
+  }, []);
+  useEffect(() => {
+    if (!CLIENT) return;
+    const client = CLIENT;
+    let cancelled = false;
+    api.meta().then(
+      (meta) => {
+        if (!cancelled && isClientTooOld(meta.minimum_client_versions, client)) setOutdated(true);
+      },
+      () => {
+        // Nothing to compare against; the service's refusals still apply.
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
   const language = account ? pickLanguage([account.language]) : (chosen ?? deviceLanguage);
   const signedInNow = account !== null;
 
@@ -164,8 +194,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
         setReady(false);
         setAttempt((count) => count + 1);
       },
+      outdated,
     }),
-    [ready, failure, account, setAccount],
+    [ready, failure, account, setAccount, outdated],
   );
 
   return (

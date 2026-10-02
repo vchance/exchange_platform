@@ -1,5 +1,6 @@
 import type { components, ErrorCode, ExchangeView as Exchange } from '@exchange/api-client';
 import {
+  amendmentEffects,
   baseRevision,
   buildTerms,
   canCompose,
@@ -7,6 +8,7 @@ import {
   CONTRIBUTION_TYPES,
   createDraftSaver,
   decimalForInput,
+  draftEffects,
   draftFromTerms,
   dueOf,
   failureCode,
@@ -18,11 +20,13 @@ import {
   problemText as problemMessage,
   revisionToSend,
   startingDraft,
+  statusesOf,
   todayIn,
   toMinorUnits,
   type Draft,
   type DraftContribution,
   type DraftDue,
+  type ItemEffect,
   type Problem,
   type ProblemField,
   type RevisionSent,
@@ -31,7 +35,7 @@ import {
 } from '@exchange/shared';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ScrollView } from 'react-native';
+import { View, type ScrollView } from 'react-native';
 
 import { Consent } from '../components/Consent';
 import { DateField } from '../components/DateField';
@@ -44,10 +48,12 @@ import {
   Check,
   Choice,
   ErrorNote,
+  Failure,
   Heading,
   Hint,
   Notice,
   P,
+  Panel,
   Screen,
   TextField,
   Written,
@@ -116,10 +122,26 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ErrorCode | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [discarding, setDiscarding] = useState(false);
+  const [discardFailure, setDiscardFailure] = useState<ErrorCode | null>(null);
   const scroll = useRef<ScrollView>(null);
 
   // The working copy was started from terms that have since been replaced.
   const stale = base !== null && draft.base !== base.id;
+
+  // An amendment's effect on each item of the agreement, predicted from the
+  // rule the service applies (DESIGN.md §7), so nothing about it is a
+  // surprise after signing.
+  const inForce = kind === 'amend' ? (exchange.in_force_revision ?? null) : null;
+  const effects = useMemo(
+    () => (inForce ? draftEffects(draft, inForce.terms, statusesOf(exchange), digits) : null),
+    [draft, inForce, exchange, digits],
+  );
+  const effectOf = (id: string) => effects?.find((item) => item.id === id) ?? null;
+  // Items of the agreement the working copy no longer has.
+  const dropped = (effects ?? []).filter(
+    (item) => !draft.contributions.some((contribution) => contribution.id === item.id),
+  );
 
   // ---- Saving the working copy ----------------------------------------------
 
@@ -212,9 +234,32 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     }
   }
 
+  // ---- Discarding a draft never sent ----------------------------------------------
+
+  async function discard() {
+    setBusy(true);
+    setDiscardFailure(null);
+    // The working copy goes with the draft; a save still on its way must not
+    // be refused noisily, or put anything back.
+    await saver.settle();
+    try {
+      await api.runCommand(exchange.id, exchange.version, { type: 'DISCARD' });
+      saver.sent();
+      onLeave();
+    } catch (error) {
+      saver.resume();
+      setDiscardFailure(failureCode(error));
+      setBusy(false);
+    }
+  }
+
   const title = kind === 'first' ? w.titleFirst : kind === 'amend' ? w.titleAmend : w.titleCounter;
 
   if (step === 'sign' && built.ok) {
+    // What signing this amendment does, from the terms exactly as they go.
+    const predicted = inForce
+      ? amendmentEffects(inForce.terms, statusesOf(exchange), built.terms.contributions)
+      : null;
     return (
       // A screen of its own, so it opens at the top: the terms are read before
       // the way to sign them is reached.
@@ -236,6 +281,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
             you={you}
           />
         </Card>
+        {predicted && <Effects effects={predicted} />}
         {kind === 'first' && <InvitationFor value={boundTo} onChange={setBoundTo} />}
         <Consent
           signLabel={w.signAndSend}
@@ -275,6 +321,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     <Screen key={`edit-${generation}`} scroll={scroll}>
       <Heading>{title}</Heading>
       <P>{kind === 'first' ? w.introFirst : kind === 'amend' ? w.introAmend : w.introCounter}</P>
+      {kind === 'amend' && <P>{w.effectsSteer}</P>}
 
       {conflict && <ErrorNote>{w.conflict}</ErrorNote>}
       {stale && base && (
@@ -339,10 +386,20 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
                 })
               : fmt(w.itemOptionBlank, { number: position + 1 }),
           }));
+        const effect = effectOf(item.id);
+        const refused = effect?.effect === 'LOCKED' || effect?.effect === 'REUSED';
         return (
           <Card key={item.id}>
             <Heading level={3}>{fmt(w.itemLegend, { number })}</Heading>
             {fixed && <Notice quiet>{w.locked}</Notice>}
+            {/* What the amendment does to this item, as it is being written. */}
+            {effect && !fixed ? (
+              refused ? (
+                <ErrorNote>{w.effects[effect.effect]}</ErrorNote>
+              ) : (
+                <Hint>{w.effects[effect.effect]}</Hint>
+              )
+            ) : null}
 
             <Choice<Slot>
               label={w.fromLabel}
@@ -382,6 +439,8 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
                 {minor !== null && (
                   <Hint>{fmt(w.amountPreview, { amount: money(minor, exchange.currency) })}</Hint>
                 )}
+                {/* Money is paid outside the product and only recorded here (DESIGN.md §11). */}
+                <Hint>{w.moneyOutside}</Hint>
               </>
             ) : (
               <>
@@ -469,6 +528,19 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
         );
       })}
 
+      {/* Items of the agreement this change removes, named as the agreement wrote them. */}
+      {dropped.length > 0 && (
+        <Notice quiet>
+          <P>{fmt(w.removedCount, { count: dropped.length })}</P>
+          {dropped.map((item) => (
+            <View key={item.id}>
+              <Written>{item.description}</Written>
+              <Hint>{w.effects[item.effect]}</Hint>
+            </View>
+          ))}
+        </Notice>
+      )}
+
       {general.map((problem) => (
         <ErrorNote key={problem.code}>{problemText(problem)}</ErrorNote>
       ))}
@@ -491,13 +563,69 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
       {saveState === 'failed' && <ErrorNote>{w.saveFailed}</ErrorNote>}
 
       <Actions>
-        <Button variant="primary" label={w.review} disabled={stale} onPress={review} />
+        <Button variant="primary" label={w.review} disabled={stale || busy} onPress={review} />
         <Button
           label={kind === 'first' ? wording.nav.exchanges : wording.common.cancel}
           onPress={onLeave}
         />
+        {/* A draft never sent can be thrown away; afterwards it is closed and out of the list. */}
+        {kind === 'first' && (
+          <Button
+            label={w.discard}
+            expanded={discarding}
+            disabled={busy}
+            onPress={() => setDiscarding(true)}
+          />
+        )}
       </Actions>
+      {discarding && (
+        <Panel title={w.discard}>
+          <P>{w.discardText}</P>
+          <Failure code={discardFailure} />
+          <Actions>
+            <Button
+              variant="primary"
+              label={w.confirmDiscard}
+              disabled={busy}
+              onPress={() => void discard()}
+            />
+            <Button
+              label={wording.common.cancel}
+              disabled={busy}
+              onPress={() => setDiscarding(false)}
+            />
+          </Actions>
+        </Panel>
+      )}
     </Screen>
+  );
+}
+
+/**
+ * What an amendment does to each item of the agreement once both have signed
+ * it, from the same rule the service applies (DESIGN.md §7): untouched items
+ * keep their status, a changed one goes back to the start, a removed one
+ * leaves, a new one starts, and a confirmed one cannot be touched.
+ */
+function Effects({ effects }: { effects: readonly ItemEffect[] }) {
+  const { wording } = useI18n();
+  const w = wording.composer;
+  return (
+    <Card>
+      <Heading level={2}>{w.effectsHeading}</Heading>
+      <P>{w.effectsIntro}</P>
+      {effects.map((item) => (
+        <View key={item.id}>
+          <Written>{item.description}</Written>
+          {item.effect === 'LOCKED' || item.effect === 'REUSED' ? (
+            <ErrorNote>{w.effects[item.effect]}</ErrorNote>
+          ) : (
+            <P>{w.effects[item.effect]}</P>
+          )}
+        </View>
+      ))}
+      <Hint>{w.effectsSteer}</Hint>
+    </Card>
   );
 }
 
