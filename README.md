@@ -155,3 +155,7 @@ The scaffold, the database schema (`backend/migrations/`), the domain rules (`ba
 `DESIGN.md` §13.4 lists what the exchange API deliberately leaves out for now.
 
 Before any of the Wallet or store work can start, the Apple and Google accounts in `DESIGN.md` §11 need creating.
+
+## License
+
+All rights reserved. The code is published to be read; no license to copy, modify or use it is granted. See [`LICENSE`](LICENSE).
