@@ -103,11 +103,22 @@ The workflow names the Rust and Node versions it uses; raise them there when the
 
 `npm run typecheck` then fails until the file is complete. The service reads the same list, so it needs no change, and neither does the API or the database. The web app needs none either: it finds the wording file by itself, and its build writes the language's invitation page, `/<code>/i`, from the file's `linkPreview` text. `DESIGN.md` §4.2 lists what else a language needs before it is offered to people, which is mostly not code.
 
+## An exchange's record
+
+Each party can read everything an exchange holds and take a copy away (`DESIGN.md` §10, §14.1). Like the exchange itself, the record is visible only to its two parties, and it names them only as the agreement does: no email address, phone number or account ID is in it.
+
+- `GET /v1/exchanges/{id}/history` is what happened, oldest first, with what the parties wrote along the way: the message sent with a revision, a note on a delivery, the reason for a dispute, a statement about closing. It answers with the latest 50 events (`limit`, at most 200) and says where the page before starts.
+- `GET /v1/exchanges/{id}/record` is the copy: one self-contained JSON document (`format: "exchange-record"`, `format_version: 1`) with how the exchange stands, every revision sent and what became of it, every signature, and the whole history. It says in words, in the reader's language, what a signature rests on (one one-time code, nothing more), and that what the parties recorded about delivery is their own account and was not checked.
+- Each revision in the copy carries `signed`, exactly what was signed, and `content_hash`. The hash is the SHA-256 of `signed` as canonical JSON (RFC 8785), so anyone holding the copy can recompute it; `backend/src/domain/canonical.rs` defines the format and `backend/tests/record.rs` recomputes it independently.
+- One document holds at most 500 events, and at most 50 revisions or about a megabyte of their text. A longer record continues in further documents: `part.next` says where the next one starts and `part.complete` says when one document is all of it.
+
+On the web, an exchange's page ends with its history, and `/exchanges/{id}/record` lays the whole record out for reading and printing; the browser's "save as PDF" is the PDF, and a button downloads the JSON copy.
+
 ## Not built yet
 
 The scaffold, the database schema (`backend/migrations/`), the domain rules (`backend/src/domain/`), sign-in (`backend/src/auth.rs`), the exchange API (`backend/src/exchanges/`, `backend/src/http/`) and the web app's screens (`apps/web/src/`) exist: two people can take an exchange from a draft to completion in a browser. Still to build, in rough order:
 
-1. The mobile app's screens. On the web: an exchange's history and the notes written along the way, which the API does not return yet; report and block; export; Wallet buttons.
+1. The mobile app's screens. On the web: report and block; Wallet buttons. Emailing each signer their copy of the record when an agreement comes into force (`DESIGN.md` §14.1); until then a party reads, prints or downloads it.
 2. A real email and SMS provider, for one-time codes and for notifications. Notifications are already queued and delivered (`backend/src/notifications/`), but only to the log.
 3. Universal and app links, push, Wallet passes.
 
