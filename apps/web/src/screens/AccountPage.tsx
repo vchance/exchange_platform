@@ -6,6 +6,7 @@ import { paths } from '../app/routes'
 import { PageHeading } from '../components/ui'
 import { api } from '../lib/api'
 import { BlockedPeople } from './BlockedPeople'
+import DeleteAccount from './DeleteAccount'
 import { ProfileForm } from './ProfileForm'
 
 /** The account: what it is verified with, its name and language, and signing out. */
@@ -54,6 +55,7 @@ export default function AccountPage() {
           {wording.nav.signOut}
         </button>
       </div>
+      <DeleteAccount account={account} />
     </>
   )
 }

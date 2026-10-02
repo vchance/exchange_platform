@@ -2,6 +2,7 @@ import type { Account, ErrorCode } from '@exchange/api-client'
 import { directionOf, languages, pickLanguage, type Language, type Wording } from '@exchange/shared'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
+import { AccountDeleted } from '../components/AccountDeleted'
 import { Failure, PageHeading } from '../components/ui'
 import { api, failureCode, onSignedOut } from '../lib/api'
 import { InvitationPage } from '../screens/InvitationPage'
@@ -25,6 +26,7 @@ import { loadWording, rememberLanguage } from './wording'
 const AccountSetup = lazy(() => import('../screens/AccountSetup'))
 const HomePage = lazy(() => import('../screens/HomePage'))
 const AccountPage = lazy(() => import('../screens/AccountPage'))
+const DeleteAccount = lazy(() => import('../screens/DeleteAccount'))
 const ExchangePage = lazy(() => import('../screens/ExchangePage'))
 const RecordPage = lazy(() => import('../screens/RecordPage'))
 
@@ -219,6 +221,7 @@ function Shell() {
         </label>
       </header>
       <main id="content" tabIndex={-1}>
+        <AccountDeleted />
         <Suspense fallback={<p>{wording.common.loading}</p>}>{page}</Suspense>
       </main>
     </>
@@ -241,7 +244,15 @@ function Gate({ children }: { children: ReactNode }) {
       </>
     )
   }
-  if (!account || !isComplete(account)) return <AccountSetup />
+  if (!account || !isComplete(account)) {
+    return (
+      <>
+        <AccountSetup />
+        {/* An account exists from the first sign-in, before it has a name: it can be deleted from here. */}
+        {account && <DeleteAccount account={account} />}
+      </>
+    )
+  }
   return children
 }
 

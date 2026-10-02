@@ -13,6 +13,7 @@ import { Link } from '../app/Link'
 import { paths } from '../app/routes'
 import { Consent } from '../components/Consent'
 import { InvitationFor, InvitationLink } from '../components/InvitationLink'
+import { OtherPartyLeft } from '../components/OtherPartyLeft'
 import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
 import { Failure, Notice, PageHeading, Written } from '../components/ui'
@@ -138,6 +139,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
         </div>
       )}
 
+      <OtherPartyLeft exchange={exchange} otherName={otherName} />
       <Counterparty
         exchange={exchange}
         otherName={otherName}

@@ -145,6 +145,49 @@ export interface Wording {
     emailLabel: string
     phoneLabel: string
   }
+  /**
+   * Deleting the account: what it does and does not delete, said before it
+   * is done, the code that confirms it, and what the other party of an open
+   * exchange is shown afterwards.
+   */
+  deletion: {
+    heading: string
+    open: string
+    intro: string
+    loadFailed: string
+    deletedHeading: string
+    deletedAccount: string
+    deletedData: string
+    signUpAgain: string
+    exchangesHeading: string
+    nothingOpen: string
+    /** One sentence each, with `{count}`, for what the account is still in. */
+    drafts: string
+    openProposals: string
+    agreementsInForce: string
+    agreementsStand: string
+    otherPartyTold: string
+    keptHeading: string
+    keptAgreements: string
+    keptReports: string
+    /** `{identifier}` is the account's own email address or phone number. */
+    codeIntro: string
+    codeChoice: string
+    sendTo: string
+    sendCode: string
+    codeSent: string
+    codeRequired: string
+    continue: string
+    confirmHeading: string
+    confirmBody: string
+    confirm: string
+    back: string
+    deleted: string
+    dismiss: string
+    /** Shown to the other party while the exchange is still open. `{name}` is who left. */
+    otherPartyLeftActive: string
+    otherPartyLeftNegotiating: string
+  }
   home: {
     title: string
     start: string

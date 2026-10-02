@@ -23,6 +23,7 @@ import {
 } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
 import { api } from '../lib/session';
+import { DeleteAccount } from './DeleteAccount';
 
 const languageOptions = languages.map((info) => ({ value: info.code, label: info.name }));
 
@@ -82,6 +83,8 @@ export function Gate({ children }: { children: ReactNode }) {
     return (
       <Screen>
         <AccountSetup />
+        {/* An account exists from the first sign-in, before it has a name: it can be deleted from here. */}
+        {account ? <DeleteAccount account={account} /> : null}
       </Screen>
     );
   }
