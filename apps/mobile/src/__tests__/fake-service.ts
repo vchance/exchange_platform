@@ -1,6 +1,8 @@
 import type { Account, ExchangeView } from '@exchange/api-client';
 import type { RevisionView } from '@exchange/shared';
 
+import { answerRecordAndSafety } from './fake-record';
+
 /*
  * A stand-in for the service, for running the whole app in a test: enough of
  * the API to sign in and work an exchange, with every request kept so a test
@@ -180,6 +182,11 @@ function respond(
       },
     ];
   }
+
+  // History, the record, reporting and blocking are answered in `fake-record.ts`.
+  const signedIn = authorization === `Bearer ${TOKEN}` && service.account !== null;
+  const answered = answerRecordAndSafety(service, call, signedIn);
+  if (answered) return answered;
 
   // Everything else needs the session.
   if (authorization !== `Bearer ${TOKEN}` || !service.account) {

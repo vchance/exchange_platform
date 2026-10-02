@@ -4,8 +4,25 @@ export type { ClosedReason, Wording } from './wording/types'
 export { CONSENT_VERSION, consentShown } from './consent'
 export { formatMessage } from './message'
 export type { MessageValues } from './message'
-export { eventMessage, joinRecord, noteKind, readWholeRecord, termsOfRevision } from './record'
-export type { HistoryPage, RecordDocument, RecordEvent, RecordRevision } from './record'
+export {
+  eventMessage,
+  joinRecord,
+  noteKind,
+  readWholeRecord,
+  recordFile,
+  recordMoments,
+  termsOfRevision,
+  verificationText,
+} from './record'
+export type {
+  HistoryPage,
+  RecordDocument,
+  RecordEvent,
+  RecordFile,
+  RecordRevision,
+} from './record'
+export { useHistory, useRecord } from './use-record'
+export type { HistoryReading, RecordReading } from './use-record'
 export {
   decimalForInput,
   formatMoney,
@@ -96,5 +113,24 @@ export {
   startingDraft,
 } from './composer'
 export type { ComposerKind, DraftSaver, SaveState } from './composer'
-export { REPORT_DETAILS_MAX_CHARS, REPORT_REASONS } from './safety'
-export type { ReportReason } from './safety'
+export {
+  checkReport,
+  hasOtherParty,
+  REPORT_DETAILS_MAX_CHARS,
+  REPORT_REASONS,
+  reportNeedsDetails,
+} from './safety'
+export type { ReportCheck, ReportReason } from './safety'
+export {
+  SAFETY_PANELS,
+  useBlockedPeople,
+  useExchangeSafety,
+  useInvitationReport,
+} from './use-safety'
+export type {
+  BlockedPeopleList,
+  ExchangeSafety,
+  InvitationReporting,
+  SafetyOutcome,
+  SafetyPanel,
+} from './use-safety'

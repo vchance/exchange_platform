@@ -145,3 +145,55 @@ export async function readWholeRecord(
     if (settled || attempt === 3) return joinRecord(parts)
   }
 }
+
+/**
+ * Writes a moment with its seconds and its time zone, in the exchange's own
+ * zone: a record is read later and by other people, so a time in it cannot
+ * depend on where its reader happens to be.
+ */
+export function recordMoments(language: string, timezone: string): (instant: string) => string {
+  const style = { dateStyle: 'long', timeStyle: 'long' } as const
+  let format: Intl.DateTimeFormat
+  try {
+    format = new Intl.DateTimeFormat(language, { ...style, timeZone: timezone })
+  } catch {
+    // A zone this device does not know. The zone is written with each time.
+    format = new Intl.DateTimeFormat(language, { ...style, timeZone: 'UTC' })
+  }
+  return (instant) => {
+    const parsed = new Date(instant)
+    return Number.isNaN(parsed.getTime()) ? instant : format.format(parsed)
+  }
+}
+
+/**
+ * How a signer was verified, in the reader's language. A method newer than
+ * this build has no wording here and is described by the record itself.
+ */
+export function verificationText(
+  verification: Schemas['Verification'],
+  words: Wording['record']['export']['verification'],
+): string {
+  const known: Partial<Record<string, string>> = words
+  return known[verification.method] ?? verification.description
+}
+
+/** A record as a file: the copy a party takes away (DESIGN.md §14.1). */
+export interface RecordFile {
+  /** With its extension. */
+  name: string
+  type: 'application/json'
+  text: string
+}
+
+/**
+ * The record as one JSON file, the same whichever client hands it over.
+ * `name` is the file's name without its extension, from the wording.
+ */
+export function recordFile(record: RecordDocument, name: string): RecordFile {
+  return {
+    name: `${name}.json`,
+    type: 'application/json',
+    text: `${JSON.stringify(record, null, 2)}\n`,
+  }
+}

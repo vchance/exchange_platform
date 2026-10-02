@@ -38,7 +38,9 @@ import { useI18n } from '../lib/context';
 import { api } from '../lib/session';
 import { type, useColors } from '../lib/theme';
 import { Ending } from './Ending';
+import { ExchangeSafety } from './ExchangeSafety';
 import { Fulfillment } from './Fulfillment';
+import { History } from './History';
 
 /** How often an open exchange is checked for what the other party has done. */
 const CHECK_EVERY_MS = 20_000;
@@ -223,6 +225,10 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       )}
 
       {active && <Ending exchange={exchange} otherName={otherName} actions={actions} />}
+
+      <History exchange={exchange} />
+
+      <ExchangeSafety exchange={exchange} otherName={otherName} actions={actions} reload={reload} />
 
       <Actions>
         {!closed && (

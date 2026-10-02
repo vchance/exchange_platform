@@ -256,7 +256,10 @@ async fn each_party_is_told_what_the_other_did_and_never_their_own_action() {
             "Ana: INVITATION_CLAIMED_UNCONFIRMED (COUNTERPARTY_CLAIMED)",
             "Ana: ACCEPTANCE_WAITING (REVISION_ACCEPTED)",
             // Confirming Ben brought his waiting acceptance into force: two
-            // events, one message.
+            // events, one message. It is the one message that also goes to
+            // whoever acted, because it tells each signer where their copy
+            // of the agreement is.
+            "Ana: AGREEMENT_IN_FORCE (AGREEMENT_IN_FORCE)",
             "Ben: AGREEMENT_IN_FORCE (AGREEMENT_IN_FORCE)",
             "Ben: DELIVERY_CLAIMED (CONTRIBUTION_CLAIMED)",
             "Ana: DISPUTE_OPENED (CONTRIBUTION_DISPUTED)",
@@ -272,12 +275,12 @@ async fn each_party_is_told_what_the_other_did_and_never_their_own_action() {
     // Each goes to its recipient's address, links to the exchange, and says
     // nothing of what the two agreed or wrote.
     let (delivered, emails) = deliver(&app).await;
-    assert_eq!(delivered.sent, 9);
+    assert_eq!(delivered.sent, 10);
     let code = display_code(&app, &deal.ana, &deal.exchange).await;
     let link = format!("https://app.test/exchanges/{}", deal.exchange);
     let to_ana = emails.iter().filter(|e| e.to == deal.ana.email).count();
     let to_ben = emails.iter().filter(|e| e.to == deal.ben.email).count();
-    assert_eq!((to_ana, to_ben), (5, 4));
+    assert_eq!((to_ana, to_ben), (6, 4));
     for email in &emails {
         assert!(email.subject.contains(&code), "{}", email.subject);
         assert!(email.body.contains(&link), "{}", email.body);
@@ -502,17 +505,170 @@ async fn a_message_is_written_in_its_recipients_language() {
 }
 
 #[tokio::test]
+async fn each_signer_is_told_where_their_signed_agreement_is_kept() {
+    let (app, _turn) = app().await;
+    let deal = app.negotiating().await;
+    claim(&app, &deal).await;
+    app.command(
+        &deal.ana,
+        &deal.exchange,
+        json!({ "type": "CONFIRM_COUNTERPARTY" }),
+    )
+    .await
+    .ok();
+    sqlx::query("UPDATE account SET language = 'es' WHERE id = $1")
+        .bind(deal.ben.id)
+        .execute(&app.db)
+        .await
+        .unwrap();
+    clear_outbox(&app).await;
+
+    // Ben signs, which brings the agreement into force. Ana is told, and so
+    // is Ben, although it was his own doing: it is his copy too.
+    app.command(&deal.ben, &deal.exchange, accept(&deal.revision))
+        .await
+        .ok();
+    assert_eq!(
+        queued(&app, &deal).await,
+        [
+            "Ana: AGREEMENT_IN_FORCE (AGREEMENT_IN_FORCE)",
+            "Ben: AGREEMENT_IN_FORCE (AGREEMENT_IN_FORCE)",
+        ]
+    );
+
+    let (delivered, emails) = deliver(&app).await;
+    assert_eq!(delivered.sent, 2);
+    let code = display_code(&app, &deal.ana, &deal.exchange).await;
+    let link = format!("https://app.test/exchanges/{}", deal.exchange);
+    let record = format!("{link}/record");
+    let [to_ana, to_ben] = &emails[..] else {
+        panic!("two emails, got {emails:?}");
+    };
+
+    // Each in their own language, each with the way to the record, which
+    // asks them to sign in, and to the exchange.
+    assert_eq!(to_ana.to, deal.ana.email);
+    assert_eq!(
+        to_ana.subject,
+        format!("Your agreement is signed and on record ({code})")
+    );
+    assert!(to_ana.body.contains(&format!(
+        "Sign in to read, print or download your copy at any time: {record}\n"
+    )));
+    assert!(
+        to_ana
+            .body
+            .contains(&format!("Open the exchange: {link}\n"))
+    );
+
+    assert_eq!(to_ben.to, deal.ben.email);
+    assert_eq!(
+        to_ben.subject,
+        format!("Tu acuerdo está firmado y registrado ({code})")
+    );
+    assert!(to_ben.body.contains(&format!(
+        "Inicia sesión para leer, imprimir o descargar tu copia cuando quieras: {record}\n"
+    )));
+    assert!(
+        to_ben
+            .body
+            .contains(&format!("Abre el intercambio: {link}\n"))
+    );
+
+    // The agreement itself does not travel by email: no terms, no names, no
+    // amounts, and nothing attached, since an email here is text and nothing
+    // more.
+    for email in &emails {
+        let text = format!("{}\n{}", email.subject, email.body)
+            .replace(&link, "")
+            .to_lowercase();
+        for private in ["fence", "ruiz", "ortiz", "400", "payment"] {
+            assert!(!text.contains(private), "{private:?} leaked into {text}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn an_amendment_coming_into_force_sends_each_signer_their_copy_again() {
+    let (app, _turn) = app().await;
+    let deal = active(&app).await;
+
+    // Ana proposes a change of wording; Ben is told there is one to look at.
+    let mut amended = common::fence_job(deal.repair, deal.payment);
+    amended["terms"] = json!("Repair the back fence and oil the gate.");
+    let sent = app.send(&deal.ana, &deal.exchange, amended).await.ok();
+    let amendment = sent["exchange"]["open_revision"]["id"].as_str().unwrap();
+    assert_eq!(
+        queued(&app, &deal).await,
+        ["Ben: AMENDMENT_PROPOSED (REVISION_SENT)"]
+    );
+
+    // Ben signs it. Both have now signed the changed agreement, which is what
+    // the record holds from here on, so both are told again where it is.
+    app.command(&deal.ben, &deal.exchange, accept(amendment))
+        .await
+        .ok();
+    assert_eq!(
+        queued(&app, &deal).await[1..],
+        [
+            "Ana: AMENDMENT_IN_FORCE (AGREEMENT_IN_FORCE)",
+            "Ben: AMENDMENT_IN_FORCE (AGREEMENT_IN_FORCE)",
+        ]
+    );
+    let (_, emails) = deliver(&app).await;
+    let code = display_code(&app, &deal.ana, &deal.exchange).await;
+    let record = format!("https://app.test/exchanges/{}/record", deal.exchange);
+    for (email, to) in emails[1..].iter().zip([&deal.ana, &deal.ben]) {
+        assert_eq!(email.to, to.email);
+        assert_eq!(
+            email.subject,
+            format!("The change to your agreement is signed and on record ({code})")
+        );
+        assert!(email.body.contains(&record), "{}", email.body);
+        assert!(!email.body.to_lowercase().contains("gate"));
+    }
+
+    // An amendment that settles everything is two events, the agreement
+    // changing and the exchange closing: each signer gets their copy, and
+    // the one who did not act is also told that it is over.
+    app.act(&deal.ben, &deal.exchange, deal.repair, "CONFIRM")
+        .await
+        .ok();
+    clear_outbox(&app).await;
+    let mut settled = common::fence_job(deal.repair, deal.payment);
+    settled["terms"] = json!("Repair the back fence and oil the gate.");
+    settled["contributions"].as_array_mut().unwrap().truncate(1);
+    let sent = app.send(&deal.ana, &deal.exchange, settled).await.ok();
+    let amendment = sent["exchange"]["open_revision"]["id"].as_str().unwrap();
+    let view = app
+        .command(&deal.ben, &deal.exchange, accept(amendment))
+        .await
+        .ok();
+    assert_eq!(view["closed_outcome"], "COMPLETED");
+    assert_eq!(
+        queued(&app, &deal).await[1..],
+        [
+            "Ana: AMENDMENT_IN_FORCE (AGREEMENT_IN_FORCE)",
+            "Ben: AMENDMENT_IN_FORCE (AGREEMENT_IN_FORCE)",
+            "Ana: CLOSED_COMPLETED (EXCHANGE_CLOSED)",
+        ]
+    );
+}
+
+#[tokio::test]
 async fn a_delivered_message_is_not_sent_again() {
     let (app, _turn) = app().await;
     let deal = app.active().await;
-    assert_eq!(rows(&app, &deal).await.len(), 3);
+    // Three pieces of news on the way to an agreement, and the copy of it
+    // that goes to the one who signed last.
+    assert_eq!(rows(&app, &deal).await.len(), 4);
 
     let provider = Arc::new(Provider::default());
     let delivery = delivery(&provider, DeliveryRules::default());
     assert_eq!(
         deliver_due(&app.db, &delivery, soon()).await.unwrap(),
         Delivered {
-            sent: 3,
+            sent: 4,
             ..Delivered::default()
         }
     );
@@ -526,7 +682,7 @@ async fn a_delivered_message_is_not_sent_again() {
         );
     }
 
-    assert_eq!(provider.sent().len(), 3);
+    assert_eq!(provider.sent().len(), 4);
     for (attempts, error, completed, _) in rows(&app, &deal).await {
         assert_eq!((attempts, error, completed), (1, None, true));
     }
@@ -542,7 +698,7 @@ async fn workers_draining_at_once_send_each_message_once() {
         .fetch_all(&app.owner)
         .await
         .unwrap();
-    assert_eq!(queued.len(), 12);
+    assert_eq!(queued.len(), 16);
 
     // Slow enough that every worker is mid-send while the others look for
     // work.
@@ -557,13 +713,13 @@ async fn workers_draining_at_once_send_each_message_once() {
     let workers = [first.unwrap(), second.unwrap(), third.unwrap()];
 
     let sent: Vec<i64> = provider.sent().iter().map(|e| e.reference).collect();
-    assert_eq!(sent.len(), 12, "nothing was sent twice");
+    assert_eq!(sent.len(), 16, "nothing was sent twice");
     assert_eq!(
         sent.iter().copied().collect::<BTreeSet<i64>>(),
         queued.into_iter().collect::<BTreeSet<i64>>(),
         "and nothing was missed"
     );
-    assert_eq!(workers.iter().map(|w| w.sent).sum::<usize>(), 12);
+    assert_eq!(workers.iter().map(|w| w.sent).sum::<usize>(), 16);
     assert!(
         workers.iter().all(|worker| worker.sent > 0),
         "the work was shared: {workers:?}"

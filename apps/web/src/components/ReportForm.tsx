@@ -1,5 +1,11 @@
 import type { ErrorCode } from '@exchange/api-client'
-import { REPORT_DETAILS_MAX_CHARS, REPORT_REASONS, type ReportReason } from '@exchange/shared'
+import {
+  checkReport,
+  REPORT_DETAILS_MAX_CHARS,
+  REPORT_REASONS,
+  reportNeedsDetails,
+  type ReportReason,
+} from '@exchange/shared'
 import { useId, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
@@ -28,17 +34,16 @@ export function ReportForm({ intro, busy, failure, onSend, onCancel }: Props) {
   const [details, setDetails] = useState('')
   const [checked, setChecked] = useState(false)
 
-  const written = details.trim()
-  const reasonMissing = checked && reason === null
-  // "Something else" with nothing said is a report nobody can act on.
-  const explain = reason === 'OTHER'
-  const detailsMissing = checked && explain && written === ''
+  // What is missing is said once sending has been tried, not before.
+  const check = checkReport(reason, details)
+  const reasonMissing = checked && !check.ok && check.reasonMissing
+  const detailsMissing = checked && !check.ok && check.detailsMissing
+  const explain = reportNeedsDetails(reason)
 
   function submit(event: FormEvent) {
     event.preventDefault()
     setChecked(true)
-    if (reason === null || (explain && written === '')) return
-    onSend(reason, written === '' ? null : written)
+    if (check.ok) onSend(check.reason, check.details)
   }
 
   return (

@@ -14,7 +14,7 @@ use crate::domain::exchange::{
     Actor, CloseRequest, Counterparty, Decision, Event, Exchange, InForce, NotAgreed, Open,
     Outcome, State, Unresolved,
 };
-use crate::domain::notification::notification;
+use crate::domain::notification::notifications;
 use crate::domain::revision::{
     Contribution, ContributionId, Due, Kind, Quantity, Revision, RevisionId, Settlement, Slot,
 };
@@ -562,9 +562,9 @@ fn event_row(
     }
 }
 
-/// Stores a decision: appends its events, queues the message telling the
-/// other party, and brings the exchange row, the contribution statuses and
-/// the counterparty confirmation up to date. The caller holds the lock on the
+/// Stores a decision: appends its events, queues the messages about them,
+/// and brings the exchange row, the contribution statuses and the
+/// counterparty confirmation up to date. The caller holds the lock on the
 /// exchange row.
 ///
 /// `note` is what the actor wrote with the command (a dispute reason, a
@@ -626,7 +626,7 @@ pub async fn persist(
 
     // Who is told (DESIGN.md §12). Queued here, with the events, so that a
     // message exists exactly when the event it is about does.
-    if let Some(notification) = notification(&before.exchange, actor, &decision.events) {
+    for notification in notifications(&before.exchange, actor, &decision.events) {
         let event_sequence = before.last_event_seq + 1 + notification.event as i64;
         for slot in notification.to {
             // An unclaimed slot is nobody yet: there is no one the platform

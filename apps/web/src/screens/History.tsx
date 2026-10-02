@@ -1,13 +1,12 @@
-import type { ErrorCode, ExchangeView as Exchange } from '@exchange/api-client'
-import type { HistoryPage } from '@exchange/shared'
-import { useEffect, useState } from 'react'
+import type { ExchangeView as Exchange } from '@exchange/api-client'
+import { useHistory } from '@exchange/shared'
 
 import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
 import { paths } from '../app/routes'
 import { EventList } from '../components/EventList'
 import { Failure } from '../components/ui'
-import { api, failureCode } from '../lib/api'
+import { api } from '../lib/api'
 
 /**
  * What has happened in an exchange so far, at the foot of its page, with
@@ -19,28 +18,8 @@ import { api, failureCode } from '../lib/api'
 export function History({ exchange }: { exchange: Exchange }) {
   const { wording, moment } = useI18n()
   const w = wording.record
-  const [page, setPage] = useState<HistoryPage | null>(null)
-  const [failure, setFailure] = useState<ErrorCode | null>(null)
-
-  // Every change to an exchange adds to its history, so it is read again
-  // whenever the exchange on screen is a newer version. Until the new one
-  // arrives, the one already shown stays.
-  useEffect(() => {
-    let cancelled = false
-    api.history(exchange.id).then(
-      (found) => {
-        if (cancelled) return
-        setPage(found)
-        setFailure(null)
-      },
-      (error: unknown) => {
-        if (!cancelled) setFailure(failureCode(error))
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [exchange.id, exchange.version])
+  // Read again whenever the exchange on screen is a newer version.
+  const { page, failure } = useHistory(api, exchange)
 
   return (
     <section aria-labelledby="history-heading">
