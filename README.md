@@ -1,6 +1,6 @@
 # Exchange Platform
 
-A versioned agreement between two parties, signed electronically, with a shared record of what each has delivered. The design, its decisions and its open questions are in [`DESIGN.md`](DESIGN.md); read it before changing behavior.
+A versioned agreement between two parties, signed electronically, with a shared record of what each has delivered. The design guide is kept in a separate, private repository. Comments and documents here cite it by section, as in `DESIGN.md §13.2`; the code and its tests are the public statement of how things work.
 
 ## Layout
 
