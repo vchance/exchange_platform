@@ -1,0 +1,246 @@
+import type { Account, ExchangeView } from '@exchange/api-client';
+import type { RevisionView } from '@exchange/shared';
+
+/*
+ * A stand-in for the service, for running the whole app in a test: enough of
+ * the API to sign in and work an exchange, with every request kept so a test
+ * can say what the app sent.
+ */
+
+export const EXCHANGE = '0b9f1c2e-7a41-4c6e-9a55-3d2f8e1b6c70';
+export const DRAFT = '5d0c3b1a-2f64-4e8b-9a7d-1c2e3f4a5b6c';
+export const REPAIR = '11111111-1111-4111-8111-111111111111';
+export const PAYMENT = '22222222-2222-4222-8222-222222222222';
+export const TOKEN = 'session-token-from-the-service';
+export const INVITATION = 'a3'.repeat(32);
+
+export const ana: Account = {
+  id: 'a0000000-0000-4000-8000-000000000001',
+  display_name: 'Ana Ruiz',
+  adult_confirmed: true,
+  language: 'en',
+  email: 'ana@example.test',
+};
+
+const revision: RevisionView = {
+  id: 'c0000000-0000-4000-8000-000000000001',
+  sequence: 1,
+  author: 'A',
+  accepted_by: ['A', 'B'],
+  content_hash: 'ab'.repeat(32),
+  expires_at: '2026-10-16T12:00:00Z',
+  terms: {
+    party_a_name: 'Ana Ruiz',
+    party_b_name: 'Ben Ortiz',
+    terms: 'Repair the back fence.',
+    contributions: [
+      {
+        id: REPAIR,
+        from: 'A',
+        type: 'SERVICE',
+        description: 'Repair the back fence',
+        due: { kind: 'DATE', date: '2026-10-30' },
+        required: true,
+      },
+      {
+        id: PAYMENT,
+        from: 'B',
+        type: 'MONEY',
+        description: 'Payment for the repair',
+        due: { kind: 'AFTER_CONTRIBUTION', contribution: REPAIR },
+        required: true,
+        amount_minor: 45000,
+      },
+    ],
+  },
+};
+
+function activeExchange(): ExchangeView {
+  return {
+    id: EXCHANGE,
+    version: 7,
+    state: 'ACTIVE',
+    you: 'A',
+    counterparty: 'CONFIRMED',
+    currency: 'USD',
+    timezone: 'America/Chicago',
+    display_code: 'PVVS-5Q2K',
+    in_force_revision: revision,
+    contributions: [
+      { id: REPAIR, status: 'PENDING' },
+      { id: PAYMENT, status: 'PENDING' },
+    ],
+  };
+}
+
+function draftExchange(): ExchangeView {
+  return {
+    id: DRAFT,
+    version: 1,
+    state: 'DRAFT',
+    you: 'A',
+    counterparty: 'UNCLAIMED',
+    currency: 'USD',
+    timezone: 'America/Chicago',
+    display_code: 'DRFT-0001',
+    contributions: [],
+    draft: {
+      format: 1,
+      base: null,
+      partyA: 'Ana Ruiz',
+      partyB: 'Ben Ortiz',
+      terms: '',
+      note: '',
+      contributions: [
+        {
+          id: REPAIR,
+          from: 'A',
+          type: 'SERVICE',
+          description: 'Repair the back fence',
+          quantity: '',
+          unit: '',
+          due: { kind: 'DATE', date: '2026-10-30' },
+          criteria: '',
+          required: true,
+          amount: '',
+        },
+      ],
+    } as never,
+  };
+}
+
+export interface Sent {
+  method: string;
+  path: string;
+  authorization: string | null;
+  idempotencyKey: string | null;
+  body: unknown;
+}
+
+export interface FakeService {
+  sent: Sent[];
+  /** The account behind the session token, once there is one. */
+  account: Account | null;
+  exchange: ExchangeView;
+  /** Makes the next command fail as if the other party had acted first. */
+  conflictNext: boolean;
+  fetch: typeof fetch;
+}
+
+export function fakeService(): FakeService {
+  const service: FakeService = {
+    sent: [],
+    account: null,
+    exchange: activeExchange(),
+    conflictNext: false,
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const text = await request.text();
+      const body = text ? JSON.parse(text) : null;
+      const path = new URL(request.url).pathname;
+      const authorization = request.headers.get('Authorization');
+      service.sent.push({
+        method: request.method,
+        path,
+        authorization,
+        idempotencyKey: request.headers.get('Idempotency-Key'),
+        body,
+      });
+      const [status, answer] = respond(service, request.method, path, authorization, body);
+      return new Response(answer === null ? null : JSON.stringify(answer), {
+        status,
+        headers: answer === null ? {} : { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch,
+  };
+  return service;
+}
+
+function respond(
+  service: FakeService,
+  method: string,
+  path: string,
+  authorization: string | null,
+  body: unknown,
+): [number, unknown] {
+  const call = `${method} ${path}`;
+  if (call === 'POST /v1/auth/codes') return [204, null];
+  if (call === 'POST /v1/auth/sessions') {
+    service.account = { ...ana, display_name: '', adult_confirmed: false };
+    return [200, { account: service.account, token: TOKEN }];
+  }
+  if (call === 'POST /v1/invitations/preview') {
+    return [
+      200,
+      {
+        bound: false,
+        display_code: service.exchange.display_code,
+        expires_at: revision.expires_at,
+        revision: { ...revision, accepted_by: ['A'] },
+      },
+    ];
+  }
+
+  // Everything else needs the session.
+  if (authorization !== `Bearer ${TOKEN}` || !service.account) {
+    return [401, { code: 'UNAUTHENTICATED' }];
+  }
+  if (call === 'GET /v1/me') return [200, service.account];
+  if (call === 'PATCH /v1/me') {
+    const update = body as { display_name?: string; adult_confirmed?: boolean; language?: string };
+    service.account = {
+      ...service.account,
+      display_name: update.display_name ?? service.account.display_name,
+      adult_confirmed: update.adult_confirmed ?? service.account.adult_confirmed,
+      language: update.language ?? service.account.language,
+    };
+    return [200, service.account];
+  }
+  if (call === 'DELETE /v1/auth/session') return [204, null];
+  if (call === 'GET /v1/exchanges') {
+    return [
+      200,
+      [
+        {
+          id: service.exchange.id,
+          display_code: service.exchange.display_code,
+          other_party_name: 'Ben Ortiz',
+          state: service.exchange.state,
+          updated_at: '2026-10-02T06:30:00Z',
+          you: 'A',
+        },
+      ],
+    ];
+  }
+  if (call === `GET /v1/exchanges/${EXCHANGE}`) return [200, service.exchange];
+  if (call === `GET /v1/exchanges/${DRAFT}`) return [200, draftExchange()];
+  if (call === `PUT /v1/exchanges/${DRAFT}/draft`) return [204, null];
+  if (call === `POST /v1/exchanges/${EXCHANGE}/commands`) {
+    const { expected_version, command } = body as {
+      expected_version: number;
+      command: { type: string; contribution?: string; action?: string };
+    };
+    if (service.conflictNext || expected_version !== service.exchange.version) {
+      // The other party got there first.
+      service.conflictNext = false;
+      service.exchange = {
+        ...service.exchange,
+        version: service.exchange.version + 1,
+        end_proposed_by: 'B',
+      };
+      return [409, { code: 'VERSION_CONFLICT' }];
+    }
+    if (command.type === 'CONTRIBUTION' && command.action === 'CLAIM') {
+      service.exchange = {
+        ...service.exchange,
+        version: service.exchange.version + 1,
+        contributions: service.exchange.contributions.map((item) =>
+          item.id === command.contribution ? { ...item, status: 'CLAIMED' } : item,
+        ),
+      };
+      return [200, service.exchange];
+    }
+    return [409, { code: 'ACTION_NOT_ALLOWED' }];
+  }
+  return [404, { code: 'NOT_FOUND' }];
+}

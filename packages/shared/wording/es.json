@@ -356,6 +356,22 @@
     "ownInvitation": "Este es tu propio enlace de invitación. Envíaselo a la otra parte; tú no puedes usarlo.",
     "alreadyResponded": "Si ya respondiste a esta invitación, está entre tus intercambios."
   },
+  "mobile": {
+    "back": "Atrás",
+    "openInvitation": {
+      "title": "Abrir una invitación",
+      "intro": "Si alguien te envió un enlace de invitación y no se abrió aquí por sí solo, pégalo abajo.",
+      "label": "Enlace de invitación",
+      "hint": "El enlace completo, tal como lo recibiste.",
+      "paste": "Pegar",
+      "open": "Abrir la invitación",
+      "invalid": "Eso no es un enlace de invitación. Copia el enlace completo del mensaje en el que llegó y pégalo aquí."
+    },
+    "date": {
+      "choose": "Elegir una fecha",
+      "change": "Vence el {date}. Cambiar la fecha."
+    }
+  },
   "exchange": {
     "title": "Intercambio con {name}",
     "titleNoName": "Intercambio",

@@ -356,6 +356,22 @@
     "ownInvitation": "This is your own invitation link. Send it to the other party; you can’t use it yourself.",
     "alreadyResponded": "If you have already responded to it, it is among your exchanges."
   },
+  "mobile": {
+    "back": "Back",
+    "openInvitation": {
+      "title": "Open an invitation",
+      "intro": "If someone sent you an invitation link and it didn’t open here by itself, paste it below.",
+      "label": "Invitation link",
+      "hint": "The whole link, exactly as you received it.",
+      "paste": "Paste",
+      "open": "Open the invitation",
+      "invalid": "That isn’t an invitation link. Copy the whole link from the message it came in and paste it here."
+    },
+    "date": {
+      "choose": "Choose a date",
+      "change": "Due {date}. Change the date."
+    }
+  },
   "exchange": {
     "title": "Exchange with {name}",
     "titleNoName": "Exchange",

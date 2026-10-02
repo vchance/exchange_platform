@@ -123,6 +123,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: npm run lint -w @exchange/web
 
+      - name: Lint the mobile app
+        if: ${{ !cancelled() }}
+        run: npm run lint -w @exchange/mobile -- --max-warnings 0
+
       - name: Test
         if: ${{ !cancelled() }}
         run: npm test

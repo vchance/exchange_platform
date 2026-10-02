@@ -1,0 +1,97 @@
+import { invitationLink } from '@exchange/shared';
+import * as Clipboard from 'expo-clipboard';
+import { useState } from 'react';
+import { Platform, Share, StyleSheet, Text, View } from 'react-native';
+
+import { WEB_URL } from '../lib/config';
+import { useI18n } from '../lib/context';
+import { space, type, useColors } from '../lib/theme';
+import { Actions, Button, ErrorNote, Hint, Label, Notice, P, TextField } from './ui';
+
+/**
+ * Naming who an invitation is for, so that only an account verified with
+ * that email address or phone number can use the link (DESIGN.md §8).
+ */
+export function InvitationFor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange(value: string): void;
+}) {
+  const { wording } = useI18n();
+  return (
+    <TextField
+      label={wording.invitationLink.forLabel}
+      hint={wording.invitationLink.forHint}
+      inputMode="email"
+      autoCapitalize="none"
+      autoCorrect={false}
+      autoComplete="off"
+      value={value}
+      onChangeText={onChange}
+    />
+  );
+}
+
+/**
+ * The invitation link, shown once: only its hash is kept by the service, so
+ * it cannot be shown again. The initiator sends it through a channel of
+ * their own, with the system's share sheet or by copying it; the platform
+ * never sends it (DESIGN.md §8).
+ *
+ * The link is the web address, in the sender's language, so it works for
+ * someone without the app and previews in that language. What is shared
+ * alongside it is fixed wording with no name, term or amount in it.
+ */
+export function InvitationLink({ token }: { token: string }) {
+  const { wording, language } = useI18n();
+  const colors = useColors();
+  const w = wording.invitationLink;
+  const [copied, setCopied] = useState<'yes' | 'failed' | null>(null);
+  const link = invitationLink(WEB_URL, language, token);
+
+  async function copy() {
+    try {
+      setCopied((await Clipboard.setStringAsync(link)) ? 'yes' : 'failed');
+    } catch {
+      setCopied('failed');
+    }
+  }
+
+  function share() {
+    // iOS takes the link as a link; Android's share sheet takes text only.
+    const content =
+      Platform.OS === 'android'
+        ? { title: wording.linkPreview.title, message: `${w.shareText}\n${link}` }
+        : { title: wording.linkPreview.title, message: w.shareText, url: link };
+    // Dismissing the share sheet is not a failure; there is nothing to do about either.
+    Share.share(content).catch(() => {});
+  }
+
+  return (
+    <View style={styles.block}>
+      <P>{w.intro}</P>
+      <Label>{w.linkLabel}</Label>
+      <Text
+        selectable
+        accessibilityLabel={w.linkLabel}
+        // An address reads left to right in every language.
+        style={[type.hint, styles.link, { color: colors.text, borderColor: colors.border }]}>
+        {link}
+      </Text>
+      <Hint>{w.shownOnce}</Hint>
+      <Actions>
+        <Button variant="primary" label={w.share} onPress={share} />
+        <Button label={w.copy} onPress={() => void copy()} />
+      </Actions>
+      {copied === 'yes' && <Notice>{w.copied}</Notice>}
+      {copied === 'failed' && <ErrorNote>{w.copyFailed}</ErrorNote>}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  block: { gap: space.m },
+  link: { borderWidth: 1, borderRadius: 8, padding: space.m, writingDirection: 'ltr' },
+});

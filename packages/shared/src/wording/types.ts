@@ -271,6 +271,28 @@ export interface Wording {
     ownInvitation: string
     alreadyResponded: string
   }
+  /**
+   * What only the mobile app says. Everything else it shows is the wording the
+   * web app uses for the same thing.
+   */
+  mobile: {
+    back: string
+    /** Opening an invitation from a link that was pasted, where the system did not hand it over. */
+    openInvitation: {
+      title: string
+      intro: string
+      label: string
+      hint: string
+      paste: string
+      open: string
+      invalid: string
+    }
+    date: {
+      choose: string
+      /** What a screen reader says the date button does. Uses `{date}`. */
+      change: string
+    }
+  }
   exchange: {
     title: string
     titleNoName: string
