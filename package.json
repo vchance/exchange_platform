@@ -10,6 +10,7 @@
     "dev:mobile": "npm run start -w @exchange/mobile",
     "build:web": "npm run build -w @exchange/web",
     "gen:api": "cargo run --quiet --manifest-path backend/Cargo.toml --bin openapi > packages/api-client/openapi.json && npm run generate -w @exchange/api-client",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
   }
 }
