@@ -44,6 +44,10 @@ What the exchange API needed beyond the first model. Each revision now records b
 
 The first migration allowed only `en` and `es` as an account's language and as a signer's consent language. Which languages exist is decided by the wording files (`DESIGN.md` §4.2), and adding one must not need a migration, so the database now checks only that the value is shaped like a language tag.
 
+## 0005_text_bounds
+
+Upper bounds on free text, as backstops. Agreement history cannot be deleted, so nothing written into it may be unbounded. The service enforces the real, tighter limits (`domain::Limits`), which can change without a migration.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

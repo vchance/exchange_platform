@@ -10,6 +10,129 @@
     "connected": "Connected to the service.",
     "unreachable": "The service can’t be reached right now."
   },
+  "notifications": {
+    "email": {
+      "layout": "{body}\n\nOpen the exchange: {link}\n\nYou’re getting this email because you’re a party to exchange {code} on {productName}. These emails never include the terms; sign in to see them.",
+      "messages": {
+        "INVITATION_CLAIMED": {
+          "subject": "The person you invited has joined ({code})",
+          "body": "The person you invited has opened your invitation and joined the exchange. They can now review the terms you sent."
+        },
+        "INVITATION_CLAIMED_UNCONFIRMED": {
+          "subject": "Confirm who joined your exchange ({code})",
+          "body": "Someone has used your invitation link to join the exchange. Check that it is the person you meant to invite, then confirm them. Nothing can be agreed until you do."
+        },
+        "COUNTERPARTY_CONFIRMED": {
+          "subject": "You’ve been confirmed ({code})",
+          "body": "The other party has confirmed that you are the person they invited. The two of you can now reach an agreement."
+        },
+        "REVISION_SENT": {
+          "subject": "New terms to review ({code})",
+          "body": "The other party has sent new terms. Review them, then accept them, decline them or send your own."
+        },
+        "AMENDMENT_PROPOSED": {
+          "subject": "A change to your agreement is proposed ({code})",
+          "body": "The other party has proposed a change to your agreement. The agreement stays as it is unless you accept the change."
+        },
+        "ACCEPTANCE_WAITING": {
+          "subject": "The terms were accepted and are waiting for you ({code})",
+          "body": "The other party has accepted the terms. Their acceptance takes effect once you confirm that they are the person you meant to invite."
+        },
+        "AGREEMENT_IN_FORCE": {
+          "subject": "Your agreement is in force ({code})",
+          "body": "Both of you have accepted the same terms, so the agreement is now in force. You can track what each of you delivers."
+        },
+        "AMENDMENT_IN_FORCE": {
+          "subject": "The change to your agreement was accepted ({code})",
+          "body": "The other party has accepted the change you proposed. It is now part of the agreement."
+        },
+        "AMENDMENT_DECLINED": {
+          "subject": "The change you proposed was declined ({code})",
+          "body": "The other party has declined the change you proposed. The agreement stays as it was."
+        },
+        "AMENDMENT_WITHDRAWN": {
+          "subject": "A proposed change was withdrawn ({code})",
+          "body": "The other party has withdrawn the change they proposed. The agreement stays as it was."
+        },
+        "AMENDMENT_EXPIRED": {
+          "subject": "A proposed change expired ({code})",
+          "body": "A proposed change to your agreement expired before it was accepted. The agreement stays as it was."
+        },
+        "DELIVERY_CLAIMED": {
+          "subject": "Something was marked as delivered ({code})",
+          "body": "The other party has marked one of their contributions as delivered. Review it, then confirm it or dispute it."
+        },
+        "CLAIM_RETRACTED": {
+          "subject": "A delivery was unmarked ({code})",
+          "body": "The other party has taken back their claim that a contribution was delivered. There is nothing for you to review for now."
+        },
+        "DELIVERY_CONFIRMED": {
+          "subject": "A delivery was confirmed ({code})",
+          "body": "The other party has confirmed that they received one of your contributions."
+        },
+        "DISPUTE_OPENED": {
+          "subject": "A delivery was disputed ({code})",
+          "body": "The other party has disputed a contribution you marked as delivered. Read their reason in the exchange and respond."
+        },
+        "CONTRIBUTION_WAIVED": {
+          "subject": "A contribution was waived ({code})",
+          "body": "The other party has waived one of your contributions. You are no longer expected to deliver it."
+        },
+        "END_PROPOSED": {
+          "subject": "A proposal to end your exchange ({code})",
+          "body": "The other party has proposed ending the exchange by agreement. If you accept, everything still outstanding is released."
+        },
+        "END_PROPOSAL_CANCELLED": {
+          "subject": "The proposal to end your exchange was cancelled ({code})",
+          "body": "The proposal to end the exchange by agreement has been cancelled. The exchange carries on as before."
+        },
+        "CLOSE_REQUESTED": {
+          "subject": "The other party has asked to close your exchange ({code})",
+          "body": "The other party has asked to close the exchange with matters still unresolved. You have a limited time to respond: you can add a statement, resolve what is outstanding or agree to end it. After that, the exchange closes as unresolved."
+        },
+        "CLOSE_REQUEST_RETRACTED": {
+          "subject": "The request to close your exchange was withdrawn ({code})",
+          "body": "The other party has withdrawn their request to close the exchange. It stays open."
+        },
+        "STATEMENT_ADDED": {
+          "subject": "A statement was added to your exchange ({code})",
+          "body": "The other party has added a statement about the request to close the exchange. You can read it in the exchange."
+        },
+        "INACTIVITY_PROMPTED": {
+          "subject": "Is your exchange still under way? ({code})",
+          "body": "Nothing has happened in this exchange for some time. If neither of you does anything in it, it will be closed as unresolved."
+        },
+        "CLOSED_WITHDRAWN": {
+          "subject": "The offer was withdrawn ({code})",
+          "body": "The other party has withdrawn their offer, so the exchange is closed. Nothing was agreed."
+        },
+        "CLOSED_DECLINED": {
+          "subject": "Your offer was declined ({code})",
+          "body": "The other party has declined your offer, so the exchange is closed. Nothing was agreed."
+        },
+        "CLOSED_EXPIRED": {
+          "subject": "The offer expired ({code})",
+          "body": "The offer expired before it was accepted, so the exchange is closed. Nothing was agreed."
+        },
+        "CLOSED_COMPLETED": {
+          "subject": "Your exchange is complete ({code})",
+          "body": "Every required contribution has been accepted or waived. The exchange is complete and closed."
+        },
+        "CLOSED_ENDED_BY_AGREEMENT": {
+          "subject": "Your exchange was ended by agreement ({code})",
+          "body": "The other party has agreed to end the exchange. It is closed, and everything still outstanding has been released."
+        },
+        "CLOSED_UNRESOLVED": {
+          "subject": "Your exchange was closed unresolved ({code})",
+          "body": "The time to respond to the request to close has passed. The exchange is closed as unresolved, and each contribution keeps the status it had."
+        },
+        "CLOSED_INACTIVE": {
+          "subject": "Your exchange was closed for inactivity ({code})",
+          "body": "Nothing happened in this exchange for a long time, so it has been closed as unresolved. Each contribution keeps the status it had."
+        }
+      }
+    }
+  },
   "common": {
     "loading": "Loading…",
     "cancel": "Cancel",
@@ -315,7 +438,7 @@
     "statementRequiredLabel": "Your statement",
     "sendCloseRequest": "Ask to close",
     "closeRequestedByYou": "You asked on {date} to close this exchange. It closes as unresolved when the time to respond runs out, unless you take the request back or the two of you resolve what is outstanding.",
-    "closeRequestedByOther": "{name} asked on {date} to close this exchange. It closes as unresolved when the time to respond runs out. You can add a statement, resolve what is outstanding, or agree to end.",
+    "closeRequestedByOther": "{name} asked on {date} to close this exchange. It closes as unresolved when the time to respond runs out. You can add a statement, resolve what is outstanding, or propose ending by agreement.",
     "retractClose": "Take back the request",
     "addStatement": "Add a statement",
     "sendStatement": "Add to the record",
@@ -332,7 +455,7 @@
     "INVALID_REQUEST": "Something in that request wasn’t right. Check it and try again.",
     "INVALID_IDENTIFIER": "Enter a valid email address, or a phone number with its country code.",
     "INVALID_CODE": "That code didn’t work. Check it, or ask for a new one.",
-    "TOO_MANY_REQUESTS": "Too many codes requested. Wait a while before asking for another.",
+    "TOO_MANY_REQUESTS": "Too many requests in a short time. Wait a little and try again.",
     "UNAUTHENTICATED": "Sign in to continue.",
     "ACCOUNT_SUSPENDED": "This account has been suspended.",
     "IDENTIFIER_IN_USE": "That email address or phone number belongs to another account.",

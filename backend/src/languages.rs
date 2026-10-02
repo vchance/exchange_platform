@@ -38,8 +38,13 @@ pub fn default() -> &'static str {
 /// The supported language for a tag a client sent: the tag itself if it is
 /// supported, otherwise its base language (`es-MX` → `es`).
 pub fn resolve(tag: &str) -> Option<&'static str> {
+    resolve_among(&CODES, tag)
+}
+
+/// [`resolve`] against a given list of languages.
+pub(crate) fn resolve_among<'a>(codes: &'a [String], tag: &str) -> Option<&'a str> {
     let find = |wanted: &str| {
-        CODES
+        codes
             .iter()
             .find(|code| code.eq_ignore_ascii_case(wanted))
             .map(String::as_str)

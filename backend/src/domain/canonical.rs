@@ -19,20 +19,32 @@ const FORMAT_VERSION: u8 = 1;
 
 /// Hashes the agreed terms of a revision.
 ///
-/// Covered: the exchange it belongs to, its currency, both party names, the
+/// Covered: the exchange it belongs to, its currency, the timezone its due
+/// dates are read in, both party names, the
 /// terms text, every contribution in order, and the hashes of attachments.
 /// Not covered: the note and the expiry, which are about the offer, not the
 /// agreement.
-pub fn content_hash(exchange: Uuid, currency: &str, revision: &Revision) -> [u8; 32] {
-    Sha256::digest(canonical_document(exchange, currency, revision).as_bytes()).into()
+pub fn content_hash(
+    exchange: Uuid,
+    currency: &str,
+    timezone: &str,
+    revision: &Revision,
+) -> [u8; 32] {
+    Sha256::digest(canonical_document(exchange, currency, timezone, revision).as_bytes()).into()
 }
 
 /// The exact text that is hashed.
-pub fn canonical_document(exchange: Uuid, currency: &str, revision: &Revision) -> String {
+pub fn canonical_document(
+    exchange: Uuid,
+    currency: &str,
+    timezone: &str,
+    revision: &Revision,
+) -> String {
     let document = json!({
         "v": FORMAT_VERSION,
         "exchange": exchange.to_string(),
         "currency": currency,
+        "timezone": timezone,
         "parties": { "A": revision.party_a, "B": revision.party_b },
         "terms": revision.terms,
         "contributions": revision.contributions.iter().map(contribution).collect::<Vec<_>>(),
@@ -153,6 +165,8 @@ mod tests {
     use crate::domain::revision::Quantity;
     use crate::domain::revision::tests::fence_job;
 
+    const ZONE: &str = "America/Chicago";
+
     fn exchange() -> Uuid {
         Uuid::from_u128(0xE)
     }
@@ -215,7 +229,7 @@ mod tests {
     #[test]
     fn the_hashed_document_is_exactly_this() {
         assert_eq!(
-            canonical_document(exchange(), "USD", &fence_job()),
+            canonical_document(exchange(), "USD", ZONE, &fence_job()),
             concat!(
                 r#"{"attachments":[],"contributions":["#,
                 r#"{"amount_minor":null,"completion_criteria":null,"description":"Contribution 1","#,
@@ -227,7 +241,8 @@ mod tests {
                 r#""from":"B","id":"00000000-0000-0000-0000-000000000002","quantity":null,"#,
                 r#""required":true,"settlement":"OFF_PLATFORM","type":"MONEY"}],"#,
                 r#""currency":"USD","exchange":"00000000-0000-0000-0000-00000000000e","#,
-                r#""parties":{"A":"Ana","B":"Ben"},"terms":"Repair the back fence.","v":1}"#,
+                r#""parties":{"A":"Ana","B":"Ben"},"terms":"Repair the back fence.","#,
+                r#""timezone":"America/Chicago","v":1}"#,
             )
         );
     }
@@ -235,14 +250,14 @@ mod tests {
     #[test]
     fn the_note_is_not_part_of_what_is_signed() {
         let mut revision = fence_job();
-        let before = content_hash(exchange(), "USD", &revision);
+        let before = content_hash(exchange(), "USD", ZONE, &revision);
         revision.note = Some("Does Saturday work?".into());
-        assert_eq!(content_hash(exchange(), "USD", &revision), before);
+        assert_eq!(content_hash(exchange(), "USD", ZONE, &revision), before);
     }
 
     #[test]
     fn every_term_changes_the_hash() {
-        let original = content_hash(exchange(), "USD", &fence_job());
+        let original = content_hash(exchange(), "USD", ZONE, &fence_job());
         let changes: Vec<fn(&mut Revision)> = vec![
             |r| r.party_a.push('!'),
             |r| r.party_b.push('!'),
@@ -279,17 +294,26 @@ mod tests {
             let mut revision = fence_job();
             change(&mut revision);
             assert_ne!(
-                content_hash(exchange(), "USD", &revision),
+                content_hash(exchange(), "USD", ZONE, &revision),
                 original,
                 "change {index} did not affect the hash"
             );
         }
 
         assert_ne!(
-            content_hash(Uuid::from_u128(0xF), "USD", &fence_job()),
+            content_hash(Uuid::from_u128(0xF), "USD", ZONE, &fence_job()),
             original
         );
-        assert_ne!(content_hash(exchange(), "CAD", &fence_job()), original);
+        assert_ne!(
+            content_hash(exchange(), "CAD", ZONE, &fence_job()),
+            original
+        );
+        // Due dates are read in the timezone, so a different one is a
+        // different agreement.
+        assert_ne!(
+            content_hash(exchange(), "USD", "Asia/Tokyo", &fence_job()),
+            original
+        );
     }
 
     #[test]
@@ -297,8 +321,8 @@ mod tests {
         // Pinned so an accidental change to the format fails loudly. Verify
         // independently with: printf '%s' '<document>' | shasum -a 256
         assert_eq!(
-            hex(&content_hash(exchange(), "USD", &fence_job())),
-            "065ca3a1876629ff22ab9cff9fe29928184f834b2797570a16d5112028ae1a14"
+            hex(&content_hash(exchange(), "USD", ZONE, &fence_job())),
+            "2126dd474c35f4c14ad40ad06f737a6d1d3276ce2280b908413ebeaafa3932ab"
         );
     }
 }

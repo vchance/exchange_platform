@@ -28,8 +28,10 @@ export function Ending({ exchange, otherName, actions }: Props) {
   const closeBy = exchange.close_requested_by ?? null
   const [stated, setStated] = useState(false)
 
-  // Agreeing to end answers the other party's proposal or their close request.
-  const invited = (endBy !== null && endBy !== you) || (closeBy !== null && closeBy !== you)
+  // Agreeing to end answers the other party's proposal, and only that. A close
+  // request is not an offer to release everything, so it cannot be "agreed
+  // to": ending by agreement during one still starts with a proposal.
+  const invited = endBy !== null && endBy !== you
   const requestedOn = exchange.close_requested_at ? moment(exchange.close_requested_at) : ''
 
   return (

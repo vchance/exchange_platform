@@ -221,7 +221,12 @@ async fn what_is_stored_reproduces_the_hash_that_was_signed() {
 
     let mut conn = app.owner.acquire().await.unwrap();
     let stored = repo::load_revision(&mut conn, revision).await.unwrap();
-    let recomputed = content_hash(exchange.parse().unwrap(), "USD", &stored.revision);
+    let recomputed = content_hash(
+        exchange.parse().unwrap(),
+        "USD",
+        "America/Chicago",
+        &stored.revision,
+    );
 
     assert_eq!(stored.content_hash, recomputed);
     let hex: String = recomputed
@@ -874,4 +879,337 @@ async fn starting_exchanges_is_limited_per_day_and_needs_a_real_timezone() {
     )
     .await
     .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+}
+
+// ---- Limits, and things a hostile party might try ---------------------------
+
+#[tokio::test]
+async fn a_revision_is_bounded_in_size_and_in_time() {
+    let app = app().await;
+    let ana = app.user("Ana").await;
+    let exchange = app.draft(&ana).await;
+    let refused = |terms: Value| {
+        let (app, ana, exchange) = (&app, &ana, &exchange);
+        async move {
+            app.send(ana, exchange, terms)
+                .await
+                .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REVISION");
+        }
+    };
+
+    // More contributions than a revision may hold, each waiting on the next:
+    // refused at once, without walking the chain.
+    let ids: Vec<Uuid> = (0..2000).map(|_| Uuid::new_v4()).collect();
+    let mut many = fence_job(Uuid::new_v4(), Uuid::new_v4());
+    many["contributions"] = ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| {
+            json!({
+                "id": id, "from": "A", "type": "TASK", "description": "x", "quantity": null,
+                "due": { "kind": "AFTER_CONTRIBUTION", "contribution": ids[(index + 1) % ids.len()] },
+                "completion_criteria": null, "required": true, "amount_minor": null,
+            })
+        })
+        .collect();
+    let started = std::time::Instant::now();
+    refused(many).await;
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+
+    let mut long_terms = fence_job(Uuid::new_v4(), Uuid::new_v4());
+    long_terms["terms"] = json!("x".repeat(20_001));
+    refused(long_terms).await;
+
+    let mut long_name = fence_job(Uuid::new_v4(), Uuid::new_v4());
+    long_name["party_b_name"] = json!("x".repeat(201));
+    refused(long_name).await;
+
+    let mut long_description = fence_job(Uuid::new_v4(), Uuid::new_v4());
+    long_description["contributions"][0]["description"] = json!("x".repeat(2_001));
+    refused(long_description).await;
+
+    // A due date in the year 9999 once took the worker down for good.
+    let mut far = fence_job(Uuid::new_v4(), Uuid::new_v4());
+    far["contributions"][0]["due"] = json!({ "kind": "DATE", "date": "9999-12-20" });
+    refused(far).await;
+
+    assert_eq!(app.view(&ana, &exchange).await["state"], "DRAFT");
+}
+
+#[tokio::test]
+async fn text_the_database_cannot_hold_is_refused_not_crashed_on() {
+    let app = app().await;
+    let deal = app.active().await;
+    let ana = &deal.ana;
+    let invalid = |reply: common::Reply| {
+        reply.refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
+    };
+
+    let exchange = app.draft(ana).await;
+    let mut terms = fence_job(Uuid::new_v4(), Uuid::new_v4());
+    terms["terms"] = json!("before\u{0}after");
+    invalid(app.send(ana, &exchange, terms).await);
+
+    invalid(
+        app.post(ana, "/v1/exchanges", json!({ "timezone": "UTC\u{0}" }))
+            .await,
+    );
+    invalid(
+        app.call(
+            Some(ana),
+            Method::PUT,
+            &format!("/v1/exchanges/{exchange}/draft"),
+            Some(json!({ "body": { "note\u{0}": "x" } })),
+            &[],
+        )
+        .await,
+    );
+    invalid(
+        app.command(
+            ana,
+            &deal.exchange,
+            json!({ "type": "REQUEST_CLOSE", "note": "why\u{0}" }),
+        )
+        .await,
+    );
+
+    // A note longer than the limit, and a working copy too large to keep.
+    invalid(
+        app.command(
+            ana,
+            &deal.exchange,
+            json!({ "type": "REQUEST_CLOSE", "note": "x".repeat(1_001) }),
+        )
+        .await,
+    );
+    invalid(
+        app.call(
+            Some(ana),
+            Method::PUT,
+            &format!("/v1/exchanges/{exchange}/draft"),
+            Some(json!({ "body": { "terms": "x".repeat(200_001) } })),
+            &[],
+        )
+        .await,
+    );
+
+    // A body that is not declared as JSON is not read as JSON.
+    let reply = app
+        .call(
+            Some(ana),
+            Method::POST,
+            "/v1/exchanges",
+            None,
+            &[("content-type", "text/plain")],
+        )
+        .await;
+    invalid(reply);
+}
+
+#[tokio::test]
+async fn an_idempotency_key_belongs_to_one_exchange() {
+    let app = app().await;
+    let first = app.active().await;
+    // The same two people, so the same account could reuse a key.
+    let second = app.draft(&first.ana).await;
+    let sent = app
+        .send(
+            &first.ana,
+            &second,
+            fence_job(Uuid::new_v4(), Uuid::new_v4()),
+        )
+        .await
+        .ok();
+    app.post(
+        &first.ben,
+        "/v1/invitations/claim",
+        json!({ "token": sent["invitation_token"] }),
+    )
+    .await
+    .ok();
+
+    let key = [("idempotency-key", "one-key")];
+    let body = |version: &Value| json!({ "expected_version": version, "command": { "type": "PROPOSE_END" } });
+    let version = app.view(&first.ana, &first.exchange).await["version"].clone();
+    app.call(
+        Some(&first.ana),
+        Method::POST,
+        &format!("/v1/exchanges/{}/commands", first.exchange),
+        Some(body(&version)),
+        &key,
+    )
+    .await
+    .ok();
+
+    // The same key and the same body, aimed at a different exchange: it used
+    // to answer 200 and silently do nothing.
+    app.call(
+        Some(&first.ana),
+        Method::POST,
+        &format!("/v1/exchanges/{second}/commands"),
+        Some(body(&version)),
+        &key,
+    )
+    .await
+    .refused(StatusCode::UNPROCESSABLE_ENTITY, "IDEMPOTENCY_KEY_REUSED");
+}
+
+#[tokio::test]
+async fn one_party_cannot_change_an_exchange_faster_than_the_other_can_follow() {
+    let app = app().await;
+    let deal = app.active().await;
+
+    // Ben proposes and cancels ending, over and over, to keep the version
+    // moving so that nothing Ana does can land.
+    let mut stopped = false;
+    for round in 0..40 {
+        let kind = if round % 2 == 0 {
+            "PROPOSE_END"
+        } else {
+            "CANCEL_END"
+        };
+        let reply = app
+            .command(&deal.ben, &deal.exchange, json!({ "type": kind }))
+            .await;
+        if reply.status == StatusCode::TOO_MANY_REQUESTS {
+            assert_eq!(reply.code(), "TOO_MANY_REQUESTS");
+            stopped = true;
+            break;
+        }
+        reply.ok();
+    }
+    assert!(stopped, "Ben was never slowed down");
+
+    // Ana is not the one being limited, and can still close the exchange.
+    let view = app
+        .command(
+            &deal.ana,
+            &deal.exchange,
+            json!({ "type": "REQUEST_CLOSE" }),
+        )
+        .await
+        .ok();
+    assert_eq!(view["close_requested_by"], "A");
+}
+
+#[tokio::test]
+async fn a_declined_amendment_renames_nobody() {
+    let app = app().await;
+    let deal = app.active().await;
+
+    let mut amended = fence_job(deal.repair, deal.payment);
+    amended["party_a_name"] = json!("Ana the Unreliable");
+    amended["contributions"][1]["amount_minor"] = json!(90_000);
+    let sent = app.send(&deal.ben, &deal.exchange, amended).await.ok();
+    let revision = sent["exchange"]["open_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    app.command(
+        &deal.ana,
+        &deal.exchange,
+        json!({ "type": "DECLINE", "revision": revision }),
+    )
+    .await
+    .ok();
+
+    // Ben's list still shows the name in the agreement that is in force.
+    let list = app.get(&deal.ben, "/v1/exchanges").await.ok();
+    let entry = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == deal.exchange.as_str())
+        .unwrap();
+    assert_eq!(entry["other_party_name"], "Ana Ruiz");
+
+    // And the declined amount did not raise the exchange's risk tier.
+    let tier: i16 = sqlx::query_scalar("SELECT risk_tier FROM exchange WHERE id = $1")
+        .bind(deal.exchange.parse::<Uuid>().unwrap())
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(tier, 0);
+}
+
+#[tokio::test]
+async fn an_agreement_over_the_threshold_raises_the_tier_once_in_force() {
+    let app = app().await;
+    let deal = app.active().await;
+    let mut amended = fence_job(deal.repair, deal.payment);
+    amended["party_b_name"] = json!("Benjamín Ortiz");
+    amended["contributions"][1]["amount_minor"] = json!(90_000);
+    let sent = app.send(&deal.ben, &deal.exchange, amended).await.ok();
+    let revision = sent["exchange"]["open_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    app.command(&deal.ana, &deal.exchange, accept(&revision))
+        .await
+        .ok();
+
+    let (tier, name): (i16, String) = sqlx::query_as(
+        "SELECT e.risk_tier, p.display_name FROM exchange e
+         JOIN participant p ON p.exchange_id = e.id AND p.slot = 'B'
+         WHERE e.id = $1",
+    )
+    .bind(deal.exchange.parse::<Uuid>().unwrap())
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!((tier, name.as_str()), (1, "Benjamín Ortiz"));
+}
+
+#[tokio::test]
+async fn invitation_links_cannot_be_reissued_without_limit() {
+    let app = app().await;
+    let deal = app.negotiating().await;
+    let path = format!("/v1/exchanges/{}/invitation", deal.exchange);
+
+    // The first link was issued with the proposal; four replacements make five.
+    for _ in 0..4 {
+        app.post(&deal.ana, &path, json!({})).await.ok();
+    }
+    app.post(&deal.ana, &path, json!({}))
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+}
+
+#[tokio::test]
+async fn the_claim_is_recorded_with_who_claimed() {
+    let app = app().await;
+    let deal = app.active().await;
+
+    let claimant: Option<String> = sqlx::query_scalar(
+        "SELECT data->>'account' FROM exchange_event
+         WHERE exchange_id = $1 AND type = 'COUNTERPARTY_CLAIMED'",
+    )
+    .bind(deal.exchange.parse::<Uuid>().unwrap())
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(claimant, Some(deal.ben.id.to_string()));
+}
+
+#[tokio::test]
+async fn a_close_request_cannot_be_answered_by_waiving_everything() {
+    let app = app().await;
+    let deal = app.active().await;
+    app.act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
+        .await
+        .ok();
+    app.command(
+        &deal.ana,
+        &deal.exchange,
+        json!({ "type": "REQUEST_CLOSE" }),
+    )
+    .await
+    .ok();
+
+    // Ben owes the payment. "Agreeing to end" here used to release him.
+    app.command(&deal.ben, &deal.exchange, json!({ "type": "ACCEPT_END" }))
+        .await
+        .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+    let view = app.view(&deal.ana, &deal.exchange).await;
+    assert_eq!(statuses(&view), ["CLAIMED", "PENDING"]);
 }

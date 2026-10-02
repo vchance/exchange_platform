@@ -2,7 +2,7 @@
 
 use axum::body::Bytes;
 use axum::extract::{FromRequest, FromRequestParts, Request};
-use axum::http::header::{AUTHORIZATION, COOKIE, ORIGIN};
+use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, Method};
 use serde::de::DeserializeOwned;
@@ -16,23 +16,60 @@ use crate::error::{ApiError, ErrorCode};
 
 pub const SESSION_COOKIE: &str = "exchange_session";
 
-/// A JSON body. Unlike axum's own extractor, a bad body is refused with an
-/// error code the clients understand.
+/// Reads a JSON request body into `T`, refusing what the service cannot
+/// store or should not accept, with an error code the clients understand.
+fn parse<T: DeserializeOwned>(headers: &HeaderMap, bytes: &[u8]) -> Result<T, ApiError> {
+    // A form or plain-text post is something another site can make a browser
+    // send without asking; JSON is not. Requiring the type keeps it that way.
+    let json = headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.trim_start().starts_with("application/json"));
+    if !json {
+        return Err(ErrorCode::InvalidRequest.into());
+    }
+
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| ErrorCode::InvalidRequest)?;
+    if contains_nul(&value) {
+        return Err(ErrorCode::InvalidRequest.into());
+    }
+    serde_json::from_value(value).map_err(|_| ErrorCode::InvalidRequest.into())
+}
+
+/// Whether any text in the value holds a NUL character, which JSON allows and
+/// the database cannot store.
+fn contains_nul(value: &serde_json::Value) -> bool {
+    use serde_json::Value;
+    match value {
+        Value::String(text) => text.contains('\0'),
+        Value::Array(items) => items.iter().any(contains_nul),
+        Value::Object(map) => map
+            .iter()
+            .any(|(key, item)| key.contains('\0') || contains_nul(item)),
+        _ => false,
+    }
+}
+
+/// A JSON body.
 pub struct ApiJson<T>(pub T);
 
 impl<T: DeserializeOwned> FromRequest<AppState> for ApiJson<T> {
     type Rejection = ApiError;
 
     async fn from_request(request: Request, state: &AppState) -> Result<Self, ApiError> {
-        match axum::Json::<T>::from_request(request, state).await {
-            Ok(axum::Json(value)) => Ok(Self(value)),
-            Err(_) => Err(ErrorCode::InvalidRequest.into()),
-        }
+        let headers = request.headers().clone();
+        let bytes = Bytes::from_request(request, state)
+            .await
+            .map_err(|_| ApiError::from(ErrorCode::InvalidRequest))?;
+        parse(&headers, &bytes).map(Self)
     }
 }
 
-/// A JSON body together with the SHA-256 of its bytes, for endpoints that
-/// honor an idempotency key: the same key must come with the same request.
+/// A JSON body together with a digest of the request it came in, for
+/// endpoints that honor an idempotency key: the same key must come with the
+/// same request. The digest covers the method and path as well as the body,
+/// so a key used on one exchange cannot stand in for another.
 pub struct DigestedJson<T> {
     pub body: T,
     pub digest: [u8; 32],
@@ -42,13 +79,20 @@ impl<T: DeserializeOwned> FromRequest<AppState> for DigestedJson<T> {
     type Rejection = ApiError;
 
     async fn from_request(request: Request, state: &AppState) -> Result<Self, ApiError> {
+        let headers = request.headers().clone();
+        let mut digest = Sha256::new();
+        digest.update(request.method().as_str().as_bytes());
+        digest.update(b" ");
+        digest.update(request.uri().path().as_bytes());
+        digest.update(b"\n");
+
         let bytes = Bytes::from_request(request, state)
             .await
             .map_err(|_| ApiError::from(ErrorCode::InvalidRequest))?;
-        let body = serde_json::from_slice(&bytes).map_err(|_| ErrorCode::InvalidRequest)?;
+        digest.update(&bytes);
         Ok(Self {
-            body,
-            digest: Sha256::digest(&bytes).into(),
+            body: parse(&headers, &bytes)?,
+            digest: digest.finalize().into(),
         })
     }
 }

@@ -110,7 +110,14 @@ pub async fn save_draft(
     Path(id): Path<String>,
     ApiJson(body): ApiJson<SaveDraft>,
 ) -> Result<StatusCode, ApiError> {
-    service::save_draft(&state.db, &session, exchange_id(&id)?, body.body).await?;
+    service::save_draft(
+        &state.db,
+        &state.settings.rules,
+        &session,
+        exchange_id(&id)?,
+        body.body,
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

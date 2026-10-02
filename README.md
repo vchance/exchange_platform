@@ -47,7 +47,7 @@ $PG/psql -h 127.0.0.1 -d postgres \
 
 `exchange` owns the schema and runs migrations; it may create databases because the API tests each build a throwaway one. `exchange_app` is what the API and worker connect as; it can add to the agreement history but not change or delete it.
 
-In development, one-time codes are not sent anywhere: with `CODE_DELIVERY=log` the API writes each code to its own log, which is where you read it to sign in.
+In development, one-time codes are not sent anywhere: with `CODE_DELIVERY=log` the API writes each code to its own log, which is where you read it to sign in. Notifications work the same way: with `NOTIFICATION_DELIVERY=log` the worker writes each email to its log instead of sending it.
 
 The API starts without a database: `/healthz` and `/v1/meta` respond, and `/readyz` returns 503 until PostgreSQL is reachable. The web dev server proxies API paths to the service, so the browser talks to one origin.
 
@@ -71,10 +71,19 @@ On a physical device the mobile app cannot reach the development machine as `loc
 | `cargo test` (in `backend/`) | Backend tests: the rules as pure functions, and the database, sign-in and exchange API against a running PostgreSQL. |
 | `cargo run --bin worker` (in `backend/`) | Background worker. |
 
+## CI
+
+GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Two jobs run side by side:
+
+- **Backend and API client**, against a PostgreSQL 17 container with the same two roles as local development: `cargo fmt --check`, `cargo clippy --all-targets` with warnings as errors, `cargo test`, and then `npm run gen:api`, which fails the job if it changes anything under `packages/api-client`. A stale client means the contract has drifted; regenerate it and commit the result.
+- **TypeScript**: `npm ci`, `npm run typecheck` (which includes the wording check), `npm run lint -w @exchange/web` (warnings fail it), `npm test` and `npm run build:web`.
+
+The workflow names the Rust and Node versions it uses; raise them there when the project moves to newer ones.
+
 ## Backend binaries
 
 - `api` — the HTTP service.
-- `worker` — background jobs (outbox, reminders, expiries, closures). Currently an empty loop.
+- `worker` — background jobs: expiries and closures on their timers, and delivering notifications from the outbox. Reminders are still to come.
 - `migrate` — applies migrations as the schema owner. The API and worker never run them.
 - `openapi` — prints the API description that the TypeScript client is generated from.
 
@@ -99,7 +108,7 @@ On a physical device the mobile app cannot reach the development machine as `loc
 The scaffold, the database schema (`backend/migrations/`), the domain rules (`backend/src/domain/`), sign-in (`backend/src/auth.rs`), the exchange API (`backend/src/exchanges/`, `backend/src/http/`) and the web app's screens (`apps/web/src/`) exist: two people can take an exchange from a draft to completion in a browser. Still to build, in rough order:
 
 1. The mobile app's screens. On the web: an exchange's history and the notes written along the way, which the API does not return yet; report and block; export; Wallet buttons.
-2. A real email and SMS provider for one-time codes, and notifications through the outbox.
+2. A real email and SMS provider, for one-time codes and for notifications. Notifications are already queued and delivered (`backend/src/notifications/`), but only to the log.
 3. Universal and app links, push, Wallet passes.
 
 `DESIGN.md` §13.4 lists what the exchange API deliberately leaves out for now.

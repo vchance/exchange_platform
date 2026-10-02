@@ -118,6 +118,13 @@ pub async fn request_code(
 ) -> Result<(), ApiError> {
     let mut tx = db.begin().await?;
 
+    // One request at a time per identifier, so that counting and inserting
+    // cannot be raced past the hourly limit.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(identifier.as_str())
+        .execute(&mut *tx)
+        .await?;
+
     let recent: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM one_time_code
          WHERE identifier = $1 AND created_at > now() - interval '1 hour'",

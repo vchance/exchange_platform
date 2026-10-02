@@ -14,9 +14,11 @@ use crate::domain::exchange::{
     Actor, CloseRequest, Counterparty, Decision, Event, Exchange, InForce, NotAgreed, Open,
     Outcome, State, Unresolved,
 };
+use crate::domain::notification::notification;
 use crate::domain::revision::{
     Contribution, ContributionId, Due, Kind, Quantity, Revision, RevisionId, Settlement, Slot,
 };
+use crate::notifications::outbox;
 
 /// A stored revision: what it says, plus what the database knows about it.
 #[derive(Clone, Debug)]
@@ -52,6 +54,14 @@ impl Aggregate {
             [Some(a), _] if a == account => Some(Slot::A),
             [_, Some(b)] if b == account => Some(Slot::B),
             _ => None,
+        }
+    }
+
+    /// The account holding a slot, if anyone does yet.
+    pub fn account_of(&self, slot: Slot) -> Option<Uuid> {
+        match slot {
+            Slot::A => self.accounts[0],
+            Slot::B => self.accounts[1],
         }
     }
 }
@@ -472,14 +482,19 @@ pub async fn insert_revision(
     Ok(())
 }
 
-fn event_row(event: &Event) -> (&'static str, Option<Uuid>, Option<Uuid>, Value) {
+/// The stored form of an event. `claimant` is the account holding the
+/// invited party's slot, recorded on the event that put them there.
+fn event_row(
+    event: &Event,
+    claimant: Option<Uuid>,
+) -> (&'static str, Option<Uuid>, Option<Uuid>, Value) {
     let none = json!({});
     match event {
         Event::CounterpartyClaimed { confirmed } => (
             "COUNTERPARTY_CLAIMED",
             None,
             None,
-            json!({ "confirmed": confirmed }),
+            json!({ "confirmed": confirmed, "account": claimant }),
         ),
         Event::CounterpartyConfirmed => ("COUNTERPARTY_CONFIRMED", None, None, none),
         Event::RevisionSent { revision, .. } => ("REVISION_SENT", Some(revision.0), None, none),
@@ -547,9 +562,10 @@ fn event_row(event: &Event) -> (&'static str, Option<Uuid>, Option<Uuid>, Value)
     }
 }
 
-/// Stores a decision: appends its events, and brings the exchange row, the
-/// contribution statuses and the counterparty confirmation up to date. The
-/// caller holds the lock on the exchange row.
+/// Stores a decision: appends its events, queues the message telling the
+/// other party, and brings the exchange row, the contribution statuses and
+/// the counterparty confirmation up to date. The caller holds the lock on the
+/// exchange row.
 ///
 /// `note` is what the actor wrote with the command (a dispute reason, a
 /// statement) and is kept on the first event.
@@ -574,7 +590,7 @@ pub async fn persist(
 
     for (index, event) in decision.events.iter().enumerate() {
         sequence += 1;
-        let (kind, revision, contribution, data) = event_row(event);
+        let (kind, revision, contribution, data) = event_row(event, before.accounts[1]);
         sqlx::query(
             "INSERT INTO exchange_event
                 (exchange_id, sequence, type, actor_kind, actor_slot, contribution_id, revision_id,
@@ -605,6 +621,26 @@ pub async fn persist(
                 caused_by.extend(waived.iter().map(|id| (*id, sequence)));
             }
             _ => {}
+        }
+    }
+
+    // Who is told (DESIGN.md §12). Queued here, with the events, so that a
+    // message exists exactly when the event it is about does.
+    if let Some(notification) = notification(&before.exchange, actor, &decision.events) {
+        let event_sequence = before.last_event_seq + 1 + notification.event as i64;
+        for slot in notification.to {
+            // An unclaimed slot is nobody yet: there is no one the platform
+            // may message (invariant 7).
+            if let Some(account) = before.account_of(slot) {
+                outbox::enqueue(
+                    conn,
+                    before.id,
+                    event_sequence,
+                    account,
+                    notification.notice,
+                )
+                .await?;
+            }
         }
     }
 
