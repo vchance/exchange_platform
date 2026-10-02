@@ -59,6 +59,8 @@ API_PROXY_TARGET=http://127.0.0.1:8084 npm run dev -w @exchange/web -- --port 51
 
 On a physical device the mobile app cannot reach the development machine as `localhost`; set `EXPO_PUBLIC_API_URL` to the machine's LAN address.
 
+The whole stack can also run in containers, built from the repository: `docker compose --profile full up --build` starts the database, applies the migrations, and runs the API serving the web app at `http://localhost:8080` and the worker, with codes and notifications in `docker compose logs api` and `docker compose logs worker`. See "Deploying" for what the image is.
+
 ## Mobile app
 
 The app in `apps/mobile` takes an exchange from a draft to completion the way the web app does: sign in, profile, exchanges, composing and signing, invitations, and the exchange view, with an exchange's history and record, and report and block. Its screens are React Native components under `apps/mobile/src`; the routes are the files in `src/app`. What it knows about the API, the wording and the rules for a working copy comes from `packages/shared`, the same code the web app runs.
@@ -104,19 +106,43 @@ EXPO_PUBLIC_API_URL=http://localhost:5185 EXPO_PUBLIC_WEB_URL=http://localhost:8
 
 ## CI
 
-GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Two jobs run side by side:
+GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Three jobs run side by side:
 
 - **Backend and API client**, against a PostgreSQL 17 container with the same two roles as local development: `cargo fmt --check`, `cargo clippy --all-targets` with warnings as errors, `cargo test`, and then `npm run gen:api`, which fails the job if it changes anything under `packages/api-client`. A stale client means the contract has drifted; regenerate it and commit the result.
 - **TypeScript**: `npm ci`, `npm run typecheck` (which includes the wording check), `npm run lint -w @exchange/web` (warnings fail it), `npm run lint -w @exchange/mobile`, `npm test` and `npm run build:web`.
+- **Container image**: builds the `Dockerfile`, starts the whole stack from `docker-compose.yml` and checks it from outside: `/healthz` and `/readyz` answer, the web app's entry pages are served in each language with the right cache and security headers, API paths keep precedence, and the worker starts and exits cleanly when stopped. Docker is not needed on a development machine for anything else, so this job is where the image is verified.
 
 The workflow names the Rust and Node versions it uses; raise them there when the project moves to newer ones.
 
 ## Backend binaries
 
-- `api` — the HTTP service.
+- `api` — the HTTP service. With `WEB_DIR` set, it also serves the built web app from the same origin: each language's entry page at `/{language}/i`, the app's own page for any other path the API does not route, and hashed assets cached for a year (`backend/src/http/web.rs`).
 - `worker` — background jobs: expiries and closures on their timers, and reminders that something is due soon or overdue, and delivering notifications from the outbox.
 - `migrate` — applies migrations as the schema owner. The API and worker never run them.
 - `openapi` — prints the API description that the TypeScript client is generated from.
+
+Both long-running binaries stop cleanly on `Ctrl-C` and on `SIGTERM`, which is what a container runtime or service manager sends.
+
+## Deploying
+
+Nothing in the service assumes a particular host. A deployment is a PostgreSQL database, one container image (or the three binaries) and a handful of settings; `.env.example` documents every setting with its default, and the processes refuse to start without the required ones.
+
+**The image.** The `Dockerfile` builds the web app and the backend and produces one image on a distroless base (a libc and CA certificates, no shell) holding `api`, `worker` and `migrate` and the built web app under `/srv/web`. The default command is the API, listening on `0.0.0.0:8080` and serving the web app; the other two run by naming them (`docker run <image> /usr/local/bin/worker`, `/usr/local/bin/migrate`). The image contains no secrets and no configuration beyond those two defaults; everything else comes from the environment at run time. `docker-compose.yml` shows the three processes wired together with the database, and the container job in CI builds and smoke-tests the image on every change.
+
+**What a deployment provides.**
+
+| Setting | What it is |
+|---|---|
+| `DATABASE_URL` | The application role's connection string: a role that can add to the agreement history but not change or delete it (`DESIGN.md` §13.2). `docker/postgres-init.sql` creates it for a fresh database. |
+| `MIGRATION_DATABASE_URL` | The schema owner's connection string, for `migrate` only. Run it once per release, before the new API and worker start; it is safe to run again. |
+| `APP_SECRET` | At least 32 random bytes (`openssl rand -hex 32`), kept as a secret. Changing it invalidates one-time codes that are in flight, nothing else. |
+| `WEB_ORIGIN` | The public origin the web app is served from, which with `WEB_DIR` is the API's own, such as `https://app.example.com`. Cookie sessions are honored only for requests from it, notification emails link into it, and when it is HTTPS every response carries HSTS. |
+| `CODE_DELIVERY`, `NOTIFICATION_DELIVERY` | How one-time codes and notification emails reach people. Both are required and have no default, so a deployment that forgot to choose cannot start with the development delivery (`log`) by accident. `smtp` sends through the server below. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | The SMTP server, when either delivery is `smtp`. Nearly every email provider offers one; the values are what it gives you. `SMTP_TLS` is `tls` (from the first byte, port 465, the default), `starttls` (port 587; a server that cannot upgrade is refused) or `none` (a relay on the same host only). The password never appears in a log or an error. Codes go by email only; SMS delivery is not built. |
+| `TRUSTED_PROXY_HEADER`, `TRUSTED_PROXIES` | Behind a reverse proxy or CDN, the header that carries the requester's address and how many proxies in a row add to it. By default no header is trusted and the connection's peer is taken, so a header a client sends itself is ignored. The address is recorded with each signature (`DESIGN.md` §8). |
+| `WEB_DIR`, `BIND_ADDR`, `RUST_LOG` | Set by the image; override only if the layout differs. |
+
+TLS termination is the proxy's or the platform's: the service speaks plain HTTP behind it, and `WEB_ORIGIN` tells it what the outside sees. Secrets belong in the platform's secret store, never in the image or the repository.
 
 ## Conventions
 
@@ -170,7 +196,7 @@ A person can delete their account from the account screen of the web app and of 
 The scaffold, the database schema (`backend/migrations/`), the domain rules (`backend/src/domain/`), sign-in (`backend/src/auth.rs`), the exchange API (`backend/src/exchanges/`, `backend/src/http/`), the web app's screens (`apps/web/src/`) and the mobile app's (`apps/mobile/src/`) exist: two people can take an exchange from a draft to completion in a browser or in the app. The mobile app has not yet been run on a device or a simulator. Still to build, in rough order:
 
 1. On the web: Wallet buttons.
-2. A real email and SMS provider, for one-time codes and for notifications. Notifications are already queued and delivered (`backend/src/notifications/`), but only to the log.
+2. An SMS provider for one-time codes sent to phone numbers. Email is done: codes and notifications go out over SMTP (`backend/src/notifications/smtp.rs`) once a deployment supplies a server; a code requested for a phone number is refused by the SMTP sender.
 3. Universal and app links, push, Wallet passes.
 4. Somewhere for staff to read reports and act on them. Report and block exist in the API, on the web and in the mobile app (`backend/src/safety.rs`, `DESIGN.md` §9), and a report is stored with who made it, about which exchange and which party, and why; but there is no staff sign-in yet, so nothing reads them.
 

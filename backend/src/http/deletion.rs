@@ -64,6 +64,8 @@ pub async fn request_deletion_code(
 ) -> Result<StatusCode, ApiError> {
     let identifier = deletion::identifier(&state.db, session.account_id, body.channel).await?;
     let settings = &state.settings;
+    // The identifier is the account's own, so this finds its language.
+    let language = auth::language_for(&state.db, &identifier, None).await;
     auth::request_code(
         &state.db,
         &settings.app_secret,
@@ -71,6 +73,7 @@ pub async fn request_deletion_code(
         state.code_sender.as_ref(),
         &identifier,
         Purpose::DeleteAccount,
+        &language,
     )
     .await?;
     Ok(StatusCode::NO_CONTENT)

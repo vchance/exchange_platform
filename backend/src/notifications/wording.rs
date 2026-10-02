@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
+use crate::auth::Purpose;
 use crate::domain::notification::Notice;
 use crate::languages;
 
@@ -27,6 +28,27 @@ struct File {
 #[derive(Deserialize)]
 struct Notifications {
     email: EmailWording,
+    /// The email that carries a one-time code, one message per purpose, so
+    /// the message says what the code does.
+    #[serde(rename = "oneTimeCode")]
+    one_time_code: CodeWording,
+}
+
+#[derive(Deserialize)]
+struct CodeWording {
+    #[serde(rename = "signIn")]
+    sign_in: Message,
+    #[serde(rename = "deleteAccount")]
+    delete_account: Message,
+}
+
+impl CodeWording {
+    fn for_purpose(&self, purpose: Purpose) -> &Message {
+        match purpose {
+            Purpose::SignIn => &self.sign_in,
+            Purpose::DeleteAccount => &self.delete_account,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -166,6 +188,23 @@ impl Wording {
             body: fill(&file.notifications.email.layout, &with_text),
         }
     }
+
+    /// The email that carries a one-time code, in `language` where that
+    /// language has wording and in the default language otherwise. The
+    /// message says what the code is for (`crate::auth::Purpose`). It is not
+    /// wrapped in the notification layout: there is no exchange to link to.
+    pub fn code_email(&self, language: &str, purpose: Purpose, code: &str) -> Rendered {
+        let file = languages::resolve_among(self.supported, language)
+            .and_then(|language| self.languages.get(language))
+            .or_else(|| self.languages.get(self.default))
+            .expect("the default language has wording; checked when loading");
+        let message = file.notifications.one_time_code.for_purpose(purpose);
+        let values = [("productName", file.product_name.as_str()), ("code", code)];
+        Rendered {
+            subject: fill(&message.subject, &values),
+            body: fill(&message.body, &values),
+        }
+    }
 }
 
 /// Replaces each `{name}` that has a value. What is put in is not read again,
@@ -282,6 +321,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_code_email_names_the_code_and_what_it_is_for_in_the_language_asked_for() {
+        let wording = Wording::embedded().unwrap();
+        for language in languages::supported() {
+            let sign_in = wording.code_email(language, Purpose::SignIn, "123456");
+            let delete = wording.code_email(language, Purpose::DeleteAccount, "123456");
+            assert_ne!(
+                sign_in, delete,
+                "{language}: the two purposes read differently"
+            );
+            for email in [&sign_in, &delete] {
+                assert!(email.subject.contains("123456"), "{language}: {email:?}");
+                assert!(email.body.contains("123456"), "{language}: {email:?}");
+                for text in [&email.subject, &email.body] {
+                    assert!(
+                        !text.contains('{') && !text.contains('}'),
+                        "{language}: {text:?}"
+                    );
+                }
+            }
+        }
+        assert_ne!(
+            wording.code_email("en", Purpose::SignIn, "123456"),
+            wording.code_email("es", Purpose::SignIn, "123456")
+        );
+        assert_eq!(
+            wording.code_email("tlh", Purpose::SignIn, "123456"),
+            wording.code_email(languages::default(), Purpose::SignIn, "123456")
+        );
+    }
+
     fn file(product: &str, messages: &[Notice]) -> String {
         let messages: serde_json::Map<String, serde_json::Value> = messages
             .iter()
@@ -293,9 +363,13 @@ mod tests {
                 (notice.as_str().to_owned(), message)
             })
             .collect();
+        let code = |what: &str| serde_json::json!({ "subject": format!("{product} {what} {{code}}"), "body": "{code}" });
         serde_json::json!({
             "productName": product,
-            "notifications": { "email": { "layout": "{body} {link}", "messages": messages } },
+            "notifications": {
+                "email": { "layout": "{body} {link}", "messages": messages },
+                "oneTimeCode": { "signIn": code("sign-in"), "deleteAccount": code("delete") },
+            },
         })
         .to_string()
     }

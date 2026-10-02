@@ -134,3 +134,76 @@ jobs:
       - name: Build the web app
         if: ${{ !cancelled() }}
         run: npm run build:web
+
+  # Builds the image the Dockerfile describes and runs the whole stack from
+  # docker-compose.yml, as a deployment would: the database, the migrations,
+  # the API serving the web app, and the worker. Its own job, beside the two
+  # above, so a slow image build never holds up their results.
+  container:
+    name: Container image
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          # The name docker-compose.yml uses, so it runs this build.
+          tags: exchange-platform:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image size
+        run: docker image inspect exchange-platform:local --format 'exchange-platform:local is {{.Size}} bytes'
+
+      - name: Start the stack
+        run: docker compose --profile full up --no-build --detach
+
+      # The API answers once the migrations have run and it has started; the
+      # web app's entry page comes from the build inside the image.
+      - name: Smoke check
+        run: |
+          for _ in $(seq 1 60); do
+            if curl --silent --fail --output /dev/null http://127.0.0.1:8080/healthz; then break; fi
+            sleep 2
+          done
+          check() {
+            local expected="$1"; shift
+            local actual
+            actual="$(curl --silent --output /dev/null --write-out "$@")"
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::expected $expected, got $actual for: $*"
+              exit 1
+            fi
+          }
+          check '204' '%{http_code}' http://127.0.0.1:8080/healthz
+          check '204' '%{http_code}' http://127.0.0.1:8080/readyz
+          check '200 text/html' '%{http_code} %{content_type}' http://127.0.0.1:8080/
+          check '200 application/json' '%{http_code} %{content_type}' http://127.0.0.1:8080/v1/meta
+          check '200 text/html' '%{http_code} %{content_type}' http://127.0.0.1:8080/exchanges/some-id
+          check '404' '%{http_code}' http://127.0.0.1:8080/v1/nothing
+          curl --silent --fail http://127.0.0.1:8080/es/i | grep --quiet 'lang="es"'
+          curl --silent --fail http://127.0.0.1:8080/en/i | grep --quiet 'lang="en"'
+          curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^x-frame-options: DENY'
+          curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^cache-control: no-cache'
+          asset="$(curl --silent --fail http://127.0.0.1:8080/ | grep --only-matching '/assets/[^"]*\.js' | head -1)"
+          test -n "$asset"
+          curl --silent --fail --head "http://127.0.0.1:8080$asset" | grep --ignore-case --quiet '^cache-control: public, max-age=31536000, immutable'
+
+      - name: Worker runs and stops cleanly on a signal
+        run: |
+          sleep 5
+          docker compose --profile full logs worker | grep --quiet 'worker started'
+          docker compose --profile full stop --timeout 20 worker
+          docker compose --profile full logs worker | grep --quiet 'worker shutting down'
+          code="$(docker inspect --format '{{.State.ExitCode}}' "$(docker compose --profile full ps --all --quiet worker)")"
+          test "$code" = "0" || { echo "::error::the worker exited with $code"; exit 1; }
+
+      - name: Logs
+        if: ${{ failure() }}
+        run: docker compose --profile full logs

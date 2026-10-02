@@ -147,6 +147,16 @@
           "body": "No pasó nada en este intercambio durante mucho tiempo, así que se cerró como no resuelto. Cada contribución conserva el estado que tenía."
         }
       }
+    },
+    "oneTimeCode": {
+      "signIn": {
+        "subject": "{code} es tu código para iniciar sesión en {productName}",
+        "body": "Escribe {code} para iniciar sesión en {productName}. El código sirve una sola vez y caduca en unos minutos.\n\nSi no pediste iniciar sesión, ignora este correo: sin el código no pasa nada, y nadie de {productName} te lo pedirá nunca."
+      },
+      "deleteAccount": {
+        "subject": "{code} es tu código para eliminar tu cuenta de {productName}",
+        "body": "Escribe {code} para confirmar que quieres eliminar tu cuenta de {productName}. El código sirve una sola vez y caduca en unos minutos. No sirve para iniciar sesión.\n\nSi no pediste eliminar tu cuenta, ignora este correo y nada cambiará. Nadie de {productName} te pedirá nunca este código."
+      }
     }
   },
   "common": {

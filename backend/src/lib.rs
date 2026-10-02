@@ -12,4 +12,5 @@ pub mod http;
 pub mod languages;
 pub mod notifications;
 pub mod safety;
+pub mod shutdown;
 pub mod telemetry;

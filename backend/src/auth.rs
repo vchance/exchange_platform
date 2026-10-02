@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorCode};
+use crate::languages;
 
 /// The numbers behind code and session handling. Placeholders: none of these
 /// is a recorded design decision yet.
@@ -65,10 +66,21 @@ impl Purpose {
 
 pub type SendFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>>;
 
-/// Delivers a one-time code by email or SMS. The message must say what the
-/// code is for.
+/// A one-time code on its way to someone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CodeMessage<'a> {
+    pub to: &'a Identifier,
+    pub code: &'a str,
+    /// What the code is for. The message must say so.
+    pub purpose: Purpose,
+    /// The language to write the message in: a supported language tag, or
+    /// whatever the client asked for, to be resolved by the wording.
+    pub language: &'a str,
+}
+
+/// Delivers a one-time code by email or SMS.
 pub trait CodeSender: Send + Sync {
-    fn send<'a>(&'a self, to: &'a Identifier, code: &'a str, purpose: Purpose) -> SendFuture<'a>;
+    fn send<'a>(&'a self, message: CodeMessage<'a>) -> SendFuture<'a>;
 }
 
 /// Development delivery: writes the code to the service log. Never configured
@@ -76,17 +88,49 @@ pub trait CodeSender: Send + Sync {
 pub struct LogSender;
 
 impl CodeSender for LogSender {
-    fn send<'a>(&'a self, to: &'a Identifier, code: &'a str, purpose: Purpose) -> SendFuture<'a> {
+    fn send<'a>(&'a self, message: CodeMessage<'a>) -> SendFuture<'a> {
         Box::pin(async move {
             tracing::info!(
-                to = to.as_str(),
-                code,
-                purpose = purpose.as_str(),
+                to = message.to.as_str(),
+                code = message.code,
+                purpose = message.purpose.as_str(),
+                language = message.language,
                 "one-time code (development delivery)"
             );
             Ok(())
         })
     }
+}
+
+/// The language to write to someone in: their account's preference if an
+/// account has this identifier, otherwise the first supported language among
+/// those the client asked for in `Accept-Language`, otherwise the default.
+/// Looked up as a side query, so a failure here costs the language, not the
+/// code.
+pub async fn language_for(
+    db: &PgPool,
+    identifier: &Identifier,
+    accept_language: Option<&str>,
+) -> String {
+    let column = match identifier {
+        Identifier::Email(_) => "email",
+        Identifier::Phone(_) => "phone",
+    };
+    let preference: Option<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT language FROM account WHERE {column} = $1 AND status = 'ACTIVE'"
+    )))
+    .bind(identifier.as_str())
+    .fetch_optional(db)
+    .await
+    .unwrap_or_default();
+    preference
+        .or_else(|| {
+            accept_language?
+                .split(',')
+                .map(|entry| entry.split(';').next().unwrap_or("").trim())
+                .find_map(|tag| languages::resolve(tag).map(str::to_owned))
+        })
+        .unwrap_or_else(|| languages::default().to_owned())
 }
 
 // ---- Codes and tokens -------------------------------------------------------
@@ -138,8 +182,9 @@ pub fn token_hash(token: &str) -> [u8; 32] {
 
 // ---- Requesting and verifying a code ----------------------------------------
 
-/// Issues a new code for an identifier and sends it. Any earlier code for the
-/// same identifier stops working, whatever it was for.
+/// Issues a new code for an identifier and sends it, in `language` (see
+/// [`language_for`]). Any earlier code for the same identifier stops working,
+/// whatever it was for.
 pub async fn request_code(
     db: &PgPool,
     secret: &[u8],
@@ -147,6 +192,7 @@ pub async fn request_code(
     sender: &dyn CodeSender,
     identifier: &Identifier,
     purpose: Purpose,
+    language: &str,
 ) -> Result<(), ApiError> {
     let mut tx = db.begin().await?;
 
@@ -189,7 +235,12 @@ pub async fn request_code(
     tx.commit().await?;
 
     sender
-        .send(identifier, &code, purpose)
+        .send(CodeMessage {
+            to: identifier,
+            code: &code,
+            purpose,
+            language,
+        })
         .await
         .map_err(|error| {
             tracing::error!(%error, "one-time code could not be delivered");

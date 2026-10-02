@@ -9,6 +9,10 @@ axum = "0.8.9"
 dotenvy = "0.15.7"
 getrandom = "0.4.3"
 hmac = "0.13.0"
+# SMTP over the tokio runtime with rustls, so the image needs no OpenSSL. No
+# connection pool: a notification is rare, and a fresh connection per send is
+# one less thing to keep healthy.
+lettre = { version = "0.11.23", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls-tls", "builder", "hostname"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
@@ -16,7 +20,7 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 thiserror = "2.0.21"
 time = { version = "0.3.55", features = ["formatting", "macros"] }
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "signal", "time", "net"] }
-tower-http = { version = "0.7.1", features = ["trace"] }
+tower-http = { version = "0.7.1", features = ["fs", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 utoipa = { version = "6.0.0", features = ["axum_extras", "uuid"] }
@@ -33,4 +37,6 @@ strip = "none"
 
 [dev-dependencies]
 http-body-util = "0.1.5"
+# Reads back what the test SMTP server received.
+mail-parser = "0.11.9"
 tower = { version = "0.5.3", features = ["util"] }

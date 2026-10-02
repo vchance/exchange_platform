@@ -9,7 +9,7 @@ use exchange_backend::exchanges::reminders::run_reminders;
 use exchange_backend::exchanges::service::run_timers;
 use exchange_backend::notifications::outbox::{self, Delivery, DeliveryRules};
 use exchange_backend::notifications::wording::Wording;
-use exchange_backend::{db, telemetry};
+use exchange_backend::{db, shutdown, telemetry};
 use time::OffsetDateTime;
 
 const TICK: Duration = Duration::from_secs(5);
@@ -30,6 +30,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let mut ticker = tokio::time::interval(TICK);
+    let mut stop = std::pin::pin!(shutdown::signal());
     tracing::info!("worker started");
 
     loop {
@@ -61,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(error) => tracing::error!(%error, "notification delivery failed"),
                 }
             }
-            _ = tokio::signal::ctrl_c() => {
+            _ = &mut stop => {
                 tracing::info!("worker shutting down");
                 return Ok(());
             }

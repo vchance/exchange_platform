@@ -8,6 +8,7 @@
 use crate::auth::SendFuture;
 
 pub mod outbox;
+pub mod smtp;
 pub mod wording;
 
 /// One email, ready to send.

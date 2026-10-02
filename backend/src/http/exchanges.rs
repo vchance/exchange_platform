@@ -7,14 +7,14 @@ use axum::http::header::USER_AGENT;
 use axum::http::{HeaderMap, StatusCode};
 use uuid::Uuid;
 
-use super::AppState;
 use super::extract::{ApiJson, DigestedJson, Session};
+use super::{AppState, ClientAddress};
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::exchanges::dto::{
     CreateExchange, ExchangeSummary, ExchangeView, InvitationIssued, InvitationOptions,
     InvitationPreview, InvitationToken, RevisionSent, RunCommand, SaveDraft, SendRevision,
 };
-use crate::exchanges::service::{self, Idempotency};
+use crate::exchanges::service::{self, Idempotency, RequestOrigin};
 
 /// An exchange the caller cannot see and one that does not exist look the same.
 fn exchange_id(raw: &str) -> Result<Uuid, ApiError> {
@@ -144,11 +144,16 @@ pub async fn send_revision(
     session: Session,
     Path(id): Path<String>,
     headers: HeaderMap,
+    ClientAddress(address): ClientAddress,
     DigestedJson { body, digest }: DigestedJson<SendRevision>,
 ) -> Result<Json<RevisionSent>, ApiError> {
     let idempotency = Idempotency {
         key: idempotency_key(&headers),
         digest,
+    };
+    let origin = RequestOrigin {
+        address,
+        user_agent: user_agent(&headers),
     };
     let sent = service::send_revision(
         &state.db,
@@ -156,7 +161,7 @@ pub async fn send_revision(
         &session,
         exchange_id(&id)?,
         idempotency,
-        user_agent(&headers),
+        origin,
         body,
     )
     .await?;
@@ -186,11 +191,16 @@ pub async fn run_command(
     session: Session,
     Path(id): Path<String>,
     headers: HeaderMap,
+    ClientAddress(address): ClientAddress,
     DigestedJson { body, digest }: DigestedJson<RunCommand>,
 ) -> Result<Json<ExchangeView>, ApiError> {
     let idempotency = Idempotency {
         key: idempotency_key(&headers),
         digest,
+    };
+    let origin = RequestOrigin {
+        address,
+        user_agent: user_agent(&headers),
     };
     let view = service::run_command(
         &state.db,
@@ -198,7 +208,7 @@ pub async fn run_command(
         &session,
         exchange_id(&id)?,
         idempotency,
-        user_agent(&headers),
+        origin,
         body,
     )
     .await?;

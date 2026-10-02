@@ -11,10 +11,9 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE};
 use axum::http::{HeaderMap, Method, Request, StatusCode};
-use exchange_backend::auth::{AuthRules, CodeSender, Purpose, SendFuture, token_hash};
+use exchange_backend::auth::{AuthRules, CodeMessage, CodeSender, SendFuture, token_hash};
 use exchange_backend::db;
-use exchange_backend::domain::identity::Identifier;
-use exchange_backend::http::{self, AppState, Settings};
+use exchange_backend::http::{self, AppState, Settings, TrustedProxies};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -30,12 +29,12 @@ const PHONE_PREFIX: &str = "+1999";
 struct Outbox(Mutex<Vec<(String, String)>>);
 
 impl CodeSender for Outbox {
-    fn send<'a>(&'a self, to: &'a Identifier, code: &'a str, _: Purpose) -> SendFuture<'a> {
+    fn send<'a>(&'a self, message: CodeMessage<'a>) -> SendFuture<'a> {
         Box::pin(async move {
             self.0
                 .lock()
                 .unwrap()
-                .push((to.as_str().to_owned(), code.to_owned()));
+                .push((message.to.as_str().to_owned(), message.code.to_owned()));
             Ok(())
         })
     }
@@ -94,12 +93,13 @@ impl App {
                 auth: AuthRules::default(),
                 rules: Default::default(),
                 consent_version: "test".to_owned(),
+                proxies: TrustedProxies::none(),
             }),
             code_sender: outbox.clone(),
         };
 
         let app = Self {
-            router: http::router(state),
+            router: http::router(state, None),
             outbox,
             owner,
         };

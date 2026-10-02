@@ -1,6 +1,14 @@
 use std::sync::Arc;
 
 use axum::Router;
+use axum::extract::Request;
+use axum::http::HeaderValue;
+use axum::http::header::{
+    CONTENT_SECURITY_POLICY, REFERRER_POLICY, STRICT_TRANSPORT_SECURITY, X_CONTENT_TYPE_OPTIONS,
+    X_FRAME_OPTIONS,
+};
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use axum::routing::get;
 use sqlx::PgPool;
 use tower_http::trace::TraceLayer;
@@ -12,6 +20,7 @@ use crate::error::{ErrorBody, ErrorCode};
 
 pub mod account;
 pub mod auth;
+pub mod client_address;
 pub mod deletion;
 pub mod exchanges;
 pub mod extract;
@@ -19,6 +28,10 @@ pub mod health;
 pub mod record;
 pub mod safety;
 pub mod v1;
+pub mod web;
+
+pub use client_address::{ClientAddress, TrustedProxies};
+pub use web::WebApp;
 
 /// What the handlers need besides the database.
 pub struct Settings {
@@ -28,6 +41,8 @@ pub struct Settings {
     pub rules: Rules,
     /// The version of the consent wording a signer must have been shown.
     pub consent_version: String,
+    /// Which header, if any, names the requester's address.
+    pub proxies: TrustedProxies,
 }
 
 #[derive(Clone)]
@@ -37,13 +52,55 @@ pub struct AppState {
     pub code_sender: Arc<dyn CodeSender>,
 }
 
-pub fn router(state: AppState) -> Router {
-    Router::new()
+/// The whole service: the API, and the web app if there is one to serve.
+/// API paths are routed first; the web app answers what is left.
+pub fn router(state: AppState, web: Option<WebApp>) -> Router {
+    // People sign on these pages, so the page must be ours and nobody
+    // else's frame. HSTS only when the origin is HTTPS, or a development
+    // setup over plain HTTP would be locked out of itself.
+    let hsts = state.settings.web_origin.starts_with("https://");
+    let api = Router::new()
         .route("/healthz", get(health::live))
         .route("/readyz", get(health::ready))
-        .nest("/v1", v1::router())
-        .layer(TraceLayer::new_for_http())
-        .with_state(state)
+        .nest("/v1", v1::router());
+    let app = match web {
+        Some(web) => api.fallback_service(web.router()),
+        None => api,
+    };
+    app.layer(middleware::from_fn(move |request, next| {
+        security_headers(hsts, request, next)
+    }))
+    .layer(TraceLayer::new_for_http().make_span_with(request_span))
+    .with_state(state)
+}
+
+/// The span a request is handled in. The path only: a query string could
+/// carry something a person typed, and never belongs in a log.
+fn request_span(request: &Request) -> tracing::Span {
+    tracing::info_span!(
+        "request",
+        method = %request.method(),
+        path = request.uri().path(),
+    )
+}
+
+async fn security_headers(hsts: bool, request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.insert(X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    headers.insert(
+        CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("frame-ancestors 'none'"),
+    );
+    headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    if hsts {
+        headers.insert(
+            STRICT_TRANSPORT_SECURITY,
+            HeaderValue::from_static("max-age=31536000"),
+        );
+    }
+    response
 }
 
 #[derive(OpenApi)]

@@ -147,6 +147,16 @@
           "body": "Nothing happened in this exchange for a long time, so it has been closed as unresolved. Each contribution keeps the status it had."
         }
       }
+    },
+    "oneTimeCode": {
+      "signIn": {
+        "subject": "{code} is your {productName} sign-in code",
+        "body": "Enter {code} to sign in to {productName}. The code works once and expires in a few minutes.\n\nIf you didn’t ask to sign in, ignore this email: nothing happens without the code, and nobody from {productName} will ever ask you for it."
+      },
+      "deleteAccount": {
+        "subject": "{code} is your code to delete your {productName} account",
+        "body": "Enter {code} to confirm that you want to delete your {productName} account. The code works once and expires in a few minutes. It can’t be used to sign in.\n\nIf you didn’t ask to delete your account, ignore this email and nothing will change. Nobody from {productName} will ever ask you for this code."
+      }
     }
   },
   "common": {

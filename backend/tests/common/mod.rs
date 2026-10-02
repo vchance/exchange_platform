@@ -8,16 +8,18 @@
 
 #![allow(dead_code)]
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
+use axum::extract::ConnectInfo;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderName, Method, Request, StatusCode};
 use exchange_backend::auth::{AuthRules, CodeSender, LogSender, generate_token, token_hash};
 use exchange_backend::db;
 use exchange_backend::domain::Rules;
-use exchange_backend::http::{self, AppState, Settings};
+use exchange_backend::http::{self, AppState, Settings, TrustedProxies};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -26,6 +28,12 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 pub const CONSENT_VERSION: &str = "test-1";
+
+/// The address every test request appears to come from.
+pub const PEER: SocketAddr = SocketAddr::new(
+    std::net::IpAddr::V4(std::net::Ipv4Addr::new(198, 51, 100, 23)),
+    51234,
+);
 
 fn env(name: &str) -> String {
     dotenvy::dotenv().ok();
@@ -143,6 +151,17 @@ impl App {
         rules: Rules,
         code_sender: Arc<dyn CodeSender>,
     ) -> Self {
+        Self::start_behind(database_name, rules, code_sender, TrustedProxies::none()).await
+    }
+
+    /// With the given view of proxy headers. Every request the helpers make
+    /// arrives from [`PEER`].
+    pub async fn start_behind(
+        database_name: &'static str,
+        rules: Rules,
+        code_sender: Arc<dyn CodeSender>,
+        proxies: TrustedProxies,
+    ) -> Self {
         let (owner_url, app_url) = database(database_name).await;
         let db = connect(app_url).await;
         let state = AppState {
@@ -153,11 +172,12 @@ impl App {
                 auth: AuthRules::default(),
                 rules: rules.clone(),
                 consent_version: CONSENT_VERSION.to_owned(),
+                proxies,
             }),
             code_sender,
         };
         Self {
-            router: http::router(state),
+            router: http::router(state, None),
             db,
             owner: connect(owner_url).await,
             rules,
@@ -206,7 +226,11 @@ impl App {
         body: Option<Value>,
         headers: &[(&'static str, &str)],
     ) -> Reply {
-        let mut request = Request::builder().method(method).uri(path);
+        let mut request = Request::builder()
+            .method(method)
+            .uri(path)
+            // What the listener would know about the connection.
+            .extension(ConnectInfo(PEER));
         if let Some(user) = user {
             request = request.header(AUTHORIZATION, format!("Bearer {}", user.token));
         }
@@ -301,6 +325,11 @@ impl App {
     pub async fn negotiating(&self) -> Deal {
         let ana = self.user("Ana").await;
         let ben = self.user("Ben").await;
+        self.negotiating_between(ana, ben).await
+    }
+
+    /// [`negotiating`](Self::negotiating) between two given people.
+    pub async fn negotiating_between(&self, ana: User, ben: User) -> Deal {
         let exchange = self.draft(&ana).await;
         let (repair, payment) = (Uuid::new_v4(), Uuid::new_v4());
 
@@ -324,7 +353,14 @@ impl App {
 
     /// Ben has claimed the link, Ana has confirmed him, and Ben has accepted.
     pub async fn active(&self) -> Deal {
-        let deal = self.negotiating().await;
+        let ana = self.user("Ana").await;
+        let ben = self.user("Ben").await;
+        self.active_between(ana, ben).await
+    }
+
+    /// [`active`](Self::active) between two given people.
+    pub async fn active_between(&self, ana: User, ben: User) -> Deal {
+        let deal = self.negotiating_between(ana, ben).await;
         self.post(
             &deal.ben,
             "/v1/invitations/claim",

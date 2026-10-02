@@ -12,10 +12,9 @@ use std::sync::{Arc, Mutex};
 use axum::http::header::SET_COOKIE;
 use axum::http::{Method, StatusCode};
 use common::{App, Reply, User, accept, consent, fence_job};
-use exchange_backend::auth::{CodeSender, Purpose, SendFuture};
+use exchange_backend::auth::{CodeMessage, CodeSender, Purpose, SendFuture};
 use exchange_backend::deletion;
 use exchange_backend::domain::Rules;
-use exchange_backend::domain::identity::Identifier;
 use exchange_backend::exchanges::service::run_timers;
 use exchange_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_due};
 use exchange_backend::notifications::wording::Wording;
@@ -35,12 +34,13 @@ static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 struct Codes(Mutex<Vec<(String, String, Purpose)>>);
 
 impl CodeSender for Codes {
-    fn send<'a>(&'a self, to: &'a Identifier, code: &'a str, purpose: Purpose) -> SendFuture<'a> {
+    fn send<'a>(&'a self, message: CodeMessage<'a>) -> SendFuture<'a> {
         Box::pin(async move {
-            self.0
-                .lock()
-                .unwrap()
-                .push((to.as_str().to_owned(), code.to_owned(), purpose));
+            self.0.lock().unwrap().push((
+                message.to.as_str().to_owned(),
+                message.code.to_owned(),
+                message.purpose,
+            ));
             Ok(())
         })
     }

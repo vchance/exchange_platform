@@ -122,6 +122,16 @@ export interface Wording {
       layout: string
       messages: Record<NotificationKind, { subject: string; body: string }>
     }
+    /**
+     * The email that carries a one-time code, one message for each thing a
+     * code can be asked for, so that the message says what the code does and
+     * nobody is talked into reading out a "sign-in code" that would delete
+     * their account. May use `{code}` and `{productName}`.
+     */
+    oneTimeCode: {
+      signIn: { subject: string; body: string }
+      deleteAccount: { subject: string; body: string }
+    }
   }
   common: {
     loading: string

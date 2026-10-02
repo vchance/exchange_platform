@@ -1,4 +1,27 @@
-# Local development database. Matches the connection strings in .env.example.
+# The local stack. Two ways to use it:
+#
+#   docker compose up -d                        the database alone, for running
+#                                               the backend and web app from source
+#   docker compose --profile full up --build    everything: database, migrations,
+#                                               the API serving the web app at
+#                                               http://localhost:8080, and the worker
+#
+# The connection strings match .env.example. Everything here is for a
+# development machine: the roles' passwords are the well-known ones, codes and
+# notifications go to the containers' logs, and the application secret is the
+# development placeholder unless APP_SECRET is set in the environment or in
+# `.env`. A real deployment sets each of these (README, "Deploying").
+
+x-service: &service
+  image: ${EXCHANGE_IMAGE:-exchange-platform:local}
+  build: .
+  profiles: [full]
+
+x-app-environment: &app-environment
+  DATABASE_URL: postgres://exchange_app:exchange_app@postgres:5432/exchange
+  WEB_ORIGIN: http://localhost:8080
+  RUST_LOG: ${RUST_LOG:-info}
+
 services:
   postgres:
     image: postgres:17
@@ -10,7 +33,50 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Adds the restricted application role on first start.
       - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      # Over TCP, which answers only once initialization has finished.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "exchange", "-d", "exchange"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Runs once, as the schema owner, and exits. The API and worker wait for it.
+  migrate:
+    <<: *service
+    command: ["/usr/local/bin/migrate"]
+    environment:
+      MIGRATION_DATABASE_URL: postgres://exchange:exchange@postgres:5432/exchange
+      RUST_LOG: ${RUST_LOG:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # The API, serving the web app built into the image.
+  api:
+    <<: *service
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      <<: *app-environment
+      APP_SECRET: ${APP_SECRET:-development-only-secret-do-not-use-anywhere-else}
+      # Development delivery: one-time codes appear in `docker compose logs api`.
+      CODE_DELIVERY: ${CODE_DELIVERY:-log}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *service
+    command: ["/usr/local/bin/worker"]
+    environment:
+      <<: *app-environment
+      # Development delivery: notifications appear in `docker compose logs worker`.
+      NOTIFICATION_DELIVERY: ${NOTIFICATION_DELIVERY:-log}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres-data:

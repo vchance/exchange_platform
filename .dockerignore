@@ -1,0 +1,19 @@
+# What the image build never needs. Secrets and local state first.
+.env
+.env.*
+!.env.example
+.git
+.github
+.claude
+
+# Build output and dependencies are produced inside the build.
+node_modules
+**/node_modules
+backend/target
+apps/web/dist
+apps/mobile/*
+!apps/mobile/package.json
+.expo
+*.tsbuildinfo
+*.log
+.DS_Store

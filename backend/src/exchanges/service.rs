@@ -189,6 +189,16 @@ async fn name_participants(
     Ok(())
 }
 
+/// Where a request came from. Kept with a signature made in it, apart from
+/// the signature itself, so it can be purged later (DESIGN.md §8, §14).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RequestOrigin<'a> {
+    /// The requester's network address, as far as it can be known
+    /// (`crate::http::ClientAddress`).
+    pub address: Option<std::net::IpAddr>,
+    pub user_agent: Option<&'a str>,
+}
+
 struct Signature<'a> {
     exchange: Uuid,
     revision: Uuid,
@@ -197,7 +207,7 @@ struct Signature<'a> {
     /// The supported language the consent wording was shown in.
     consent_language: &'a str,
     consent_version: &'a str,
-    user_agent: Option<&'a str>,
+    origin: RequestOrigin<'a>,
 }
 
 async fn record_signature(
@@ -226,13 +236,15 @@ async fn record_signature(
     .fetch_one(&mut *conn)
     .await?;
 
-    // Kept apart so it can be purged after 90 days. The network address is
-    // left empty until the deployment says which proxy header to trust.
+    // Kept apart so it can be purged after 90 days. The address is empty when
+    // it cannot be known, which with no trusted proxy header is never.
     sqlx::query(
-        "INSERT INTO acceptance_network_metadata (acceptance_id, user_agent) VALUES ($1, $2)",
+        "INSERT INTO acceptance_network_metadata (acceptance_id, ip_address, user_agent)
+         VALUES ($1, $2::inet, $3)",
     )
     .bind(acceptance)
-    .bind(signature.user_agent)
+    .bind(signature.origin.address.map(|address| address.to_string()))
+    .bind(signature.origin.user_agent)
     .execute(&mut *conn)
     .await?;
     Ok(())
@@ -538,7 +550,7 @@ pub async fn send_revision(
     session: &Session,
     id: Uuid,
     idempotency: Idempotency<'_>,
-    user_agent: Option<&str>,
+    origin: RequestOrigin<'_>,
     body: SendRevision,
 ) -> Result<RevisionSent, ApiError> {
     let mut tx = db.begin().await?;
@@ -618,7 +630,7 @@ pub async fn send_revision(
             content_hash: &hash,
             consent_language,
             consent_version: &body.consent.version,
-            user_agent,
+            origin,
         },
         at,
     )
@@ -666,7 +678,7 @@ pub async fn run_command(
     session: &Session,
     id: Uuid,
     idempotency: Idempotency<'_>,
-    user_agent: Option<&str>,
+    origin: RequestOrigin<'_>,
     body: RunCommand,
 ) -> Result<ExchangeView, ApiError> {
     let mut tx = db.begin().await?;
@@ -779,7 +791,7 @@ pub async fn run_command(
                 content_hash: &open.content_hash,
                 consent_language,
                 consent_version,
-                user_agent,
+                origin,
             },
             at,
         )

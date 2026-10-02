@@ -2,7 +2,7 @@
 
 use axum::Json;
 use axum::extract::State;
-use axum::http::header::SET_COOKIE;
+use axum::http::header::{ACCEPT_LANGUAGE, SET_COOKIE};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
@@ -37,10 +37,17 @@ pub struct RequestCode {
 )]
 pub async fn request_code(
     State(state): State<AppState>,
+    headers: HeaderMap,
     ApiJson(body): ApiJson<RequestCode>,
 ) -> Result<StatusCode, ApiError> {
     let identifier = Identifier::parse(&body.identifier)?;
     let settings = &state.settings;
+    // There may be no account yet, so the browser's or device's language
+    // stands in for a preference.
+    let accept_language = headers
+        .get(ACCEPT_LANGUAGE)
+        .and_then(|value| value.to_str().ok());
+    let language = auth::language_for(&state.db, &identifier, accept_language).await;
     auth::request_code(
         &state.db,
         &settings.app_secret,
@@ -48,6 +55,7 @@ pub async fn request_code(
         state.code_sender.as_ref(),
         &identifier,
         Purpose::SignIn,
+        &language,
     )
     .await?;
     Ok(StatusCode::NO_CONTENT)
