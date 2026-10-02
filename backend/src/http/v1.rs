@@ -1,9 +1,9 @@
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use super::{AppState, account, auth};
+use super::{AppState, account, auth, exchanges};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -13,6 +13,17 @@ pub fn router() -> Router<AppState> {
         .route("/auth/session", delete(auth::delete_session))
         .route("/me", get(account::me).patch(account::update_me))
         .route("/me/identifiers", post(account::add_identifier))
+        .route("/exchanges", get(exchanges::list).post(exchanges::create))
+        .route("/exchanges/{id}", get(exchanges::get))
+        .route("/exchanges/{id}/draft", put(exchanges::save_draft))
+        .route("/exchanges/{id}/revisions", post(exchanges::send_revision))
+        .route("/exchanges/{id}/commands", post(exchanges::run_command))
+        .route(
+            "/exchanges/{id}/invitation",
+            post(exchanges::reissue_invitation),
+        )
+        .route("/invitations/preview", post(exchanges::preview_invitation))
+        .route("/invitations/claim", post(exchanges::claim_invitation))
 }
 
 #[derive(Serialize, ToSchema)]

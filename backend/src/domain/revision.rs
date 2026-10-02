@@ -2,7 +2,9 @@
 
 use std::collections::BTreeSet;
 
+use serde::{Deserialize, Serialize};
 use time::Date;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::Rules;
@@ -16,7 +18,9 @@ pub struct RevisionId(pub Uuid);
 pub struct ContributionId(pub Uuid);
 
 /// One side of the exchange. `A` is the initiator, `B` the invited counterparty.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ToSchema,
+)]
 pub enum Slot {
     A,
     B,
@@ -218,8 +222,11 @@ fn is_positive_decimal(text: &str) -> bool {
     };
     let all_digits = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
 
+    // No superfluous leading zeros, so the number reads back from the database
+    // exactly as it was written and signed.
     text.len() <= 20
         && all_digits(whole)
+        && (whole == "0" || !whole.starts_with('0'))
         && fraction.is_none_or(all_digits)
         && text.bytes().any(|b| (b'1'..=b'9').contains(&b))
 }
@@ -343,11 +350,11 @@ pub(crate) mod tests {
 
     #[test]
     fn quantities_are_positive_decimals() {
-        for good in ["1", "2.5", "0.25", "10", "007"] {
+        for good in ["1", "2.5", "0.25", "10", "1.50"] {
             assert!(is_positive_decimal(good), "{good}");
         }
         for bad in [
-            "", "0", "0.00", "-1", "1.", ".5", "1.2.3", "1e3", "two", " 1",
+            "", "0", "0.00", "-1", "1.", ".5", "1.2.3", "1e3", "two", " 1", "007", "00.5",
         ] {
             assert!(!is_positive_decimal(bad), "{bad}");
         }

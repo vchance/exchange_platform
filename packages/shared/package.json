@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && node scripts/check-wording.mjs"
   },
   "dependencies": {
     "@exchange/api-client": "*"

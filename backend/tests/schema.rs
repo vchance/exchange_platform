@@ -142,8 +142,10 @@ async fn agreement(conn: &mut PgConnection) -> Agreement {
     .unwrap();
 
     let revision: Uuid = sqlx::query_scalar(
-        "INSERT INTO revision (exchange_id, sequence, author_slot, terms, expires_at, content_hash)
-         VALUES ($1, 1, 'A', 'Fix the fence for $500.', now() + interval '14 days', sha256('r1'))
+        "INSERT INTO revision (exchange_id, sequence, author_slot, terms, expires_at, content_hash,
+                               party_a_name, party_b_name)
+         VALUES ($1, 1, 'A', 'Fix the fence for $500.', now() + interval '14 days', sha256('r1'),
+                 'Ana', 'Ben')
          RETURNING id",
     )
     .bind(exchange)
@@ -351,8 +353,8 @@ async fn an_acceptance_must_carry_the_hash_of_the_revision_it_signs() {
 
     let second: Uuid = sqlx::query_scalar(
         "INSERT INTO revision (exchange_id, sequence, parent_revision_id, author_slot,
-                               expires_at, content_hash)
-         VALUES ($1, 2, $2, 'B', now() + interval '14 days', sha256('r2'))
+                               expires_at, content_hash, party_a_name, party_b_name)
+         VALUES ($1, 2, $2, 'B', now() + interval '14 days', sha256('r2'), 'Ana', 'Ben')
          RETURNING id",
     )
     .bind(a.exchange)
@@ -382,8 +384,9 @@ async fn only_the_account_holding_a_slot_can_sign_for_it() {
     let a = agreement(&mut tx).await;
 
     let second: Uuid = sqlx::query_scalar(
-        "INSERT INTO revision (exchange_id, sequence, author_slot, expires_at, content_hash)
-         VALUES ($1, 2, 'A', now() + interval '14 days', sha256('r2'))
+        "INSERT INTO revision (exchange_id, sequence, author_slot, expires_at, content_hash,
+                               party_a_name, party_b_name)
+         VALUES ($1, 2, 'A', now() + interval '14 days', sha256('r2'), 'Ana', 'Ben')
          RETURNING id",
     )
     .bind(a.exchange)
@@ -565,6 +568,30 @@ async fn event_sequence_numbers_never_repeat_within_an_exchange() {
         .await
         .unwrap();
     refused!(tx, UNIQUE, sqlx::query(insert).bind(a.exchange));
+}
+
+#[tokio::test]
+async fn any_well_formed_language_tag_is_stored_and_nothing_else() {
+    let mut tx = app().await;
+    let account = account(&mut tx).await;
+
+    for tag in ["en", "es", "fr", "pt-BR", "zh-Hant", "fil"] {
+        sqlx::query("UPDATE account SET language = $2 WHERE id = $1")
+            .bind(account)
+            .bind(tag)
+            .execute(&mut *tx)
+            .await
+            .unwrap_or_else(|error| panic!("{tag}: {error}"));
+    }
+    for junk in ["", "EN", "english", "e", "en_US"] {
+        refused!(
+            tx,
+            CHECK,
+            sqlx::query("UPDATE account SET language = $2 WHERE id = $1")
+                .bind(account)
+                .bind(junk)
+        );
+    }
 }
 
 #[tokio::test]

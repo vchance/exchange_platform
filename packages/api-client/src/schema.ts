@@ -92,6 +92,153 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/exchanges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's exchanges, most recently changed first. */
+        get: operations["list"];
+        put?: never;
+        /** Starts an exchange as a private draft. */
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One exchange, as its party sees it. */
+        get: operations["get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Does one thing to an exchange: accept, decline or withdraw a revision,
+         *     act on a contribution, confirm the counterparty, or end or close it.
+         */
+        post: operations["run_command"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Saves the caller's unsent working copy. */
+        put: operations["save_draft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replaces the invitation link. The previous link stops working. */
+        post: operations["reissue_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sends a revision, which signs it: a first proposal, a counteroffer, or an
+         *     amendment to an agreement in force. Send an `Idempotency-Key` header so a
+         *     retry cannot send it twice.
+         */
+        post: operations["send_revision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/invitations/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Takes the invited party's place in the exchange. */
+        post: operations["claim_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/invitations/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shows the proposal behind an invitation link. No sign-in needed. The token
+         *     travels in the body so it never appears in a URL the service logs.
+         */
+        post: operations["preview_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -159,27 +306,144 @@ export interface components {
             display_name: string;
             email?: string | null;
             id: string;
-            language: components["schemas"]["Language"];
+            /** @description A supported language tag, such as `en` or `es`. */
+            language: string;
             phone?: string | null;
         };
+        /** @enum {string} */
+        Action: "CLAIM" | "RETRACT_CLAIM" | "CONFIRM" | "DISPUTE" | "WAIVE";
         AddIdentifier: {
             /** @description The one-time code sent to it. */
             code: string;
             /** @description An email address, or a phone number in international form. */
             identifier: string;
         };
+        /** @description Who claimed the invitation, shown to the initiator so they can confirm. */
+        Claimant: {
+            display_name: string;
+            /** @description Partly hidden, such as `b•••@example.com`. */
+            identifier: string;
+        };
+        CommandDto: {
+            consent: components["schemas"]["Consent"];
+            /** Format: uuid */
+            revision: string;
+            /** @enum {string} */
+            type: "ACCEPT";
+        } | {
+            /** Format: uuid */
+            revision: string;
+            /** @enum {string} */
+            type: "DECLINE";
+        } | {
+            /** Format: uuid */
+            revision: string;
+            /** @enum {string} */
+            type: "WITHDRAW";
+        } | {
+            action: components["schemas"]["Action"];
+            /** Format: uuid */
+            contribution: string;
+            note?: string | null;
+            /** @enum {string} */
+            type: "CONTRIBUTION";
+        } | {
+            /** @enum {string} */
+            type: "CONFIRM_COUNTERPARTY";
+        } | {
+            /** @enum {string} */
+            type: "PROPOSE_END";
+        } | {
+            /** @enum {string} */
+            type: "ACCEPT_END";
+        } | {
+            /** @enum {string} */
+            type: "CANCEL_END";
+        } | {
+            note?: string | null;
+            /** @enum {string} */
+            type: "REQUEST_CLOSE";
+        } | {
+            /** @enum {string} */
+            type: "RETRACT_CLOSE";
+        } | {
+            note: string;
+            /** @enum {string} */
+            type: "ADD_STATEMENT";
+        };
+        /**
+         * @description Which consent wording the signer was shown. Signing is refused unless it
+         *     is the current version.
+         */
+        Consent: {
+            /** @description The language the wording was shown in, as a supported language tag. */
+            language: string;
+            version: string;
+        };
+        ContributionDto: {
+            /**
+             * Format: int64
+             * @description Whole minor units of the exchange's currency. Money only.
+             */
+            amount_minor?: number | null;
+            completion_criteria?: string | null;
+            description: string;
+            due: components["schemas"]["DueDto"];
+            /** @description The party who owes it. */
+            from: components["schemas"]["Slot"];
+            /**
+             * Format: uuid
+             * @description Chosen by the client for a new contribution; kept unchanged for one
+             *     carried over from an earlier revision.
+             */
+            id: string;
+            quantity?: components["schemas"]["QuantityDto"] | null;
+            required: boolean;
+            type: components["schemas"]["ContributionType"];
+        };
+        ContributionStatus: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["Status"];
+        };
+        /** @enum {string} */
+        ContributionType: "ITEM" | "SERVICE" | "TASK" | "OTHER" | "MONEY";
+        /** @enum {string} */
+        CounterpartyDto: "UNCLAIMED" | "CLAIMED" | "CONFIRMED";
+        CreateExchange: {
+            /** @description IANA timezone name, such as `America/Chicago`. Due dates are read in it. */
+            timezone: string;
+        };
         CreateSession: {
             /** @description The one-time code sent to the identifier. */
             code: string;
             delivery: components["schemas"]["Delivery"];
             identifier: string;
-            language?: components["schemas"]["Language"] | null;
+            /**
+             * @description The language the client is showing, as a tag such as `es-MX`. Used only
+             *     when this creates the account; an unsupported one becomes the default.
+             */
+            language?: string | null;
         };
         /**
          * @description How the client wants to hold the session.
          * @enum {string}
          */
         Delivery: "COOKIE" | "TOKEN";
+        /** @description When a contribution falls due. */
+        DueDto: {
+            date: string;
+            /** @enum {string} */
+            kind: "DATE";
+        } | {
+            /** @enum {string} */
+            kind: "ON_AGREEMENT";
+        } | {
+            /** Format: uuid */
+            contribution: string;
+            /** @enum {string} */
+            kind: "AFTER_CONTRIBUTION";
+        };
         ErrorBody: {
             code: components["schemas"]["ErrorCode"];
         };
@@ -190,28 +454,165 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "CLIENT_TOO_OLD" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
-        /** @enum {string} */
-        Language: "en" | "es";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ExchangeSummary: {
+            closed_outcome?: components["schemas"]["OutcomeDto"] | null;
+            display_code: string;
+            /** Format: uuid */
+            id: string;
+            other_party_name: string;
+            state: components["schemas"]["StateDto"];
+            updated_at: string;
+            you: components["schemas"]["Slot"];
+        };
+        ExchangeView: {
+            claimant?: components["schemas"]["Claimant"] | null;
+            close_requested_at?: string | null;
+            close_requested_by?: components["schemas"]["Slot"] | null;
+            closed_outcome?: components["schemas"]["OutcomeDto"] | null;
+            closed_reason?: string | null;
+            /** @description Status of each contribution in the agreement in force. */
+            contributions: components["schemas"]["ContributionStatus"][];
+            counterparty: components["schemas"]["CounterpartyDto"];
+            currency: string;
+            /** @description For telling exchanges apart. Not a credential. */
+            display_code: string;
+            /** @description The viewer's own unsent working copy. */
+            draft?: Record<string, never> | null;
+            end_proposed_by?: components["schemas"]["Slot"] | null;
+            /** Format: uuid */
+            id: string;
+            in_force_revision?: components["schemas"]["RevisionView"] | null;
+            open_revision?: components["schemas"]["RevisionView"] | null;
+            state: components["schemas"]["StateDto"];
+            timezone: string;
+            /**
+             * Format: int64
+             * @description Send this back as `expected_version` with the next change.
+             */
+            version: number;
+            /** @description Which side the viewer is. */
+            you: components["schemas"]["Slot"];
+        };
+        InvitationIssued: {
+            invitation_token: string;
+        };
+        InvitationOptions: {
+            /**
+             * @description Names who the invitation is for: only an account that has verified
+             *     this email address or phone number can claim it.
+             */
+            bound_to?: string | null;
+        };
+        /** @description What someone holding an invitation link sees before signing in. */
+        InvitationPreview: {
+            /** @description The invitation names a specific person. */
+            bound: boolean;
+            display_code: string;
+            expires_at: string;
+            revision: components["schemas"]["RevisionView"];
+        };
+        InvitationToken: {
+            token: string;
+        };
         Meta: {
             service: string;
             version: string;
         };
+        /** @enum {string} */
+        OutcomeDto: "NOT_AGREED" | "COMPLETED" | "ENDED_BY_AGREEMENT" | "UNRESOLVED";
+        QuantityDto: {
+            /** @description A positive decimal number such as `2` or `1.5`. */
+            amount: string;
+            unit?: string | null;
+        };
         RequestCode: {
             /** @description An email address, or a phone number in international form. */
             identifier: string;
+        };
+        RevisionSent: {
+            exchange: components["schemas"]["ExchangeView"];
+            /**
+             * @description The link token for the invited party, returned once, when the first
+             *     revision is sent. Only its hash is kept.
+             */
+            invitation_token?: string | null;
+        };
+        /** @description What a revision says: the part both parties sign. */
+        RevisionTerms: {
+            contributions: components["schemas"]["ContributionDto"][];
+            party_a_name: string;
+            party_b_name: string;
+            terms: string;
+        };
+        RevisionView: {
+            /** @description Who has signed it. The author always has. */
+            accepted_by: components["schemas"]["Slot"][];
+            author: components["schemas"]["Slot"];
+            /** @description SHA-256 of the signed terms, in hex. */
+            content_hash: string;
+            /** @description RFC 3339. */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            note?: string | null;
+            /** Format: int32 */
+            sequence: number;
+            terms: components["schemas"]["RevisionTerms"];
+        };
+        RunCommand: {
+            command: components["schemas"]["CommandDto"];
+            /**
+             * Format: int64
+             * @description The exchange version the client last saw.
+             */
+            expected_version: number;
+        };
+        SaveDraft: {
+            /** @description The client's working copy, stored as given. */
+            body: Record<string, never>;
+        };
+        /** @description Sending a revision signs it. */
+        SendRevision: {
+            consent: components["schemas"]["Consent"];
+            /**
+             * Format: int64
+             * @description The exchange version the client last saw.
+             */
+            expected_version: number;
+            invitation?: components["schemas"]["InvitationOptions"] | null;
+            /** @description A message to the other party. Not part of what is signed. */
+            note?: string | null;
+            terms: components["schemas"]["RevisionTerms"];
         };
         SessionCreated: {
             account: components["schemas"]["Account"];
             /** @description Present for `TOKEN` delivery only. */
             token?: string | null;
         };
+        /**
+         * @description One side of the exchange. `A` is the initiator, `B` the invited counterparty.
+         * @enum {string}
+         */
+        Slot: "A" | "B";
+        /** @enum {string} */
+        StateDto: "DRAFT" | "NEGOTIATING" | "ACTIVE" | "CLOSED";
+        /**
+         * @description Where a contribution stands. Overdue is derived from `Pending` plus the due
+         *     condition; it is not a status.
+         * @enum {string}
+         */
+        Status: "PENDING" | "CLAIMED" | "DISPUTED" | "ACCEPTED" | "WAIVED" | "REMOVED";
         UpdateAccount: {
             /** @description Only `true` is meaningful: a confirmation cannot be taken back. */
             adult_confirmed?: boolean | null;
             /** @description 1 to 100 characters. */
             display_name?: string | null;
-            language?: components["schemas"]["Language"] | null;
+            /**
+             * @description A language tag. A regional tag falls back to its base language; an
+             *     unsupported language is refused.
+             */
+            language?: string | null;
         };
     };
     responses: never;
@@ -376,6 +777,413 @@ export interface operations {
             };
             /** @description Invalid request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exchanges the caller is a party to */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExchangeSummary"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateExchange"];
+            };
+        };
+        responses: {
+            /** @description The new draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExchangeView"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Unknown timezone */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many exchanges created today */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The exchange */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExchangeView"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    run_command: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique per attempt to make this change */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunCommand"];
+            };
+        };
+        responses: {
+            /** @description Done; the exchange as it now stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExchangeView"];
+                };
+            };
+            /** @description That is for the other party to do */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Refused by the rules, or the exchange changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    save_draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveDraft"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The exchange is closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    reissue_invitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationOptions"];
+            };
+        };
+        responses: {
+            /** @description The new link token, shown once */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationIssued"];
+                };
+            };
+            /** @description Only the initiator can invite */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The invitation has already been claimed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    send_revision: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique per attempt to make this change */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendRevision"];
+            };
+        };
+        responses: {
+            /** @description Sent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionSent"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Refused by the rules, or the exchange changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The revision is not valid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    claim_invitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationToken"];
+            };
+        };
+        responses: {
+            /** @description Claimed; the exchange as the new party sees it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExchangeView"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The invitation names someone else */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The link is not valid, or no longer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    preview_invitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationToken"];
+            };
+        };
+        responses: {
+            /** @description The proposal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationPreview"];
+                };
+            };
+            /** @description The link is not valid, or no longer */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

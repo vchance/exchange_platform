@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use exchange_backend::auth::AuthRules;
 use exchange_backend::config::ApiConfig;
+use exchange_backend::domain::Rules;
 use exchange_backend::http::{self, AppState, Settings};
 use exchange_backend::{db, telemetry};
 
@@ -16,6 +17,10 @@ async fn main() -> anyhow::Result<()> {
             app_secret: config.app_secret,
             web_origin: config.web_origin,
             auth: AuthRules::default(),
+            rules: Rules::default(),
+            // A stand-in until counsel-approved consent wording exists
+            // (DESIGN.md §14.1); the real version replaces it then.
+            consent_version: "draft-1".to_owned(),
         }),
         code_sender: config.code_sender,
     };

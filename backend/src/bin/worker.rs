@@ -3,14 +3,18 @@
 
 use std::time::Duration;
 
+use exchange_backend::domain::Rules;
+use exchange_backend::exchanges::service::run_timers;
 use exchange_backend::{config, db, telemetry};
+use time::OffsetDateTime;
 
 const TICK: Duration = Duration::from_secs(5);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     telemetry::init();
-    let _db = db::pool(&config::database_url()?)?;
+    let db = db::pool(&config::database_url()?)?;
+    let rules = Rules::default();
 
     let mut ticker = tokio::time::interval(TICK);
     tracing::info!("worker started");
@@ -18,10 +22,12 @@ async fn main() -> anyhow::Result<()> {
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                // Jobs are added here as they are built: drain the outbox,
-                // send reminders, expire revisions and invitations, close
-                // exchanges whose windows have lapsed.
-                tracing::debug!("worker tick");
+                // Still to come here: draining the outbox and sending reminders.
+                match run_timers(&db, &rules, OffsetDateTime::now_utc()).await {
+                    Ok(0) => {}
+                    Ok(changed) => tracing::info!(changed, "timers ran"),
+                    Err(error) => tracing::error!(%error, "timers failed"),
+                }
             }
             _ = tokio::signal::ctrl_c() => {
                 tracing::info!("worker shutting down");

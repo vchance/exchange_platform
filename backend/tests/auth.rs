@@ -92,6 +92,8 @@ impl App {
                 app_secret: b"test-secret-test-secret-test-secret".to_vec(),
                 web_origin: WEB_ORIGIN.to_owned(),
                 auth: AuthRules::default(),
+                rules: Default::default(),
+                consent_version: "test".to_owned(),
             }),
             code_sender: outbox.clone(),
         };
@@ -632,8 +634,12 @@ async fn the_profile_can_be_edited() {
             (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST")
         );
     }
-    let reply = patch(json!({ "language": "fr" })).await;
+    // A language the product does not speak is refused; a regional variant of
+    // one it does falls back to the base language.
+    let reply = patch(json!({ "language": "tlh" })).await;
     assert_eq!(reply.code(), "INVALID_REQUEST");
+    let reply = patch(json!({ "language": "en-GB" })).await;
+    assert_eq!(reply.body["language"], "en");
 
     app.finish(&[&email]).await;
 }

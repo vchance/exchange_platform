@@ -42,6 +42,18 @@ pub enum ErrorCode {
     AccountSuspended,
     /// The email address or phone number belongs to another account.
     IdentifierInUse,
+    /// The exchange changed since the client last read it.
+    VersionConflict,
+    /// A display name and confirmation of age are needed before signing.
+    ProfileIncomplete,
+    /// The consent wording shown is not the current version.
+    ConsentOutdated,
+    /// The invitation link is not valid, or no longer.
+    InvitationUnavailable,
+    /// The invitation names someone else.
+    InvitationNotForYou,
+    /// The idempotency key was already used for a different request.
+    IdempotencyKeyReused,
     /// The client build is too old to act and must update.
     ClientTooOld,
     NotFound,
@@ -70,19 +82,22 @@ impl From<ErrorCode> for ApiError {
     fn from(code: ErrorCode) -> Self {
         use ErrorCode::*;
         let status = match code {
-            InvalidRequest | InvalidIdentifier | InvalidRevision => {
+            InvalidRequest | InvalidIdentifier | InvalidRevision | IdempotencyKeyReused => {
                 StatusCode::UNPROCESSABLE_ENTITY
             }
             InvalidCode | Unauthenticated => StatusCode::UNAUTHORIZED,
-            WrongActor | AccountSuspended => StatusCode::FORBIDDEN,
-            NotFound => StatusCode::NOT_FOUND,
+            WrongActor | AccountSuspended | InvitationNotForYou => StatusCode::FORBIDDEN,
+            NotFound | InvitationUnavailable => StatusCode::NOT_FOUND,
             TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
             StaleRevision
             | ActionNotAllowed
             | ContributionLocked
             | RevisionExpired
             | CounterpartyNotConfirmed
-            | IdentifierInUse => StatusCode::CONFLICT,
+            | IdentifierInUse
+            | VersionConflict
+            | ProfileIncomplete
+            | ConsentOutdated => StatusCode::CONFLICT,
             ClientTooOld => StatusCode::UPGRADE_REQUIRED,
             ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             Internal => StatusCode::INTERNAL_SERVER_ERROR,

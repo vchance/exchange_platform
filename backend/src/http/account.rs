@@ -13,22 +13,7 @@ use super::extract::{ApiJson, Session};
 use crate::auth;
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum Language {
-    En,
-    Es,
-}
-
-impl Language {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Language::En => "en",
-            Language::Es => "es",
-        }
-    }
-}
+use crate::languages;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Account {
@@ -37,7 +22,8 @@ pub struct Account {
     pub phone: Option<String>,
     /// Empty until the person has chosen one.
     pub display_name: String,
-    pub language: Language,
+    /// A supported language tag, such as `en` or `es`.
+    pub language: String,
     /// The holder has confirmed they are 18 or over. Required before signing.
     pub adult_confirmed: bool,
 }
@@ -59,11 +45,7 @@ fn from_row((id, email, phone, display_name, language, adult_confirmed_at): Acco
         email,
         phone,
         display_name,
-        language: if language == "es" {
-            Language::Es
-        } else {
-            Language::En
-        },
+        language,
         adult_confirmed: adult_confirmed_at.is_some(),
     }
 }
@@ -98,7 +80,9 @@ pub async fn me(
 pub struct UpdateAccount {
     /// 1 to 100 characters.
     pub display_name: Option<String>,
-    pub language: Option<Language>,
+    /// A language tag. A regional tag falls back to its base language; an
+    /// unsupported language is refused.
+    pub language: Option<String>,
     /// Only `true` is meaningful: a confirmation cannot be taken back.
     pub adult_confirmed: Option<bool>,
 }
@@ -126,6 +110,11 @@ pub async fn update_me(
         name => name,
     };
 
+    let language = match update.language.as_deref() {
+        Some(tag) => Some(languages::resolve(tag).ok_or(ErrorCode::InvalidRequest)?),
+        None => None,
+    };
+
     sqlx::query(
         "UPDATE account
          SET display_name = coalesce($2, display_name),
@@ -136,7 +125,7 @@ pub async fn update_me(
     )
     .bind(session.account_id)
     .bind(display_name)
-    .bind(update.language.map(Language::as_str))
+    .bind(language)
     .bind(update.adult_confirmed == Some(true))
     .execute(&state.db)
     .await?;

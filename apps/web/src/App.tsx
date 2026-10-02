@@ -1,5 +1,5 @@
 import { createApiClient } from '@exchange/api-client'
-import { pickLanguage, wordingFor } from '@exchange/shared'
+import { directionOf, pickLanguage, wordingFor } from '@exchange/shared'
 import { useEffect, useState } from 'react'
 
 // Same origin: the dev server proxies API paths to the Rust service.
@@ -14,6 +14,7 @@ function App() {
 
   useEffect(() => {
     document.documentElement.lang = language
+    document.documentElement.dir = directionOf(language)
   }, [language])
 
   useEffect(() => {

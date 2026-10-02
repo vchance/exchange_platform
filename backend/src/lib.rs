@@ -6,5 +6,7 @@ pub mod config;
 pub mod db;
 pub mod domain;
 pub mod error;
+pub mod exchanges;
 pub mod http;
+pub mod languages;
 pub mod telemetry;

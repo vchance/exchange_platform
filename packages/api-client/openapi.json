@@ -172,6 +172,538 @@
         }
       }
     },
+    "/v1/exchanges": {
+      "get": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "The caller's exchanges, most recently changed first.",
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": "Exchanges the caller is a party to",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExchangeSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "Starts an exchange as a private draft.",
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExchange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The new draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangeView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown timezone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many exchanges created today",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchanges/{id}": {
+      "get": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "One exchange, as its party sees it.",
+        "operationId": "get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The exchange",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangeView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchanges/{id}/commands": {
+      "post": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "Does one thing to an exchange: accept, decline or withdraw a revision,\nact on a contribution, confirm the counterparty, or end or close it.",
+        "operationId": "run_command",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Unique per attempt to make this change",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Done; the exchange as it now stands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangeView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "That is for the other party to do",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Refused by the rules, or the exchange changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchanges/{id}/draft": {
+      "put": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "Saves the caller's unsent working copy.",
+        "operationId": "save_draft",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Saved"
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The exchange is closed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchanges/{id}/invitation": {
+      "post": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "Replaces the invitation link. The previous link stops working.",
+        "operationId": "reissue_invitation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationOptions"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The new link token, shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationIssued"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only the initiator can invite",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The invitation has already been claimed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchanges/{id}/revisions": {
+      "post": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "Sends a revision, which signs it: a first proposal, a counteroffer, or an\namendment to an agreement in force. Send an `Idempotency-Key` header so a\nretry cannot send it twice.",
+        "operationId": "send_revision",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Unique per attempt to make this change",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendRevision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionSent"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Refused by the rules, or the exchange changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The revision is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invitations/claim": {
+      "post": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "Takes the invited party's place in the exchange.",
+        "operationId": "claim_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationToken"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Claimed; the exchange as the new party sees it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangeView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The invitation names someone else",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The link is not valid, or no longer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invitations/preview": {
+      "post": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "Shows the proposal behind an invitation link. No sign-in needed. The token\ntravels in the body so it never appears in a URL the service logs.",
+        "operationId": "preview_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationToken"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The proposal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationPreview"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The link is not valid, or no longer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me": {
       "get": {
         "tags": [
@@ -364,7 +896,8 @@
             "type": "string"
           },
           "language": {
-            "$ref": "#/components/schemas/Language"
+            "type": "string",
+            "description": "A supported language tag, such as `en` or `es`."
           },
           "phone": {
             "type": [
@@ -373,6 +906,16 @@
             ]
           }
         }
+      },
+      "Action": {
+        "type": "string",
+        "enum": [
+          "CLAIM",
+          "RETRACT_CLAIM",
+          "CONFIRM",
+          "DISPUTE",
+          "WAIVE"
+        ]
       },
       "AddIdentifier": {
         "type": "object",
@@ -388,6 +931,350 @@
           "identifier": {
             "type": "string",
             "description": "An email address, or a phone number in international form."
+          }
+        }
+      },
+      "Claimant": {
+        "type": "object",
+        "description": "Who claimed the invitation, shown to the initiator so they can confirm.",
+        "required": [
+          "display_name",
+          "identifier"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "identifier": {
+            "type": "string",
+            "description": "Partly hidden, such as `b•••@example.com`."
+          }
+        }
+      },
+      "CommandDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Sign the open revision.",
+            "required": [
+              "revision",
+              "consent",
+              "type"
+            ],
+            "properties": {
+              "consent": {
+                "$ref": "#/components/schemas/Consent"
+              },
+              "revision": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "ACCEPT"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "revision",
+              "type"
+            ],
+            "properties": {
+              "revision": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "DECLINE"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Take back a revision you sent, before it takes effect.",
+            "required": [
+              "revision",
+              "type"
+            ],
+            "properties": {
+              "revision": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "WITHDRAW"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Claim, confirm, dispute or waive a contribution. A dispute needs a\nreason, and a claim after a dispute needs a note.",
+            "required": [
+              "contribution",
+              "action",
+              "type"
+            ],
+            "properties": {
+              "action": {
+                "$ref": "#/components/schemas/Action"
+              },
+              "contribution": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "CONTRIBUTION"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The initiator confirms who claimed the invitation.",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "CONFIRM_COUNTERPARTY"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "PROPOSE_END"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "ACCEPT_END"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "CANCEL_END"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "REQUEST_CLOSE"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "RETRACT_CLOSE"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "note",
+              "type"
+            ],
+            "properties": {
+              "note": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "ADD_STATEMENT"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "Consent": {
+        "type": "object",
+        "description": "Which consent wording the signer was shown. Signing is refused unless it\nis the current version.",
+        "required": [
+          "language",
+          "version"
+        ],
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "The language the wording was shown in, as a supported language tag."
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "ContributionDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "from",
+          "type",
+          "description",
+          "due",
+          "required"
+        ],
+        "properties": {
+          "amount_minor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Whole minor units of the exchange's currency. Money only."
+          },
+          "completion_criteria": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "due": {
+            "$ref": "#/components/schemas/DueDto"
+          },
+          "from": {
+            "$ref": "#/components/schemas/Slot",
+            "description": "The party who owes it."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Chosen by the client for a new contribution; kept unchanged for one\ncarried over from an earlier revision."
+          },
+          "quantity": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/QuantityDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ContributionType"
+          }
+        }
+      },
+      "ContributionStatus": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        }
+      },
+      "ContributionType": {
+        "type": "string",
+        "enum": [
+          "ITEM",
+          "SERVICE",
+          "TASK",
+          "OTHER",
+          "MONEY"
+        ]
+      },
+      "CounterpartyDto": {
+        "type": "string",
+        "enum": [
+          "UNCLAIMED",
+          "CLAIMED",
+          "CONFIRMED"
+        ]
+      },
+      "CreateExchange": {
+        "type": "object",
+        "required": [
+          "timezone"
+        ],
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone name, such as `America/Chicago`. Due dates are read in it."
           }
         }
       },
@@ -410,15 +1297,11 @@
             "type": "string"
           },
           "language": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/Language",
-                "description": "Used only when this creates the account."
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The language the client is showing, as a tag such as `es-MX`. Used only\nwhen this creates the account; an unsupported one becomes the default."
           }
         }
       },
@@ -429,6 +1312,65 @@
           "COOKIE",
           "TOKEN"
         ]
+      },
+      "DueDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "A calendar date, `YYYY-MM-DD`, in the exchange's timezone.",
+            "required": [
+              "date",
+              "kind"
+            ],
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "DATE"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "When the agreement is accepted.",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "ON_AGREEMENT"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "When another contribution in the same revision is accepted.",
+            "required": [
+              "contribution",
+              "kind"
+            ],
+            "properties": {
+              "contribution": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "AFTER_CONTRIBUTION"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "When a contribution falls due."
       },
       "ErrorBody": {
         "type": "object",
@@ -459,18 +1401,251 @@
           "UNAUTHENTICATED",
           "ACCOUNT_SUSPENDED",
           "IDENTIFIER_IN_USE",
+          "VERSION_CONFLICT",
+          "PROFILE_INCOMPLETE",
+          "CONSENT_OUTDATED",
+          "INVITATION_UNAVAILABLE",
+          "INVITATION_NOT_FOR_YOU",
+          "IDEMPOTENCY_KEY_REUSED",
           "CLIENT_TOO_OLD",
           "NOT_FOUND",
           "SERVICE_UNAVAILABLE",
           "INTERNAL"
         ]
       },
-      "Language": {
-        "type": "string",
-        "enum": [
-          "en",
-          "es"
-        ]
+      "ExchangeSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_code",
+          "state",
+          "you",
+          "other_party_name",
+          "updated_at"
+        ],
+        "properties": {
+          "closed_outcome": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OutcomeDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "display_code": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "other_party_name": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/StateDto"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "you": {
+            "$ref": "#/components/schemas/Slot"
+          }
+        }
+      },
+      "ExchangeView": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_code",
+          "state",
+          "version",
+          "timezone",
+          "currency",
+          "you",
+          "counterparty",
+          "contributions"
+        ],
+        "properties": {
+          "claimant": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Claimant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "close_requested_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "close_requested_by": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Slot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closed_outcome": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OutcomeDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closed_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contributions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContributionStatus"
+            },
+            "description": "Status of each contribution in the agreement in force."
+          },
+          "counterparty": {
+            "$ref": "#/components/schemas/CounterpartyDto"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "display_code": {
+            "type": "string",
+            "description": "For telling exchanges apart. Not a credential."
+          },
+          "draft": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The viewer's own unsent working copy."
+          },
+          "end_proposed_by": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Slot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "in_force_revision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RevisionView",
+                "description": "The agreement currently binding, if any."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "open_revision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RevisionView",
+                "description": "The revision awaiting acceptance, if any."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/StateDto"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Send this back as `expected_version` with the next change."
+          },
+          "you": {
+            "$ref": "#/components/schemas/Slot",
+            "description": "Which side the viewer is."
+          }
+        }
+      },
+      "InvitationIssued": {
+        "type": "object",
+        "required": [
+          "invitation_token"
+        ],
+        "properties": {
+          "invitation_token": {
+            "type": "string"
+          }
+        }
+      },
+      "InvitationOptions": {
+        "type": "object",
+        "properties": {
+          "bound_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Names who the invitation is for: only an account that has verified\nthis email address or phone number can claim it."
+          }
+        }
+      },
+      "InvitationPreview": {
+        "type": "object",
+        "description": "What someone holding an invitation link sees before signing in.",
+        "required": [
+          "display_code",
+          "expires_at",
+          "bound",
+          "revision"
+        ],
+        "properties": {
+          "bound": {
+            "type": "boolean",
+            "description": "The invitation names a specific person."
+          },
+          "display_code": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/RevisionView"
+          }
+        }
+      },
+      "InvitationToken": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
       },
       "Meta": {
         "type": "object",
@@ -487,6 +1662,33 @@
           }
         }
       },
+      "OutcomeDto": {
+        "type": "string",
+        "enum": [
+          "NOT_AGREED",
+          "COMPLETED",
+          "ENDED_BY_AGREEMENT",
+          "UNRESOLVED"
+        ]
+      },
+      "QuantityDto": {
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "string",
+            "description": "A positive decimal number such as `2` or `1.5`."
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "RequestCode": {
         "type": "object",
         "required": [
@@ -496,6 +1698,169 @@
           "identifier": {
             "type": "string",
             "description": "An email address, or a phone number in international form."
+          }
+        }
+      },
+      "RevisionSent": {
+        "type": "object",
+        "required": [
+          "exchange"
+        ],
+        "properties": {
+          "exchange": {
+            "$ref": "#/components/schemas/ExchangeView"
+          },
+          "invitation_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The link token for the invited party, returned once, when the first\nrevision is sent. Only its hash is kept."
+          }
+        }
+      },
+      "RevisionTerms": {
+        "type": "object",
+        "description": "What a revision says: the part both parties sign.",
+        "required": [
+          "party_a_name",
+          "party_b_name",
+          "terms",
+          "contributions"
+        ],
+        "properties": {
+          "contributions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContributionDto"
+            }
+          },
+          "party_a_name": {
+            "type": "string"
+          },
+          "party_b_name": {
+            "type": "string"
+          },
+          "terms": {
+            "type": "string"
+          }
+        }
+      },
+      "RevisionView": {
+        "type": "object",
+        "required": [
+          "id",
+          "sequence",
+          "author",
+          "expires_at",
+          "accepted_by",
+          "content_hash",
+          "terms"
+        ],
+        "properties": {
+          "accepted_by": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Slot"
+            },
+            "description": "Who has signed it. The author always has."
+          },
+          "author": {
+            "$ref": "#/components/schemas/Slot"
+          },
+          "content_hash": {
+            "type": "string",
+            "description": "SHA-256 of the signed terms, in hex."
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "terms": {
+            "$ref": "#/components/schemas/RevisionTerms"
+          }
+        }
+      },
+      "RunCommand": {
+        "type": "object",
+        "required": [
+          "expected_version",
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "$ref": "#/components/schemas/CommandDto"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The exchange version the client last saw."
+          }
+        }
+      },
+      "SaveDraft": {
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "type": "object",
+            "description": "The client's working copy, stored as given."
+          }
+        }
+      },
+      "SendRevision": {
+        "type": "object",
+        "description": "Sending a revision signs it.",
+        "required": [
+          "expected_version",
+          "terms",
+          "consent"
+        ],
+        "properties": {
+          "consent": {
+            "$ref": "#/components/schemas/Consent"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The exchange version the client last saw."
+          },
+          "invitation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InvitationOptions",
+                "description": "Used when this is the first revision, which also issues the invitation."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A message to the other party. Not part of what is signed."
+          },
+          "terms": {
+            "$ref": "#/components/schemas/RevisionTerms"
           }
         }
       },
@@ -517,6 +1882,35 @@
           }
         }
       },
+      "Slot": {
+        "type": "string",
+        "description": "One side of the exchange. `A` is the initiator, `B` the invited counterparty.",
+        "enum": [
+          "A",
+          "B"
+        ]
+      },
+      "StateDto": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "NEGOTIATING",
+          "ACTIVE",
+          "CLOSED"
+        ]
+      },
+      "Status": {
+        "type": "string",
+        "description": "Where a contribution stands. Overdue is derived from `Pending` plus the due\ncondition; it is not a status.",
+        "enum": [
+          "PENDING",
+          "CLAIMED",
+          "DISPUTED",
+          "ACCEPTED",
+          "WAIVED",
+          "REMOVED"
+        ]
+      },
       "UpdateAccount": {
         "type": "object",
         "properties": {
@@ -535,14 +1929,11 @@
             "description": "1 to 100 characters."
           },
           "language": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/Language"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A language tag. A regional tag falls back to its base language; an\nunsupported language is refused."
           }
         }
       }

@@ -3,9 +3,13 @@
 //! Amendments are not actions here: they change contribution terms through a
 //! new revision accepted by both parties, and are handled at the revision level.
 
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+
 /// Where a contribution stands. Overdue is derived from `Pending` plus the due
 /// condition; it is not a status.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Status {
     Pending,
     Claimed,
@@ -25,7 +29,8 @@ pub enum Role {
     Recipient,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Action {
     /// Mark delivered. From `Disputed` this is a re-claim after remedy.
     Claim,

@@ -34,6 +34,16 @@ Erasure and retention deletes (`DESIGN.md` §14) are still open with counsel. Un
 
 One-time codes and sessions (`DESIGN.md` §8). A code is stored as a keyed hash (HMAC under `APP_SECRET`), because six digits are too few to protect with a plain hash; a session token is 256 random bits and stored as a SHA-256 hash. `backend/tests/auth.rs` exercises both through the HTTP endpoints.
 
+## 0003_exchange_projection
+
+What the exchange API needed beyond the first model. Each revision now records both party names as written, since they are part of what is signed. The exchange row gains the state the rules track between commands: a pending end proposal or close request, the inactivity prompt, and last activity. Indexes support the worker's timers.
+
+`backend/tests/exchanges.rs` and `backend/tests/timers.rs` drive the API against databases of their own, created fresh on each run, because agreement history cannot be deleted and so cannot be cleaned up.
+
+## 0004_any_language
+
+The first migration allowed only `en` and `es` as an account's language and as a signer's consent language. Which languages exist is decided by the wording files (`DESIGN.md` §4.2), and adding one must not need a migration, so the database now checks only that the value is shaped like a language tag.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

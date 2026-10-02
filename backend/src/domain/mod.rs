@@ -32,6 +32,10 @@ pub struct Rules {
     pub tier_one_threshold_minor: i64,
     /// How recent a one-time code must be to count as fresh at signing (§8).
     pub fresh_code_window: Duration,
+    /// How long an invitation link can be claimed (§8).
+    pub invitation_ttl: Duration,
+    /// Exchanges one account may create per day (§9). A placeholder.
+    pub exchanges_per_day: i64,
 }
 
 impl Default for Rules {
@@ -44,6 +48,8 @@ impl Default for Rules {
             note_max_chars: 1000,
             tier_one_threshold_minor: 50_000,
             fresh_code_window: Duration::minutes(10),
+            invitation_ttl: Duration::days(14),
+            exchanges_per_day: 20,
         }
     }
 }

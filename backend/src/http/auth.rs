@@ -9,12 +9,13 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::account::{self, Account, Language};
+use super::account::{self, Account};
 use super::extract::{ApiJson, SESSION_COOKIE, Session, require_web_origin};
 use super::{AppState, Settings};
 use crate::auth;
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
+use crate::languages;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RequestCode {
@@ -68,8 +69,9 @@ pub struct CreateSession {
     /// The one-time code sent to the identifier.
     pub code: String,
     pub delivery: Delivery,
-    /// Used only when this creates the account.
-    pub language: Option<Language>,
+    /// The language the client is showing, as a tag such as `es-MX`. Used only
+    /// when this creates the account; an unsupported one becomes the default.
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -130,14 +132,18 @@ pub async fn create_session(
         Some((_, status)) if status != "ACTIVE" => return Err(ErrorCode::AccountSuspended.into()),
         Some((id, _)) => id,
         None => {
-            let language = body.language.unwrap_or(Language::En);
+            let language = body
+                .language
+                .as_deref()
+                .and_then(languages::resolve)
+                .unwrap_or(languages::default());
             sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
                 "INSERT INTO account ({column}, display_name, language)
                  VALUES ($1, '', $2)
                  RETURNING id"
             )))
             .bind(identifier.as_str())
-            .bind(language.as_str())
+            .bind(language)
             .fetch_one(&mut *tx)
             .await?
         }

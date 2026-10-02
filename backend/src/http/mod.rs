@@ -7,10 +7,12 @@ use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 
 use crate::auth::{AuthRules, CodeSender};
+use crate::domain::Rules;
 use crate::error::{ErrorBody, ErrorCode};
 
 pub mod account;
 pub mod auth;
+pub mod exchanges;
 pub mod extract;
 pub mod health;
 pub mod v1;
@@ -20,6 +22,9 @@ pub struct Settings {
     pub app_secret: Vec<u8>,
     pub web_origin: String,
     pub auth: AuthRules,
+    pub rules: Rules,
+    /// The version of the consent wording a signer must have been shown.
+    pub consent_version: String,
 }
 
 #[derive(Clone)]
@@ -51,6 +56,15 @@ pub fn router(state: AppState) -> Router {
         account::me,
         account::update_me,
         account::add_identifier,
+        exchanges::create,
+        exchanges::list,
+        exchanges::get,
+        exchanges::save_draft,
+        exchanges::send_revision,
+        exchanges::run_command,
+        exchanges::reissue_invitation,
+        exchanges::preview_invitation,
+        exchanges::claim_invitation,
     ),
     components(schemas(ErrorBody, ErrorCode))
 )]

@@ -1,0 +1,917 @@
+//! What the exchange endpoints do: check who is asking, run the domain rules,
+//! and store the result, all in one transaction per request.
+
+use serde_json::Value;
+use sqlx::{PgConnection, PgPool};
+use time::OffsetDateTime;
+use uuid::Uuid;
+
+use super::dto::{
+    Claimant, CommandDto, Consent, CreateExchange, ExchangeSummary, ExchangeView, InvitationIssued,
+    InvitationOptions, InvitationPreview, RevisionSent, RevisionView, RunCommand, SendRevision,
+    rfc3339, state_dto,
+};
+use super::repo::{self, Aggregate, NewRevision};
+use crate::auth;
+use crate::domain::Rules;
+use crate::domain::canonical::content_hash;
+use crate::domain::contribution::{Action, Status};
+use crate::domain::exchange::{self, Actor, Command, Counterparty, Decision, State, decide};
+use crate::domain::identity::Identifier;
+use crate::domain::invitation;
+use crate::domain::revision::{ContributionId, RevisionId, Slot};
+use crate::domain::risk::{Tier, required_tier};
+use crate::error::{ApiError, ErrorCode};
+use crate::http::Settings;
+use crate::http::extract::Session;
+use crate::languages;
+
+/// A request body's digest together with the caller's idempotency key.
+pub struct Idempotency<'a> {
+    pub key: Option<&'a str>,
+    pub digest: [u8; 32],
+}
+
+fn now() -> OffsetDateTime {
+    OffsetDateTime::now_utc()
+}
+
+fn is_violation(error: &sqlx::Error, sqlstate: &str) -> bool {
+    error
+        .as_database_error()
+        .is_some_and(|e| e.code().as_deref() == Some(sqlstate))
+}
+
+// ---- Shared steps -----------------------------------------------------------
+
+/// Loads an exchange for one of its participants. Anyone else is told it
+/// does not exist.
+async fn open_for(
+    conn: &mut PgConnection,
+    id: Uuid,
+    account: Uuid,
+    lock: bool,
+) -> Result<(Aggregate, Slot), ApiError> {
+    let aggregate = repo::load(conn, id, lock)
+        .await?
+        .ok_or(ErrorCode::NotFound)?;
+    let slot = aggregate.slot_of(account).ok_or(ErrorCode::NotFound)?;
+    Ok((aggregate, slot))
+}
+
+/// Records the idempotency key in the same transaction as the change it
+/// guards. Returns `true` when this key has already been applied, in which
+/// case the caller answers with the current state instead of acting again.
+async fn already_applied(
+    conn: &mut PgConnection,
+    account: Uuid,
+    idempotency: &Idempotency<'_>,
+) -> Result<bool, ApiError> {
+    let Some(key) = idempotency.key else {
+        return Ok(false);
+    };
+    let inserted = sqlx::query(
+        "INSERT INTO idempotency_key (account_id, key, request_hash, response_status)
+         VALUES ($1, $2, $3, 200)
+         ON CONFLICT (account_id, key) DO NOTHING",
+    )
+    .bind(account)
+    .bind(key)
+    .bind(idempotency.digest.as_slice())
+    .execute(&mut *conn)
+    .await?
+    .rows_affected();
+    if inserted == 1 {
+        return Ok(false);
+    }
+
+    let stored: Vec<u8> = sqlx::query_scalar(
+        "SELECT request_hash FROM idempotency_key WHERE account_id = $1 AND key = $2",
+    )
+    .bind(account)
+    .bind(key)
+    .fetch_one(&mut *conn)
+    .await?;
+    if stored == idempotency.digest {
+        Ok(true)
+    } else {
+        Err(ErrorCode::IdempotencyKeyReused.into())
+    }
+}
+
+/// Signing needs a named adult and the current consent wording
+/// (DESIGN.md §14.1).
+async fn require_signer(
+    conn: &mut PgConnection,
+    session: &Session,
+    consent: &Consent,
+    settings: &Settings,
+) -> Result<&'static str, ApiError> {
+    let (display_name, adult): (String, bool) = sqlx::query_as(
+        "SELECT display_name, adult_confirmed_at IS NOT NULL FROM account WHERE id = $1",
+    )
+    .bind(session.account_id)
+    .fetch_one(&mut *conn)
+    .await?;
+    if display_name.is_empty() || !adult {
+        return Err(ErrorCode::ProfileIncomplete.into());
+    }
+    if consent.version != settings.consent_version {
+        return Err(ErrorCode::ConsentOutdated.into());
+    }
+    // The record must name a language the consent wording exists in.
+    languages::resolve(&consent.language).ok_or_else(|| ErrorCode::InvalidRequest.into())
+}
+
+struct Signature<'a> {
+    exchange: Uuid,
+    revision: Uuid,
+    slot: Slot,
+    content_hash: &'a [u8],
+    /// The supported language the consent wording was shown in.
+    consent_language: &'a str,
+    consent_version: &'a str,
+    user_agent: Option<&'a str>,
+}
+
+async fn record_signature(
+    conn: &mut PgConnection,
+    session: &Session,
+    signature: Signature<'_>,
+    at: OffsetDateTime,
+) -> Result<(), sqlx::Error> {
+    let acceptance: Uuid = sqlx::query_scalar(
+        "INSERT INTO acceptance
+            (exchange_id, revision_id, slot, account_id, content_hash, auth_method,
+             authenticated_at, consent_language, consent_version, accepted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING id",
+    )
+    .bind(signature.exchange)
+    .bind(signature.revision)
+    .bind(signature.slot.as_str())
+    .bind(session.account_id)
+    .bind(signature.content_hash)
+    .bind(&session.auth_method)
+    .bind(session.authenticated_at)
+    .bind(signature.consent_language)
+    .bind(signature.consent_version)
+    .bind(at)
+    .fetch_one(&mut *conn)
+    .await?;
+
+    // Kept apart so it can be purged after 90 days. The network address is
+    // left empty until the deployment says which proxy header to trust.
+    sqlx::query(
+        "INSERT INTO acceptance_network_metadata (acceptance_id, user_agent) VALUES ($1, $2)",
+    )
+    .bind(acceptance)
+    .bind(signature.user_agent)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+async fn view(conn: &mut PgConnection, id: Uuid, account: Uuid) -> Result<ExchangeView, ApiError> {
+    let (aggregate, you) = open_for(conn, id, account, false).await?;
+
+    // The initiator is shown who claimed the invitation until they confirm.
+    let claimant = match (you, aggregate.exchange.counterparty, aggregate.accounts[1]) {
+        (Slot::A, Counterparty::Claimed, Some(other)) => {
+            let (display_name, email, phone): (String, Option<String>, Option<String>) =
+                sqlx::query_as("SELECT display_name, email, phone FROM account WHERE id = $1")
+                    .bind(other)
+                    .fetch_one(&mut *conn)
+                    .await?;
+            let identifier = email
+                .map(Identifier::Email)
+                .or(phone.map(Identifier::Phone))
+                .map(|identifier| identifier.masked())
+                .unwrap_or_default();
+            Some(Claimant {
+                display_name,
+                identifier,
+            })
+        }
+        _ => None,
+    };
+
+    let draft: Option<Value> = sqlx::query_scalar(
+        "SELECT body FROM exchange_draft WHERE exchange_id = $1 AND account_id = $2",
+    )
+    .bind(id)
+    .bind(account)
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    Ok(ExchangeView::build(&aggregate, you, claimant, draft))
+}
+
+// ---- Creating, listing, viewing ---------------------------------------------
+
+/// Letters and digits that are hard to confuse when read aloud or copied.
+const CODE_ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+
+fn display_code() -> String {
+    let mut code = String::with_capacity(9);
+    for position in 0..8 {
+        if position == 4 {
+            code.push('-');
+        }
+        let n = getrandom::u32().expect("the operating system provides randomness") as usize;
+        code.push(CODE_ALPHABET[n % CODE_ALPHABET.len()] as char);
+    }
+    code
+}
+
+pub async fn create(
+    db: &PgPool,
+    rules: &Rules,
+    session: &Session,
+    body: CreateExchange,
+) -> Result<ExchangeView, ApiError> {
+    let mut tx = db.begin().await?;
+
+    let recent: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM exchange
+         WHERE created_by = $1 AND created_at > now() - interval '1 day'",
+    )
+    .bind(session.account_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if recent >= rules.exchanges_per_day {
+        return Err(ErrorCode::TooManyRequests.into());
+    }
+
+    let known_timezone: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = $1)")
+            .bind(&body.timezone)
+            .fetch_one(&mut *tx)
+            .await?;
+    if !known_timezone {
+        return Err(ErrorCode::InvalidRequest.into());
+    }
+
+    // A display code is short, so a clash is possible; try again with another.
+    let mut id = None;
+    for _ in 0..5 {
+        id = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO exchange (display_code, timezone, created_by)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (display_code) DO NOTHING
+             RETURNING id",
+        )
+        .bind(display_code())
+        .bind(&body.timezone)
+        .bind(session.account_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if id.is_some() {
+            break;
+        }
+    }
+    let id = id.ok_or(ErrorCode::Internal)?;
+
+    sqlx::query(
+        "INSERT INTO participant (exchange_id, slot, account_id, display_name, alias)
+         VALUES ($1, 'A', $2, (SELECT display_name FROM account WHERE id = $2), ''),
+                ($1, 'B', NULL, '', '')",
+    )
+    .bind(id)
+    .bind(session.account_id)
+    .execute(&mut *tx)
+    .await?;
+
+    let view = view(&mut tx, id, session.account_id).await?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+/// id, display code, state, closed outcome, closed reason, the caller's slot,
+/// the other party's name, last change.
+type SummaryRow = (
+    Uuid,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    String,
+    String,
+    OffsetDateTime,
+);
+
+pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>, ApiError> {
+    let rows: Vec<SummaryRow> = sqlx::query_as(
+        "SELECT e.id, e.display_code, e.state, e.closed_outcome, e.closed_reason,
+                    mine.slot, other.display_name, e.updated_at
+             FROM participant mine
+             JOIN exchange e ON e.id = mine.exchange_id
+             JOIN participant other ON other.exchange_id = e.id AND other.slot <> mine.slot
+             WHERE mine.account_id = $1
+             ORDER BY e.updated_at DESC
+             LIMIT 100",
+    )
+    .bind(session.account_id)
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(id, display_code, state, outcome, reason, slot, other, updated_at)| {
+                let (state, closed_outcome) = state_dto(repo::parse_state(
+                    &state,
+                    outcome.as_deref(),
+                    reason.as_deref(),
+                ));
+                ExchangeSummary {
+                    id,
+                    display_code,
+                    state,
+                    closed_outcome,
+                    you: if slot == "A" { Slot::A } else { Slot::B },
+                    other_party_name: other,
+                    updated_at: rfc3339(updated_at),
+                }
+            },
+        )
+        .collect())
+}
+
+pub async fn get(db: &PgPool, session: &Session, id: Uuid) -> Result<ExchangeView, ApiError> {
+    let mut conn = db.acquire().await?;
+    view(&mut conn, id, session.account_id).await
+}
+
+/// Saves the caller's working copy. Private to them and never binding.
+pub async fn save_draft(
+    db: &PgPool,
+    session: &Session,
+    id: Uuid,
+    body: Value,
+) -> Result<(), ApiError> {
+    let mut tx = db.begin().await?;
+    let (aggregate, _) = open_for(&mut tx, id, session.account_id, false).await?;
+    if matches!(aggregate.exchange.state, State::Closed(_)) {
+        return Err(ErrorCode::ActionNotAllowed.into());
+    }
+    sqlx::query(
+        "INSERT INTO exchange_draft (exchange_id, account_id, body) VALUES ($1, $2, $3)
+         ON CONFLICT (exchange_id, account_id) DO UPDATE SET body = $3, updated_at = now()",
+    )
+    .bind(id)
+    .bind(session.account_id)
+    .bind(body)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+// ---- Sending a revision -----------------------------------------------------
+
+async fn issue_invitation(
+    conn: &mut PgConnection,
+    exchange: Uuid,
+    options: Option<InvitationOptions>,
+    rules: &Rules,
+    at: OffsetDateTime,
+) -> Result<String, ApiError> {
+    let bound = match options.and_then(|options| options.bound_to) {
+        Some(text) => Some(Identifier::parse(&text)?),
+        None => None,
+    };
+    let (email, phone) = match &bound {
+        Some(Identifier::Email(email)) => (Some(email.as_str()), None),
+        Some(Identifier::Phone(phone)) => (None, Some(phone.as_str())),
+        None => (None, None),
+    };
+
+    let token = auth::generate_token();
+    sqlx::query(
+        "INSERT INTO invitation (exchange_id, token_hash, bound_email, bound_phone, expires_at)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(exchange)
+    .bind(auth::token_hash(&token).as_slice())
+    .bind(email)
+    .bind(phone)
+    .bind(at + rules.invitation_ttl)
+    .execute(&mut *conn)
+    .await?;
+    Ok(token)
+}
+
+pub async fn send_revision(
+    db: &PgPool,
+    settings: &Settings,
+    session: &Session,
+    id: Uuid,
+    idempotency: Idempotency<'_>,
+    user_agent: Option<&str>,
+    body: SendRevision,
+) -> Result<RevisionSent, ApiError> {
+    let at = now();
+    let mut tx = db.begin().await?;
+    let (aggregate, slot) = open_for(&mut tx, id, session.account_id, true).await?;
+
+    if already_applied(&mut tx, session.account_id, &idempotency).await? {
+        // The token was shown once, the first time; it cannot be shown again.
+        let exchange = view(&mut tx, id, session.account_id).await?;
+        return Ok(RevisionSent {
+            exchange,
+            invitation_token: None,
+        });
+    }
+    if body.expected_version != aggregate.version {
+        return Err(ErrorCode::VersionConflict.into());
+    }
+    let consent_language = require_signer(&mut tx, session, &body.consent, settings).await?;
+
+    let revision = body.terms.into_domain(body.note)?;
+    let revision_id = Uuid::new_v4();
+    let decision = decide(
+        &aggregate.exchange,
+        Actor::Party(slot),
+        Command::Send {
+            id: RevisionId(revision_id),
+            revision: revision.clone(),
+        },
+        at,
+        &settings.rules,
+    )?;
+    let expires_at = decision
+        .exchange
+        .open
+        .as_ref()
+        .expect("sending leaves the revision open")
+        .expires_at;
+    let hash = content_hash(aggregate.id, &aggregate.currency, &revision);
+
+    repo::insert_revision(
+        &mut tx,
+        NewRevision {
+            id: revision_id,
+            exchange: &aggregate,
+            author: slot,
+            expires_at,
+            content_hash: hash,
+            revision: &revision,
+        },
+    )
+    .await
+    .map_err(|error| {
+        // A contribution ID that belongs to a different exchange.
+        if is_violation(&error, "23503") {
+            ApiError::from(ErrorCode::InvalidRevision)
+        } else {
+            error.into()
+        }
+    })?;
+
+    // Sending is signing.
+    record_signature(
+        &mut tx,
+        session,
+        Signature {
+            exchange: id,
+            revision: revision_id,
+            slot,
+            content_hash: &hash,
+            consent_language,
+            consent_version: &body.consent.version,
+            user_agent,
+        },
+        at,
+    )
+    .await?;
+
+    // The participant rows follow the names in the latest revision.
+    for (party, name) in [("A", &revision.party_a), ("B", &revision.party_b)] {
+        sqlx::query(
+            "UPDATE participant SET display_name = $3 WHERE exchange_id = $1 AND slot = $2",
+        )
+        .bind(id)
+        .bind(party)
+        .bind(name)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    // The tier only ever goes up.
+    let tier = required_tier(&revision, false, settings.rules.tier_one_threshold_minor);
+    if tier == Tier::One {
+        sqlx::query("UPDATE exchange SET risk_tier = greatest(risk_tier, 1) WHERE id = $1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    sqlx::query("DELETE FROM exchange_draft WHERE exchange_id = $1 AND account_id = $2")
+        .bind(id)
+        .bind(session.account_id)
+        .execute(&mut *tx)
+        .await?;
+
+    repo::persist(&mut tx, &aggregate, &decision, Actor::Party(slot), None, at).await?;
+
+    // The first revision opens the negotiation, which needs someone to invite.
+    let invitation_token = if aggregate.exchange.state == State::Draft {
+        Some(issue_invitation(&mut tx, id, body.invitation, &settings.rules, at).await?)
+    } else {
+        None
+    };
+
+    let exchange = view(&mut tx, id, session.account_id).await?;
+    tx.commit().await?;
+    Ok(RevisionSent {
+        exchange,
+        invitation_token,
+    })
+}
+
+// ---- Commands ---------------------------------------------------------------
+
+fn non_empty(note: Option<String>) -> Option<String> {
+    note.map(|n| n.trim().to_owned()).filter(|n| !n.is_empty())
+}
+
+pub async fn run_command(
+    db: &PgPool,
+    settings: &Settings,
+    session: &Session,
+    id: Uuid,
+    idempotency: Idempotency<'_>,
+    user_agent: Option<&str>,
+    body: RunCommand,
+) -> Result<ExchangeView, ApiError> {
+    let at = now();
+    let mut tx = db.begin().await?;
+    let (aggregate, slot) = open_for(&mut tx, id, session.account_id, true).await?;
+
+    if already_applied(&mut tx, session.account_id, &idempotency).await? {
+        return view(&mut tx, id, session.account_id).await;
+    }
+    if body.expected_version != aggregate.version {
+        return Err(ErrorCode::VersionConflict.into());
+    }
+
+    let mut signing = None;
+    let (command, note) = match body.command {
+        CommandDto::Accept { revision, consent } => {
+            let language = require_signer(&mut tx, session, &consent, settings).await?;
+            signing = Some((language, consent.version));
+            (
+                Command::Accept {
+                    revision: RevisionId(revision),
+                },
+                None,
+            )
+        }
+        CommandDto::Decline { revision } => (
+            Command::Decline {
+                revision: RevisionId(revision),
+            },
+            None,
+        ),
+        CommandDto::Withdraw { revision } => (
+            Command::Withdraw {
+                revision: RevisionId(revision),
+            },
+            None,
+        ),
+        CommandDto::Contribution {
+            contribution,
+            action,
+            note,
+        } => {
+            let contribution = ContributionId(contribution);
+            let note = non_empty(note);
+            // A dispute must say why, and a claim after a dispute must say
+            // what was done about it.
+            let reclaim = action == Action::Claim
+                && aggregate.exchange.statuses.get(&contribution) == Some(&Status::Disputed);
+            if (action == Action::Dispute || reclaim) && note.is_none() {
+                return Err(ErrorCode::InvalidRequest.into());
+            }
+            (
+                Command::Contribution {
+                    id: contribution,
+                    action,
+                },
+                note,
+            )
+        }
+        CommandDto::ConfirmCounterparty => (Command::ConfirmCounterparty, None),
+        CommandDto::ProposeEnd => (Command::ProposeEnd, None),
+        CommandDto::AcceptEnd => (Command::AcceptEnd, None),
+        CommandDto::CancelEnd => (Command::CancelEnd, None),
+        CommandDto::RequestClose { note } => (Command::RequestClose, non_empty(note)),
+        CommandDto::RetractClose => (Command::RetractClose, None),
+        CommandDto::AddStatement { note } => {
+            let note = non_empty(Some(note)).ok_or(ErrorCode::InvalidRequest)?;
+            (Command::AddStatement, Some(note))
+        }
+    };
+
+    let actor = Actor::Party(slot);
+    let decision = decide(&aggregate.exchange, actor, command, at, &settings.rules)?;
+
+    if let Some((consent_language, consent_version)) = &signing {
+        let open = aggregate
+            .open
+            .as_ref()
+            .expect("an accepted revision was open");
+        record_signature(
+            &mut tx,
+            session,
+            Signature {
+                exchange: id,
+                revision: open.id,
+                slot,
+                content_hash: &open.content_hash,
+                consent_language,
+                consent_version,
+                user_agent,
+            },
+            at,
+        )
+        .await?;
+    }
+
+    repo::persist(&mut tx, &aggregate, &decision, actor, note.as_deref(), at).await?;
+
+    let view = view(&mut tx, id, session.account_id).await?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+// ---- Invitations ------------------------------------------------------------
+
+/// Replaces the invitation link, for when it was lost, expired or sent to
+/// the wrong person. The old link stops working.
+pub async fn reissue_invitation(
+    db: &PgPool,
+    rules: &Rules,
+    session: &Session,
+    id: Uuid,
+    options: Option<InvitationOptions>,
+) -> Result<InvitationIssued, ApiError> {
+    let at = now();
+    let mut tx = db.begin().await?;
+    let (aggregate, slot) = open_for(&mut tx, id, session.account_id, true).await?;
+    if slot != Slot::A {
+        return Err(ErrorCode::WrongActor.into());
+    }
+    if aggregate.exchange.state != State::Negotiating
+        || aggregate.exchange.counterparty != Counterparty::Unclaimed
+    {
+        return Err(ErrorCode::ActionNotAllowed.into());
+    }
+
+    sqlx::query(
+        "UPDATE invitation SET revoked_at = $2
+         WHERE exchange_id = $1 AND claimed_by IS NULL AND revoked_at IS NULL",
+    )
+    .bind(id)
+    .bind(at)
+    .execute(&mut *tx)
+    .await?;
+    let invitation_token = issue_invitation(&mut tx, id, options, rules, at).await?;
+
+    tx.commit().await?;
+    Ok(InvitationIssued { invitation_token })
+}
+
+struct InvitationRow {
+    id: Uuid,
+    exchange: Uuid,
+    record: invitation::Invitation,
+    claimed_by: Option<Uuid>,
+}
+
+async fn find_invitation(
+    conn: &mut PgConnection,
+    token: &str,
+    lock: bool,
+) -> Result<Option<InvitationRow>, sqlx::Error> {
+    type Row = (
+        Uuid,
+        Uuid,
+        Option<String>,
+        Option<String>,
+        OffsetDateTime,
+        Option<Uuid>,
+        Option<OffsetDateTime>,
+    );
+    let query = format!(
+        "SELECT id, exchange_id, bound_email, bound_phone, expires_at, claimed_by, revoked_at
+         FROM invitation WHERE token_hash = $1 {}",
+        if lock { "FOR UPDATE" } else { "" }
+    );
+    let row: Option<Row> = sqlx::query_as(sqlx::AssertSqlSafe(query))
+        .bind(auth::token_hash(token.trim()).as_slice())
+        .fetch_optional(&mut *conn)
+        .await?;
+
+    Ok(row.map(
+        |(id, exchange, email, phone, expires_at, claimed_by, revoked_at)| InvitationRow {
+            id,
+            exchange,
+            record: invitation::Invitation {
+                expires_at,
+                claimed: claimed_by.is_some(),
+                revoked: revoked_at.is_some(),
+                bound_to: email
+                    .map(Identifier::Email)
+                    .or(phone.map(Identifier::Phone)),
+            },
+            claimed_by,
+        },
+    ))
+}
+
+/// What the holder of an invitation link may read before signing in: the
+/// proposal itself. Every way a link can be dead gives the same answer.
+pub async fn preview_invitation(db: &PgPool, token: &str) -> Result<InvitationPreview, ApiError> {
+    let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
+    let mut conn = db.acquire().await?;
+
+    let found = find_invitation(&mut conn, token, false)
+        .await?
+        .ok_or_else(unavailable)?;
+    let invitation = &found.record;
+    if invitation.revoked || invitation.claimed || now() >= invitation.expires_at {
+        return Err(unavailable());
+    }
+
+    let aggregate = repo::load(&mut conn, found.exchange, false)
+        .await?
+        .ok_or_else(unavailable)?;
+    let open = match (&aggregate.exchange.state, &aggregate.open) {
+        (State::Negotiating, Some(open)) => open,
+        _ => return Err(unavailable()),
+    };
+
+    Ok(InvitationPreview {
+        display_code: aggregate.display_code.clone(),
+        expires_at: rfc3339(invitation.expires_at),
+        bound: invitation.bound_to.is_some(),
+        revision: RevisionView::from_record(open),
+    })
+}
+
+/// The signed-in account takes the invited party's place in the exchange.
+pub async fn claim_invitation(
+    db: &PgPool,
+    rules: &Rules,
+    session: &Session,
+    token: &str,
+) -> Result<ExchangeView, ApiError> {
+    let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
+    let at = now();
+    let account = session.account_id;
+    let mut tx = db.begin().await?;
+
+    // Find the exchange first, so the locks are always taken in the same
+    // order as everywhere else: the exchange, then the invitation.
+    let exchange = find_invitation(&mut tx, token, false)
+        .await?
+        .ok_or_else(unavailable)?
+        .exchange;
+    let aggregate = repo::load(&mut tx, exchange, true)
+        .await?
+        .ok_or_else(unavailable)?;
+    let found = find_invitation(&mut tx, token, true)
+        .await?
+        .ok_or_else(unavailable)?;
+
+    // Claiming twice with the same account is harmless.
+    if found.claimed_by == Some(account) {
+        return view(&mut tx, exchange, account).await;
+    }
+
+    let initiator = aggregate.accounts[0];
+    let (email, phone): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT email, phone FROM account WHERE id = $1")
+            .bind(account)
+            .fetch_one(&mut *tx)
+            .await?;
+    let blocked: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM account_block
+                        WHERE (blocker_account_id = $1 AND blocked_account_id = $2)
+                           OR (blocker_account_id = $2 AND blocked_account_id = $1))",
+    )
+    .bind(account)
+    .bind(initiator)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let claimant = invitation::Claimant {
+        email,
+        phone,
+        is_initiator: initiator == Some(account),
+        blocked,
+    };
+    let claim = invitation::claim(&found.record, &claimant, at).map_err(|refusal| {
+        ApiError::from(match refusal {
+            invitation::Refusal::OwnInvitation => ErrorCode::ActionNotAllowed,
+            invitation::Refusal::BoundToSomeoneElse => ErrorCode::InvitationNotForYou,
+            // Dead links, and blocks, all look the same from outside.
+            _ => ErrorCode::InvitationUnavailable,
+        })
+    })?;
+
+    let actor = Actor::Party(Slot::B);
+    let command = Command::ClaimCounterparty {
+        pre_bound: claim.pre_bound,
+    };
+    let decision: Decision = decide(&aggregate.exchange, actor, command, at, rules).map_err(
+        |refusal| match refusal {
+            exchange::Refusal::NotAllowed => unavailable(),
+            other => other.into(),
+        },
+    )?;
+
+    sqlx::query("UPDATE participant SET account_id = $2 WHERE exchange_id = $1 AND slot = 'B'")
+        .bind(exchange)
+        .bind(account)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE invitation SET claimed_by = $2, claimed_at = $3 WHERE id = $1")
+        .bind(found.id)
+        .bind(account)
+        .bind(at)
+        .execute(&mut *tx)
+        .await?;
+    repo::persist(&mut tx, &aggregate, &decision, actor, None, at).await?;
+
+    let view = view(&mut tx, exchange, account).await?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+// ---- Timers -----------------------------------------------------------------
+
+/// Runs every timer that has come due: expired revisions, lapsed close
+/// requests, and the inactivity prompt and closure. Returns how many
+/// exchanges changed. Called by the worker.
+pub async fn run_timers(
+    db: &PgPool,
+    rules: &Rules,
+    at: OffsetDateTime,
+) -> Result<usize, sqlx::Error> {
+    let due: [(&str, Command, OffsetDateTime); 4] = [
+        (
+            "SELECT e.id FROM exchange e JOIN revision r ON r.id = e.open_revision_id
+             WHERE r.expires_at <= $1",
+            Command::ExpireRevision,
+            at,
+        ),
+        (
+            "SELECT id FROM exchange WHERE close_requested_at <= $1",
+            Command::LapseCloseRequest,
+            at - rules.close_response_window,
+        ),
+        (
+            "SELECT id FROM exchange
+             WHERE state = 'ACTIVE' AND inactivity_prompted_at IS NULL AND last_activity_at <= $1",
+            Command::PromptInactivity,
+            at - rules.inactivity_prompt_after,
+        ),
+        (
+            "SELECT id FROM exchange WHERE inactivity_prompted_at <= $1",
+            Command::CloseInactive,
+            at - rules.inactivity_close_after,
+        ),
+    ];
+
+    let mut changed = 0;
+    for (candidates, command, cutoff) in due {
+        let ids: Vec<Uuid> = sqlx::query_scalar(candidates)
+            .bind(cutoff)
+            .fetch_all(db)
+            .await?;
+        for id in ids {
+            let mut tx = db.begin().await?;
+            let Some(aggregate) = repo::load(&mut tx, id, true).await? else {
+                continue;
+            };
+            // The query is only a shortlist; the rules have the last word, and
+            // the exchange may have moved on since it was listed.
+            let Ok(decision) = decide(
+                &aggregate.exchange,
+                Actor::System,
+                command.clone(),
+                at,
+                rules,
+            ) else {
+                continue;
+            };
+            repo::persist(&mut tx, &aggregate, &decision, Actor::System, None, at).await?;
+            tx.commit().await?;
+            changed += 1;
+        }
+    }
+    Ok(changed)
+}
