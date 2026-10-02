@@ -10,6 +10,129 @@
     "connected": "Conectado al servicio.",
     "unreachable": "No se puede conectar con el servicio en este momento."
   },
+  "notifications": {
+    "email": {
+      "layout": "{body}\n\nAbre el intercambio: {link}\n\nRecibes este correo porque eres parte del intercambio {code} en {productName}. Estos correos nunca incluyen los términos; inicia sesión para verlos.",
+      "messages": {
+        "INVITATION_CLAIMED": {
+          "subject": "La persona que invitaste se unió ({code})",
+          "body": "La persona que invitaste abrió tu invitación y se unió al intercambio. Ya puede revisar los términos que enviaste."
+        },
+        "INVITATION_CLAIMED_UNCONFIRMED": {
+          "subject": "Confirma quién se unió a tu intercambio ({code})",
+          "body": "Alguien usó tu enlace de invitación para unirse al intercambio. Comprueba que sea la persona a la que querías invitar y confírmala. No se puede acordar nada hasta que lo hagas."
+        },
+        "COUNTERPARTY_CONFIRMED": {
+          "subject": "Te confirmaron ({code})",
+          "body": "La otra parte confirmó que eres la persona a la que invitó. Ya pueden llegar a un acuerdo."
+        },
+        "REVISION_SENT": {
+          "subject": "Hay nuevos términos para revisar ({code})",
+          "body": "La otra parte envió nuevos términos. Revísalos y luego acéptalos, recházalos o envía los tuyos."
+        },
+        "AMENDMENT_PROPOSED": {
+          "subject": "Se propone un cambio en tu acuerdo ({code})",
+          "body": "La otra parte propuso un cambio en el acuerdo. El acuerdo sigue como está a menos que aceptes el cambio."
+        },
+        "ACCEPTANCE_WAITING": {
+          "subject": "Los términos fueron aceptados y esperan tu confirmación ({code})",
+          "body": "La otra parte aceptó los términos. Su aceptación tendrá efecto cuando confirmes que es la persona a la que querías invitar."
+        },
+        "AGREEMENT_IN_FORCE": {
+          "subject": "Tu acuerdo está en vigor ({code})",
+          "body": "Ambas partes aceptaron los mismos términos, así que el acuerdo ya está en vigor. Puedes llevar el registro de lo que entrega cada parte."
+        },
+        "AMENDMENT_IN_FORCE": {
+          "subject": "Se aceptó el cambio en tu acuerdo ({code})",
+          "body": "La otra parte aceptó el cambio que propusiste. Ya forma parte del acuerdo."
+        },
+        "AMENDMENT_DECLINED": {
+          "subject": "Se rechazó el cambio que propusiste ({code})",
+          "body": "La otra parte rechazó el cambio que propusiste. El acuerdo sigue como estaba."
+        },
+        "AMENDMENT_WITHDRAWN": {
+          "subject": "Se retiró un cambio propuesto ({code})",
+          "body": "La otra parte retiró el cambio que había propuesto. El acuerdo sigue como estaba."
+        },
+        "AMENDMENT_EXPIRED": {
+          "subject": "Venció un cambio propuesto ({code})",
+          "body": "Un cambio propuesto en tu acuerdo venció antes de ser aceptado. El acuerdo sigue como estaba."
+        },
+        "DELIVERY_CLAIMED": {
+          "subject": "Algo se marcó como entregado ({code})",
+          "body": "La otra parte marcó como entregada una de sus contribuciones. Revísala y luego confírmala o abre una disputa."
+        },
+        "CLAIM_RETRACTED": {
+          "subject": "Se desmarcó una entrega ({code})",
+          "body": "La otra parte retiró su aviso de que una contribución estaba entregada. Por ahora no tienes nada que revisar."
+        },
+        "DELIVERY_CONFIRMED": {
+          "subject": "Se confirmó una entrega ({code})",
+          "body": "La otra parte confirmó que recibió una de tus contribuciones."
+        },
+        "DISPUTE_OPENED": {
+          "subject": "Se disputó una entrega ({code})",
+          "body": "La otra parte disputó una contribución que marcaste como entregada. Lee su motivo en el intercambio y responde."
+        },
+        "CONTRIBUTION_WAIVED": {
+          "subject": "Se renunció a una contribución ({code})",
+          "body": "La otra parte renunció a una de tus contribuciones. Ya no se espera que la entregues."
+        },
+        "END_PROPOSED": {
+          "subject": "Una propuesta para terminar tu intercambio ({code})",
+          "body": "La otra parte propuso terminar el intercambio de común acuerdo. Si aceptas, todo lo que siga pendiente queda liberado."
+        },
+        "END_PROPOSAL_CANCELLED": {
+          "subject": "Se canceló la propuesta para terminar tu intercambio ({code})",
+          "body": "Se canceló la propuesta de terminar el intercambio de común acuerdo. El intercambio continúa como antes."
+        },
+        "CLOSE_REQUESTED": {
+          "subject": "La otra parte pidió cerrar tu intercambio ({code})",
+          "body": "La otra parte pidió cerrar el intercambio con asuntos sin resolver. Tienes un tiempo limitado para responder: puedes agregar una declaración, resolver lo pendiente o aceptar terminarlo. Después, el intercambio se cierra como no resuelto."
+        },
+        "CLOSE_REQUEST_RETRACTED": {
+          "subject": "Se retiró la solicitud de cerrar tu intercambio ({code})",
+          "body": "La otra parte retiró su solicitud de cerrar el intercambio. Sigue abierto."
+        },
+        "STATEMENT_ADDED": {
+          "subject": "Se agregó una declaración a tu intercambio ({code})",
+          "body": "La otra parte agregó una declaración sobre la solicitud de cerrar el intercambio. Puedes leerla en el intercambio."
+        },
+        "INACTIVITY_PROMPTED": {
+          "subject": "¿Tu intercambio sigue en marcha? ({code})",
+          "body": "Hace tiempo que no pasa nada en este intercambio. Si ninguna de las partes hace algo en él, se cerrará como no resuelto."
+        },
+        "CLOSED_WITHDRAWN": {
+          "subject": "Se retiró la oferta ({code})",
+          "body": "La otra parte retiró su oferta, así que el intercambio está cerrado. No se acordó nada."
+        },
+        "CLOSED_DECLINED": {
+          "subject": "Tu oferta fue rechazada ({code})",
+          "body": "La otra parte rechazó tu oferta, así que el intercambio está cerrado. No se acordó nada."
+        },
+        "CLOSED_EXPIRED": {
+          "subject": "La oferta venció ({code})",
+          "body": "La oferta venció antes de ser aceptada, así que el intercambio está cerrado. No se acordó nada."
+        },
+        "CLOSED_COMPLETED": {
+          "subject": "Tu intercambio está completo ({code})",
+          "body": "Todas las contribuciones obligatorias fueron aceptadas o se renunció a ellas. El intercambio está completo y cerrado."
+        },
+        "CLOSED_ENDED_BY_AGREEMENT": {
+          "subject": "Tu intercambio terminó de común acuerdo ({code})",
+          "body": "La otra parte aceptó terminar el intercambio. Está cerrado, y todo lo que seguía pendiente quedó liberado."
+        },
+        "CLOSED_UNRESOLVED": {
+          "subject": "Tu intercambio se cerró sin resolver ({code})",
+          "body": "Pasó el plazo para responder a la solicitud de cierre. El intercambio se cerró como no resuelto, y cada contribución conserva el estado que tenía."
+        },
+        "CLOSED_INACTIVE": {
+          "subject": "Tu intercambio se cerró por inactividad ({code})",
+          "body": "No pasó nada en este intercambio durante mucho tiempo, así que se cerró como no resuelto. Cada contribución conserva el estado que tenía."
+        }
+      }
+    }
+  },
   "errors": {
     "STALE_REVISION": "Los términos cambiaron mientras los revisabas. Revisa la versión más reciente.",
     "WRONG_ACTOR": "Solo la otra parte puede hacer esto.",

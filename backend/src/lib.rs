@@ -9,4 +9,5 @@ pub mod error;
 pub mod exchanges;
 pub mod http;
 pub mod languages;
+pub mod notifications;
 pub mod telemetry;

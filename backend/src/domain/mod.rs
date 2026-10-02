@@ -10,6 +10,7 @@ pub mod contribution;
 pub mod exchange;
 pub mod identity;
 pub mod invitation;
+pub mod notification;
 pub mod revision;
 pub mod risk;
 

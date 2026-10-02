@@ -47,7 +47,7 @@ $PG/psql -h 127.0.0.1 -d postgres \
 
 `exchange` owns the schema and runs migrations; it may create databases because the API tests each build a throwaway one. `exchange_app` is what the API and worker connect as; it can add to the agreement history but not change or delete it.
 
-In development, one-time codes are not sent anywhere: with `CODE_DELIVERY=log` the API writes each code to its own log, which is where you read it to sign in.
+In development, one-time codes are not sent anywhere: with `CODE_DELIVERY=log` the API writes each code to its own log, which is where you read it to sign in. Notifications work the same way: with `NOTIFICATION_DELIVERY=log` the worker writes each email to its log instead of sending it.
 
 The API starts without a database: `/healthz` and `/v1/meta` respond, and `/readyz` returns 503 until PostgreSQL is reachable. The web dev server proxies API paths to the service, so the browser talks to one origin.
 
@@ -75,7 +75,7 @@ The workflow names the Rust and Node versions it uses; raise them there when the
 ## Backend binaries
 
 - `api` — the HTTP service.
-- `worker` — background jobs (outbox, reminders, expiries, closures). Currently an empty loop.
+- `worker` — background jobs: expiries and closures on their timers, and delivering notifications from the outbox. Reminders are still to come.
 - `migrate` — applies migrations as the schema owner. The API and worker never run them.
 - `openapi` — prints the API description that the TypeScript client is generated from.
 
@@ -100,7 +100,7 @@ The workflow names the Rust and Node versions it uses; raise them there when the
 The scaffold, the database schema (`backend/migrations/`), the domain rules (`backend/src/domain/`), sign-in (`backend/src/auth.rs`) and the exchange API (`backend/src/exchanges/`, `backend/src/http/`) exist. Still to build, in rough order:
 
 1. Screens: routing in both apps, then the composer, invitation and tracking flows, web first.
-2. A real email and SMS provider for one-time codes, and notifications through the outbox.
+2. A real email and SMS provider, for one-time codes and for notifications. Notifications are already queued and delivered (`backend/src/notifications/`), but only to the log.
 3. Universal and app links, push, Wallet passes.
 
 `DESIGN.md` §13.4 lists what the exchange API deliberately leaves out for now.
