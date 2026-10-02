@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::{Context, bail};
 
 use crate::auth::{CodeSender, LogSender};
+use crate::client_version::{MinimumClientVersions, parse_version};
 use crate::notifications::{EmailSender, LogEmailSender};
 
 fn load_env() {
@@ -53,6 +54,30 @@ impl WorkerConfig {
     }
 }
 
+/// An optional `MIN_CLIENT_VERSION_*` value: unset or empty means no minimum,
+/// and anything else must read as a version.
+fn min_client_version(name: &str) -> anyhow::Result<Option<String>> {
+    let value = std::env::var(name).unwrap_or_default();
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if parse_version(value).is_none() {
+        bail!("{name}={value} is not a version such as 1.4.0");
+    }
+    Ok(Some(value.to_owned()))
+}
+
+/// The oldest build of each client that may still change anything
+/// (`crate::client_version`). Nothing is required unless a deployment says so.
+fn min_client_versions() -> anyhow::Result<MinimumClientVersions> {
+    Ok(MinimumClientVersions {
+        web: min_client_version("MIN_CLIENT_VERSION_WEB")?,
+        ios: min_client_version("MIN_CLIENT_VERSION_IOS")?,
+        android: min_client_version("MIN_CLIENT_VERSION_ANDROID")?,
+    })
+}
+
 /// Configuration for the `api` process, read from the environment (and `.env`
 /// in development).
 pub struct ApiConfig {
@@ -64,6 +89,7 @@ pub struct ApiConfig {
     /// Cookie sessions are only honored for requests from this origin.
     pub web_origin: String,
     pub code_sender: Arc<dyn CodeSender>,
+    pub min_client_versions: MinimumClientVersions,
 }
 
 impl ApiConfig {
@@ -97,6 +123,7 @@ impl ApiConfig {
             app_secret,
             web_origin,
             code_sender,
+            min_client_versions: min_client_versions()?,
         })
     }
 }
@@ -111,5 +138,22 @@ mod tests {
         for other in ["", "LOG", "smtp"] {
             assert!(email_sender(other).is_err(), "{other:?}");
         }
+    }
+
+    #[test]
+    fn a_minimum_client_version_is_optional_but_must_be_a_version() {
+        // Variables of this test's own, so the ones of a `.env` do not matter.
+        let name = "MIN_CLIENT_VERSION_TEST_ONLY";
+        // SAFETY: tests in this crate run on one thread per test and nothing
+        // else reads this variable.
+        unsafe { std::env::remove_var(name) };
+        assert_eq!(min_client_version(name).unwrap(), None);
+        unsafe { std::env::set_var(name, " ") };
+        assert_eq!(min_client_version(name).unwrap(), None);
+        unsafe { std::env::set_var(name, " 1.4.0 ") };
+        assert_eq!(min_client_version(name).unwrap().as_deref(), Some("1.4.0"));
+        unsafe { std::env::set_var(name, "v1") };
+        assert!(min_client_version(name).is_err());
+        unsafe { std::env::remove_var(name) };
     }
 }

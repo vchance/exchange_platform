@@ -21,6 +21,7 @@ async fn main() -> anyhow::Result<()> {
             // A stand-in until counsel-approved consent wording exists
             // (DESIGN.md §14.1); the real version replaces it then.
             consent_version: "draft-1".to_owned(),
+            min_client_versions: config.min_client_versions,
         }),
         code_sender: config.code_sender,
     };

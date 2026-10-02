@@ -1,9 +1,11 @@
+use axum::extract::State;
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::Serialize;
 use utoipa::ToSchema;
 
 use super::{AppState, account, auth, deletion, exchanges, record, safety};
+use crate::client_version::MinimumClientVersions;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -39,13 +41,18 @@ pub fn router() -> Router<AppState> {
 pub struct Meta {
     pub service: String,
     pub version: String,
+    /// The oldest build of each client that may still change anything. A
+    /// client below its minimum shows that it must be updated; its changes
+    /// are refused with `CLIENT_TOO_OLD`. Absent for a client with no minimum.
+    pub minimum_client_versions: MinimumClientVersions,
 }
 
-/// Identifies the service and its build.
+/// Identifies the service and its build, and says how old a client may be.
 #[utoipa::path(get, path = "/v1/meta", responses((status = 200, description = "Service identity", body = Meta)))]
-pub async fn meta() -> Json<Meta> {
+pub async fn meta(State(state): State<AppState>) -> Json<Meta> {
     Json(Meta {
         service: env!("CARGO_PKG_NAME").to_owned(),
         version: env!("CARGO_PKG_VERSION").to_owned(),
+        minimum_client_versions: state.settings.min_client_versions.clone(),
     })
 }

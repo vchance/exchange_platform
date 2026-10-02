@@ -1,6 +1,8 @@
 //! The shapes the exchange endpoints accept and return, and their
 //! translation to and from the domain types.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::{Date, Month, OffsetDateTime};
@@ -8,6 +10,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::repo::{Aggregate, RevisionRecord};
+use crate::domain::Rules;
 use crate::domain::contribution::{Action, Status};
 use crate::domain::exchange::{Counterparty, Outcome, State};
 use crate::domain::revision::{
@@ -247,6 +250,10 @@ pub enum CommandDto {
     Withdraw {
         revision: Uuid,
     },
+    /// Throw away a draft that was never sent. It closes with nothing agreed
+    /// and leaves the list. Only the initiator has one, and only until the
+    /// first revision is sent.
+    Discard,
     /// Claim, confirm, dispute or waive a contribution. A dispute needs a
     /// reason, and a claim after a dispute needs a note.
     Contribution {
@@ -344,6 +351,10 @@ pub struct RevisionView {
 pub struct ContributionStatus {
     pub id: Uuid,
     pub status: Status,
+    /// When it came to stand this way, RFC 3339. Not sent where it is not
+    /// known, such as on an agreement coming into force in the history.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -382,6 +393,11 @@ pub struct ExchangeView {
     pub end_proposed_by: Option<Slot>,
     pub close_requested_by: Option<Slot>,
     pub close_requested_at: Option<String>,
+    /// When the close request's response window runs out and the exchange
+    /// closes unresolved, unless the request is taken back or what is
+    /// outstanding is resolved first (DESIGN.md §5.3). RFC 3339. Computed
+    /// here, so every client shows the same moment.
+    pub close_request_lapses_at: Option<String>,
     /// The viewer's own unsent working copy.
     #[schema(value_type = Option<Object>)]
     pub draft: Option<serde_json::Value>,
@@ -418,6 +434,10 @@ pub struct InvitationPreview {
     pub expires_at: String,
     /// The invitation names a specific person.
     pub bound: bool,
+    /// The exchange's currency, which its amounts are in.
+    pub currency: String,
+    /// The exchange's IANA timezone, which its due dates are read in.
+    pub timezone: String,
     pub revision: RevisionView,
 }
 
@@ -462,15 +482,19 @@ impl RevisionView {
     }
 }
 
+/// What the database knows about an exchange beyond the aggregate, gathered
+/// for its view.
+pub struct ViewContext {
+    pub claimant: Option<Claimant>,
+    pub invitation_open: Option<bool>,
+    pub other_party_left: bool,
+    pub draft: Option<serde_json::Value>,
+    /// When each contribution came to its current status.
+    pub status_since: BTreeMap<ContributionId, OffsetDateTime>,
+}
+
 impl ExchangeView {
-    pub fn build(
-        aggregate: &Aggregate,
-        you: Slot,
-        claimant: Option<Claimant>,
-        invitation_open: Option<bool>,
-        other_party_left: bool,
-        draft: Option<serde_json::Value>,
-    ) -> Self {
+    pub fn build(aggregate: &Aggregate, you: Slot, context: ViewContext, rules: &Rules) -> Self {
         let exchange = &aggregate.exchange;
         let (state, closed_outcome) = state_dto(exchange.state);
 
@@ -483,9 +507,20 @@ impl ExchangeView {
                 exchange
                     .statuses
                     .get(&c.id)
-                    .map(|&status| ContributionStatus { id: c.id.0, status })
+                    .map(|&status| ContributionStatus {
+                        id: c.id.0,
+                        status,
+                        since: context.status_since.get(&c.id).copied().map(rfc3339),
+                    })
             })
             .collect();
+        let ViewContext {
+            claimant,
+            invitation_open,
+            other_party_left,
+            draft,
+            ..
+        } = context;
 
         Self {
             id: aggregate.id,
@@ -513,6 +548,13 @@ impl ExchangeView {
             end_proposed_by: exchange.end_proposed_by,
             close_requested_by: exchange.close_request.map(|request| request.by),
             close_requested_at: exchange.close_request.map(|request| rfc3339(request.at)),
+            // The same sum the timer uses (`exchange::lapse_close_request`).
+            // A moment too far ahead to compute is one that never comes, and
+            // is left out rather than made up.
+            close_request_lapses_at: exchange
+                .close_request
+                .and_then(|request| request.at.checked_add(rules.close_response_window))
+                .map(rfc3339),
             draft,
         }
     }

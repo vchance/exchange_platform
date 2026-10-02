@@ -88,7 +88,13 @@ pub async fn get(
     Path(id): Path<String>,
 ) -> Result<Json<ExchangeView>, ApiError> {
     Ok(Json(
-        service::get(&state.db, &session, exchange_id(&id)?).await?,
+        service::get(
+            &state.db,
+            &state.settings.rules,
+            &session,
+            exchange_id(&id)?,
+        )
+        .await?,
     ))
 }
 
@@ -165,7 +171,7 @@ pub async fn send_revision(
 
 /// Does one thing to an exchange: accept, decline or withdraw a revision,
 /// act on a contribution, confirm or reject whoever claimed the invitation,
-/// or end or close it.
+/// discard a draft, or end or close it.
 #[utoipa::path(
     post,
     path = "/v1/exchanges/{id}/commands",

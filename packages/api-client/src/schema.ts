@@ -180,7 +180,7 @@ export interface paths {
         /**
          * Does one thing to an exchange: accept, decline or withdraw a revision,
          *     act on a contribution, confirm or reject whoever claimed the invitation,
-         *     or end or close it.
+         *     discard a draft, or end or close it.
          */
         post: operations["run_command"];
         delete?: never;
@@ -485,7 +485,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Identifies the service and its build. */
+        /** Identifies the service and its build, and says how old a client may be. */
         get: operations["meta"];
         put?: never;
         post?: never;
@@ -583,6 +583,9 @@ export interface components {
             /** @enum {string} */
             type: "WITHDRAW";
         } | {
+            /** @enum {string} */
+            type: "DISCARD";
+        } | {
             action: components["schemas"]["Action"];
             /** Format: uuid */
             contribution: string;
@@ -670,6 +673,11 @@ export interface components {
         ContributionStatus: {
             /** Format: uuid */
             id: string;
+            /**
+             * @description When it came to stand this way, RFC 3339. Not sent where it is not
+             *     known, such as on an agreement coming into force in the history.
+             */
+            since?: string | null;
             status: components["schemas"]["Status"];
         };
         /** @enum {string} */
@@ -766,6 +774,13 @@ export interface components {
         };
         ExchangeView: {
             claimant?: components["schemas"]["Claimant"] | null;
+            /**
+             * @description When the close request's response window runs out and the exchange
+             *     closes unresolved, unless the request is taken back or what is
+             *     outstanding is resolved first (DESIGN.md §5.3). RFC 3339. Computed
+             *     here, so every client shows the same moment.
+             */
+            close_request_lapses_at?: string | null;
             close_requested_at?: string | null;
             close_requested_by?: components["schemas"]["Slot"] | null;
             closed_outcome?: components["schemas"]["OutcomeDto"] | null;
@@ -834,16 +849,35 @@ export interface components {
         InvitationPreview: {
             /** @description The invitation names a specific person. */
             bound: boolean;
+            /** @description The exchange's currency, which its amounts are in. */
+            currency: string;
             display_code: string;
             expires_at: string;
             revision: components["schemas"]["RevisionView"];
+            /** @description The exchange's IANA timezone, which its due dates are read in. */
+            timezone: string;
         };
         InvitationToken: {
             token: string;
         };
         Meta: {
+            /**
+             * @description The oldest build of each client that may still change anything. A
+             *     client below its minimum shows that it must be updated; its changes
+             *     are refused with `CLIENT_TOO_OLD`. Absent for a client with no minimum.
+             */
+            minimum_client_versions: components["schemas"]["MinimumClientVersions"];
             service: string;
             version: string;
+        };
+        /**
+         * @description The oldest version of each client that may still change anything.
+         *     `None` means every version may.
+         */
+        MinimumClientVersions: {
+            android?: string | null;
+            ios?: string | null;
+            web?: string | null;
         };
         /**
          * @description A report on the proposal behind an invitation link, from someone who need

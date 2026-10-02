@@ -15,6 +15,7 @@ use axum::body::Body;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderName, Method, Request, StatusCode};
 use exchange_backend::auth::{AuthRules, CodeSender, LogSender, generate_token, token_hash};
+use exchange_backend::client_version::MinimumClientVersions;
 use exchange_backend::db;
 use exchange_backend::domain::Rules;
 use exchange_backend::http::{self, AppState, Settings};
@@ -143,6 +144,35 @@ impl App {
         rules: Rules,
         code_sender: Arc<dyn CodeSender>,
     ) -> Self {
+        Self::start_configured(
+            database_name,
+            rules,
+            code_sender,
+            MinimumClientVersions::default(),
+        )
+        .await
+    }
+
+    /// Requiring clients to be at least the given versions.
+    pub async fn start_requiring(
+        database_name: &'static str,
+        min_client_versions: MinimumClientVersions,
+    ) -> Self {
+        Self::start_configured(
+            database_name,
+            Rules::default(),
+            Arc::new(LogSender),
+            min_client_versions,
+        )
+        .await
+    }
+
+    async fn start_configured(
+        database_name: &'static str,
+        rules: Rules,
+        code_sender: Arc<dyn CodeSender>,
+        min_client_versions: MinimumClientVersions,
+    ) -> Self {
         let (owner_url, app_url) = database(database_name).await;
         let db = connect(app_url).await;
         let state = AppState {
@@ -153,6 +183,7 @@ impl App {
                 auth: AuthRules::default(),
                 rules: rules.clone(),
                 consent_version: CONSENT_VERSION.to_owned(),
+                min_client_versions,
             }),
             code_sender,
         };

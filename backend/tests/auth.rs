@@ -94,6 +94,7 @@ impl App {
                 auth: AuthRules::default(),
                 rules: Default::default(),
                 consent_version: "test".to_owned(),
+                min_client_versions: Default::default(),
             }),
             code_sender: outbox.clone(),
         };

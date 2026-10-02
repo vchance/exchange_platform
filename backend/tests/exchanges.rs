@@ -1213,3 +1213,188 @@ async fn a_close_request_cannot_be_answered_by_waiving_everything() {
     let view = app.view(&deal.ana, &deal.exchange).await;
     assert_eq!(statuses(&view), ["CLAIMED", "PENDING"]);
 }
+
+// ---- What a walk-through of the use cases asked for -------------------------
+
+#[tokio::test]
+async fn a_draft_never_sent_can_be_discarded_and_leaves_the_list() {
+    let app = app().await;
+    let ana = app.user("Ana").await;
+    let ben = app.user("Ben").await;
+    let exchange = app.draft(&ana).await;
+    let path = format!("/v1/exchanges/{exchange}");
+    app.call(
+        Some(&ana),
+        Method::PUT,
+        &format!("{path}/draft"),
+        Some(json!({ "body": { "terms": "Half-written" } })),
+        &[],
+    )
+    .await;
+
+    // Nobody else has a draft to discard: to Ben it does not exist.
+    app.post(
+        &ben,
+        &format!("{path}/commands"),
+        json!({ "expected_version": 0, "command": { "type": "DISCARD" } }),
+    )
+    .await
+    .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
+
+    let view = app
+        .command(&ana, &exchange, json!({ "type": "DISCARD" }))
+        .await
+        .ok();
+    assert_eq!(
+        (
+            &view["state"],
+            &view["closed_outcome"],
+            &view["closed_reason"]
+        ),
+        (&json!("CLOSED"), &json!("NOT_AGREED"), &json!("DISCARDED"))
+    );
+    assert_eq!(view["draft"], Value::Null, "the working copy goes with it");
+    assert_eq!(view["open_revision"], Value::Null);
+    assert_eq!(view["in_force_revision"], Value::Null);
+
+    // The record says what happened, truthfully: closed, nothing agreed,
+    // because its initiator discarded it.
+    let history = app.get(&ana, &format!("{path}/history")).await.ok();
+    let events = history["events"].as_array().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["type"], "EXCHANGE_CLOSED");
+    assert_eq!(events[0]["actor"], "A");
+    assert_eq!(events[0]["outcome"], "NOT_AGREED");
+    assert_eq!(events[0]["reason"], "DISCARDED");
+    let record = app.get(&ana, &format!("{path}/record")).await.ok();
+    assert_eq!(record["exchange"]["closed_reason"], "DISCARDED");
+
+    // Closed is closed: nothing more can be written or sent.
+    app.call(
+        Some(&ana),
+        Method::PUT,
+        &format!("{path}/draft"),
+        Some(json!({ "body": { "terms": "Again" } })),
+        &[],
+    )
+    .await
+    .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+    app.send(&ana, &exchange, fence_job(Uuid::new_v4(), Uuid::new_v4()))
+        .await
+        .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+    app.command(&ana, &exchange, json!({ "type": "DISCARD" }))
+        .await
+        .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+
+    // In the list it is a closed exchange like any other, so it can be put
+    // out of the way with them.
+    let list = app.get(&ana, "/v1/exchanges").await.ok();
+    let entry = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == exchange.as_str())
+        .expect("still listed");
+    assert_eq!(
+        (&entry["state"], &entry["closed_outcome"]),
+        (&json!("CLOSED"), &json!("NOT_AGREED"))
+    );
+
+    // Once something has been sent, there is no discarding: the offer is
+    // withdrawn or declined instead.
+    let deal = app.negotiating().await;
+    app.command(&deal.ana, &deal.exchange, json!({ "type": "DISCARD" }))
+        .await
+        .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+    let deal = app.active().await;
+    app.command(&deal.ben, &deal.exchange, json!({ "type": "DISCARD" }))
+        .await
+        .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+}
+
+fn moment(value: &Value) -> time::OffsetDateTime {
+    time::OffsetDateTime::parse(
+        value.as_str().expect("an RFC 3339 moment"),
+        &time::format_description::well_known::Rfc3339,
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_close_request_says_when_it_lapses_and_a_contribution_says_since_when_it_stands() {
+    let rules = exchange_backend::domain::Rules {
+        close_response_window: time::Duration::days(3),
+        ..Default::default()
+    };
+    let app = App::start_with(DATABASE, rules).await;
+    let deal = app.active().await;
+
+    let view = app.view(&deal.ana, &deal.exchange).await;
+    assert_eq!(view["close_request_lapses_at"], Value::Null);
+    // Each contribution came to stand as it does when the agreement did.
+    let agreed = moment(&view["contributions"][0]["since"]);
+    assert_eq!(moment(&view["contributions"][1]["since"]), agreed);
+
+    let view = app
+        .act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
+        .await
+        .ok();
+    assert!(
+        moment(&view["contributions"][0]["since"]) >= agreed,
+        "the claim is what the repair now stands on"
+    );
+    assert_eq!(
+        moment(&view["contributions"][1]["since"]),
+        agreed,
+        "the payment stands as it did"
+    );
+
+    let view = app
+        .command(
+            &deal.ben,
+            &deal.exchange,
+            json!({ "type": "REQUEST_CLOSE" }),
+        )
+        .await
+        .ok();
+    // The window is the service's to know; the client is told the moment.
+    assert_eq!(
+        moment(&view["close_request_lapses_at"]),
+        moment(&view["close_requested_at"]) + time::Duration::days(3)
+    );
+    assert_eq!(
+        app.view(&deal.ben, &deal.exchange).await["close_request_lapses_at"],
+        view["close_request_lapses_at"],
+        "both parties are told the same moment"
+    );
+
+    let view = app
+        .command(
+            &deal.ben,
+            &deal.exchange,
+            json!({ "type": "RETRACT_CLOSE" }),
+        )
+        .await
+        .ok();
+    assert_eq!(view["close_request_lapses_at"], Value::Null);
+}
+
+#[tokio::test]
+async fn an_invitation_preview_names_the_currency_and_the_timezone() {
+    let app = app().await;
+    let deal = app.negotiating().await;
+    let preview = app
+        .call(
+            None,
+            Method::POST,
+            "/v1/invitations/preview",
+            Some(json!({ "token": deal.invitation })),
+            &[],
+        )
+        .await
+        .ok();
+    let view = app.view(&deal.ana, &deal.exchange).await;
+    assert_eq!(preview["currency"], view["currency"]);
+    assert_eq!(preview["timezone"], "America/Chicago");
+    assert_eq!(preview["timezone"], view["timezone"]);
+}

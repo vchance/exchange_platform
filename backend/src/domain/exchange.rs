@@ -16,6 +16,9 @@ pub enum NotAgreed {
     Withdrawn,
     Declined,
     Expired,
+    /// The initiator threw away a draft that was never sent. Nobody else was
+    /// ever in it, and nothing was ever on the table.
+    Discarded,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -164,6 +167,10 @@ pub enum Command {
         id: RevisionId,
         revision: Revision,
     },
+    /// The initiator throws away a draft that was never sent. It closes with
+    /// nothing agreed, so it leaves their list; once something has been sent,
+    /// withdrawing or declining is the way out instead.
+    Discard,
     Accept {
         revision: RevisionId,
     },
@@ -359,6 +366,7 @@ pub fn decide(
                 Command::RejectCounterparty => step.reject(by)?,
                 Command::ReleaseClaim => step.release(by)?,
                 Command::Send { id, revision } => step.send(by, id, revision)?,
+                Command::Discard => step.discard(by)?,
                 Command::Accept { revision } => step.accept(by, revision)?,
                 Command::Decline { revision } => step.decline(by, revision)?,
                 Command::Withdraw { revision } => step.withdraw(by, revision)?,
@@ -413,6 +421,7 @@ fn open_to_unconfirmed_claimant(command: &Command) -> bool {
         | Command::PromptInactivity
         | Command::CloseInactive => true,
         Command::Send { .. }
+        | Command::Discard
         | Command::Decline { .. }
         | Command::Contribution { .. }
         | Command::ProposeEnd
@@ -564,6 +573,20 @@ impl Step<'_> {
             by,
             expires_at,
         });
+        Ok(())
+    }
+
+    /// Throws away a draft. Only its initiator has one, and only until it is
+    /// sent: after that there is an offer on the table, which is withdrawn
+    /// or declined instead, and the draft's owner is slot A by definition.
+    fn discard(&mut self, by: Slot) -> Result<(), Refusal> {
+        if self.exchange.state != State::Draft {
+            return Err(Refusal::NotAllowed);
+        }
+        if by != Slot::A {
+            return Err(Refusal::WrongActor);
+        }
+        self.close(Outcome::NotAgreed(NotAgreed::Discarded), Vec::new());
         Ok(())
     }
 
