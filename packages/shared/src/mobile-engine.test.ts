@@ -5,6 +5,7 @@ import { todayIn } from './fulfillment'
 import { createI18n } from './i18n'
 import { wordingFor } from './language'
 import { formatMessage } from './message'
+import { recordMoments } from './record'
 
 /*
  * The mobile apps run on Hermes, whose `Intl` is narrower than a browser's:
@@ -60,4 +61,9 @@ test('dates and refusals are still told in the reader’s language', () => {
   const es = createI18n('es', wordingFor('es'), () => {})
   expect(es.day('2026-10-02')).toBe('2 de octubre de 2026')
   expect(es.errorText('VERSION_CONFLICT')).toBe(wordingFor('es').errors.VERSION_CONFLICT)
+})
+
+test('a time in a record is still written in the exchange’s zone', () => {
+  const when = recordMoments('en', 'America/Chicago')
+  expect(when('2026-11-01T03:30:15Z')).toBe('October 31, 2026 at 10:30:15 PM CDT')
 })
