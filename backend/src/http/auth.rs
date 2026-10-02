@@ -12,7 +12,7 @@ use uuid::Uuid;
 use super::account::{self, Account};
 use super::extract::{ApiJson, SESSION_COOKIE, Session, require_web_origin};
 use super::{AppState, Settings};
-use crate::auth;
+use crate::auth::{self, Purpose};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::languages;
@@ -47,6 +47,7 @@ pub async fn request_code(
         &settings.auth,
         state.code_sender.as_ref(),
         &identifier,
+        Purpose::SignIn,
     )
     .await?;
     Ok(StatusCode::NO_CONTENT)
@@ -112,6 +113,7 @@ pub async fn create_session(
         &settings.auth,
         &identifier,
         &body.code,
+        Purpose::SignIn,
     )
     .await?;
 
@@ -211,7 +213,7 @@ fn session_cookie(settings: &Settings, token: &str) -> HeaderValue {
     cookie(settings, token, settings.auth.session_ttl.whole_seconds())
 }
 
-fn expired_cookie(settings: &Settings) -> HeaderValue {
+pub(super) fn expired_cookie(settings: &Settings) -> HeaderValue {
     cookie(settings, "", 0)
 }
 

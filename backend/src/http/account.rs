@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use super::AppState;
 use super::extract::{ApiJson, Session};
-use crate::auth;
+use crate::auth::{self, Purpose};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::languages;
@@ -168,6 +168,7 @@ pub async fn add_identifier(
         &settings.auth,
         &identifier,
         &body.code,
+        Purpose::SignIn,
     )
     .await?;
 

@@ -4,6 +4,7 @@
 pub mod auth;
 pub mod config;
 pub mod db;
+pub mod deletion;
 pub mod domain;
 pub mod error;
 pub mod exchanges;

@@ -12,6 +12,7 @@ use crate::error::{ErrorBody, ErrorCode};
 
 pub mod account;
 pub mod auth;
+pub mod deletion;
 pub mod exchanges;
 pub mod extract;
 pub mod health;
@@ -58,6 +59,9 @@ pub fn router(state: AppState) -> Router {
         account::me,
         account::update_me,
         account::add_identifier,
+        deletion::deletion_preview,
+        deletion::request_deletion_code,
+        deletion::delete_account,
         exchanges::create,
         exchanges::list,
         exchanges::get,

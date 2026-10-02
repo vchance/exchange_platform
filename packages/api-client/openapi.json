@@ -1290,6 +1290,133 @@
         }
       }
     },
+    "/v1/me/deletion": {
+      "get": {
+        "tags": [
+          "deletion"
+        ],
+        "summary": "What deleting the account would do to the exchanges it is in. Changes nothing.",
+        "operationId": "deletion_preview",
+        "responses": {
+          "200": {
+            "description": "What would happen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionPreview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "deletion"
+        ],
+        "summary": "Deletes the signed-in account. Every session ends, its email address and\nphone number are released, its working data is removed, and each exchange\nit is still in is ended or put on the way to closing. Agreements the\nother party signed stay in that party's record. It cannot be undone.",
+        "operationId": "delete_account",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccount"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The account is deleted"
+          },
+          "401": {
+            "description": "Not signed in, or the code is wrong, expired, used up or was sent for something else",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The account has no such identifier",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/deletion/codes": {
+      "post": {
+        "tags": [
+          "deletion"
+        ],
+        "summary": "Sends a one-time code for deleting the account to its own email address\nor phone number. The code is good for that and nothing else.",
+        "operationId": "request_deletion_code",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestDeletionCode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "A code was sent"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The account has no such identifier",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many codes requested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me/identifiers": {
       "post": {
         "tags": [
@@ -1509,6 +1636,14 @@
             "description": "Partly hidden, such as `b•••@example.com`."
           }
         }
+      },
+      "CodeChannel": {
+        "type": "string",
+        "description": "Which of the account's identifiers a code is sent to.",
+        "enum": [
+          "EMAIL",
+          "PHONE"
+        ]
       },
       "CommandDto": {
         "oneOf": [
@@ -1915,6 +2050,49 @@
           }
         }
       },
+      "DeleteAccount": {
+        "type": "object",
+        "required": [
+          "channel",
+          "code"
+        ],
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/CodeChannel",
+            "description": "Where the code was sent."
+          },
+          "code": {
+            "type": "string",
+            "description": "The one-time code sent for deleting the account."
+          }
+        }
+      },
+      "DeletionPreview": {
+        "type": "object",
+        "description": "What deleting the account would do to the exchanges it is in, counted, so\nthat the person can be told before they confirm.",
+        "required": [
+          "drafts",
+          "open_proposals",
+          "agreements_in_force"
+        ],
+        "properties": {
+          "agreements_in_force": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Agreements in force. Each gets a request to close, in the account's name."
+          },
+          "drafts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Drafts never sent. They are discarded."
+          },
+          "open_proposals": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Negotiations with an offer on the table. They end with nothing agreed."
+          }
+        }
+      },
       "Delivery": {
         "type": "string",
         "description": "How the client wants to hold the session.",
@@ -2207,6 +2385,10 @@
                 "type": "null"
               }
             ]
+          },
+          "other_party_left": {
+            "type": "boolean",
+            "description": "The other party has deleted their account and can no longer act in\nthis exchange. Said only while the exchange is still open, which is\nwhen the viewer needs to know it. Always sent; a client may read its\nabsence as `false`."
           },
           "state": {
             "$ref": "#/components/schemas/StateDto"
@@ -2905,6 +3087,18 @@
           "identifier": {
             "type": "string",
             "description": "An email address, or a phone number in international form."
+          }
+        }
+      },
+      "RequestDeletionCode": {
+        "type": "object",
+        "required": [
+          "channel"
+        ],
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/CodeChannel",
+            "description": "Which of the account's own identifiers to send the code to."
           }
         }
       },

@@ -3,7 +3,7 @@ use axum::{Json, Router};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use super::{AppState, account, auth, exchanges, record, safety};
+use super::{AppState, account, auth, deletion, exchanges, record, safety};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -13,6 +13,11 @@ pub fn router() -> Router<AppState> {
         .route("/auth/session", delete(auth::delete_session))
         .route("/me", get(account::me).patch(account::update_me))
         .route("/me/identifiers", post(account::add_identifier))
+        .route(
+            "/me/deletion",
+            get(deletion::deletion_preview).post(deletion::delete_account),
+        )
+        .route("/me/deletion/codes", post(deletion::request_deletion_code))
         .route("/exchanges", get(exchanges::list).post(exchanges::create))
         .route("/exchanges/{id}", get(exchanges::get))
         .route("/exchanges/{id}/draft", put(exchanges::save_draft))

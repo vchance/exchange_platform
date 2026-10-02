@@ -391,6 +391,49 @@ export interface paths {
         patch: operations["update_me"];
         trace?: never;
     };
+    "/v1/me/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What deleting the account would do to the exchanges it is in. Changes nothing. */
+        get: operations["deletion_preview"];
+        put?: never;
+        /**
+         * Deletes the signed-in account. Every session ends, its email address and
+         *     phone number are released, its working data is removed, and each exchange
+         *     it is still in is ended or put on the way to closing. Agreements the
+         *     other party signed stay in that party's record. It cannot be undone.
+         */
+        post: operations["delete_account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/deletion/codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sends a one-time code for deleting the account to its own email address
+         *     or phone number. The code is good for that and nothing else.
+         */
+        post: operations["request_deletion_code"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/identifiers": {
         parameters: {
             query?: never;
@@ -489,6 +532,11 @@ export interface components {
             /** @description Partly hidden, such as `b•••@example.com`. */
             identifier: string;
         };
+        /**
+         * @description Which of the account's identifiers a code is sent to.
+         * @enum {string}
+         */
+        CodeChannel: "EMAIL" | "PHONE";
         CommandDto: {
             consent: components["schemas"]["Consent"];
             /** Format: uuid */
@@ -611,6 +659,33 @@ export interface components {
              */
             language?: string | null;
         };
+        DeleteAccount: {
+            /** @description Where the code was sent. */
+            channel: components["schemas"]["CodeChannel"];
+            /** @description The one-time code sent for deleting the account. */
+            code: string;
+        };
+        /**
+         * @description What deleting the account would do to the exchanges it is in, counted, so
+         *     that the person can be told before they confirm.
+         */
+        DeletionPreview: {
+            /**
+             * Format: int64
+             * @description Agreements in force. Each gets a request to close, in the account's name.
+             */
+            agreements_in_force: number;
+            /**
+             * Format: int64
+             * @description Drafts never sent. They are discarded.
+             */
+            drafts: number;
+            /**
+             * Format: int64
+             * @description Negotiations with an offer on the table. They end with nothing agreed.
+             */
+            open_proposals: number;
+        };
         /**
          * @description How the client wants to hold the session.
          * @enum {string}
@@ -676,6 +751,13 @@ export interface components {
             id: string;
             in_force_revision?: components["schemas"]["RevisionView"] | null;
             open_revision?: components["schemas"]["RevisionView"] | null;
+            /**
+             * @description The other party has deleted their account and can no longer act in
+             *     this exchange. Said only while the exchange is still open, which is
+             *     when the viewer needs to know it. Always sent; a client may read its
+             *     absence as `false`.
+             */
+            other_party_left?: boolean;
             state: components["schemas"]["StateDto"];
             timezone: string;
             /**
@@ -930,6 +1012,10 @@ export interface components {
         RequestCode: {
             /** @description An email address, or a phone number in international form. */
             identifier: string;
+        };
+        RequestDeletionCode: {
+            /** @description Which of the account's own identifiers to send the code to. */
+            channel: components["schemas"]["CodeChannel"];
         };
         /** @description A revision, named both ways: by ID, and by the number people see. */
         RevisionRef: {
@@ -2162,6 +2248,124 @@ export interface operations {
             };
             /** @description Invalid request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deletion_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What would happen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionPreview"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteAccount"];
+            };
+        };
+        responses: {
+            /** @description The account is deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in, or the code is wrong, expired, used up or was sent for something else */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The account has no such identifier */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    request_deletion_code: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestDeletionCode"];
+            };
+        };
+        responses: {
+            /** @description A code was sent */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The account has no such identifier */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many codes requested */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
