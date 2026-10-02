@@ -367,6 +367,12 @@ pub struct ExchangeView {
     /// used. It is not once the link has been used, even by someone since
     /// removed, or has expired; a new one has to be issued.
     pub invitation_open: Option<bool>,
+    /// The other party has deleted their account and can no longer act in
+    /// this exchange. Said only while the exchange is still open, which is
+    /// when the viewer needs to know it. Always sent; a client may read its
+    /// absence as `false`.
+    #[schema(required = false)]
+    pub other_party_left: bool,
     /// The revision awaiting acceptance, if any.
     pub open_revision: Option<RevisionView>,
     /// The agreement currently binding, if any.
@@ -462,6 +468,7 @@ impl ExchangeView {
         you: Slot,
         claimant: Option<Claimant>,
         invitation_open: Option<bool>,
+        other_party_left: bool,
         draft: Option<serde_json::Value>,
     ) -> Self {
         let exchange = &aggregate.exchange;
@@ -499,6 +506,7 @@ impl ExchangeView {
             },
             claimant,
             invitation_open,
+            other_party_left,
             open_revision: aggregate.open.as_ref().map(RevisionView::from_record),
             in_force_revision: aggregate.in_force.as_ref().map(RevisionView::from_record),
             contributions,

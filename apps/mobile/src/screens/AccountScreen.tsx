@@ -7,6 +7,7 @@ import { useI18n, useSession } from '../lib/context';
 import { space, type, useColors } from '../lib/theme';
 import { ProfileForm } from './AccountSetup';
 import { BlockedPeople } from './BlockedPeople';
+import { DeleteAccount } from './DeleteAccount';
 
 /** The account: what it is verified with, its name and language, and signing out. */
 export function AccountScreen() {
@@ -53,6 +54,7 @@ export function AccountScreen() {
       <Actions>
         <Button label={wording.nav.signOut} disabled={leaving} onPress={() => void leave()} />
       </Actions>
+      <DeleteAccount account={account} />
     </Screen>
   );
 }

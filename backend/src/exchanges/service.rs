@@ -52,11 +52,33 @@ async fn open_for(
     account: Uuid,
     lock: bool,
 ) -> Result<(Aggregate, Slot), ApiError> {
+    if lock {
+        acting(conn, account).await?;
+    }
     let aggregate = repo::load(conn, id, lock)
         .await?
         .ok_or(ErrorCode::NotFound)?;
     let slot = aggregate.slot_of(account).ok_or(ErrorCode::NotFound)?;
     Ok((aggregate, slot))
+}
+
+/// Holds the acting account as it is until the transaction ends, and
+/// refuses one that is no longer active. A request is matched to its account
+/// before its transaction starts; the account may be deleted in between
+/// (`crate::deletion`), and what a deleted account's last request did would
+/// otherwise outlive it. Taken before the exchange is locked, which is the
+/// order the deletion takes the two in.
+pub(crate) async fn acting(conn: &mut PgConnection, account: Uuid) -> Result<(), ApiError> {
+    let active: Option<bool> =
+        sqlx::query_scalar("SELECT status = 'ACTIVE' FROM account WHERE id = $1 FOR SHARE")
+            .bind(account)
+            .fetch_optional(&mut *conn)
+            .await?;
+    if active == Some(true) {
+        Ok(())
+    } else {
+        Err(ErrorCode::Unauthenticated.into())
+    }
 }
 
 /// Records the idempotency key in the same transaction as the change it
@@ -219,9 +241,19 @@ async fn record_signature(
 async fn view(conn: &mut PgConnection, id: Uuid, account: Uuid) -> Result<ExchangeView, ApiError> {
     let (aggregate, you) = open_for(conn, id, account, false).await?;
 
+    // Someone still in an open exchange needs to know that the other party
+    // has deleted their account: nothing more will come from them. Once it
+    // is closed there is nothing left to wait for, and it is not said.
+    let closed = matches!(aggregate.exchange.state, State::Closed(_));
+    let other_party_left = match aggregate.account_of(you.other()) {
+        Some(other) if !closed => deleted(conn, other).await?,
+        _ => false,
+    };
+
     // The initiator is shown who claimed the invitation until they confirm.
+    // Someone who has since left is not there to be confirmed.
     let claimant = match (you, aggregate.exchange.counterparty, aggregate.accounts[1]) {
-        (Slot::A, Counterparty::Claimed, Some(other)) => {
+        (Slot::A, Counterparty::Claimed, Some(other)) if !other_party_left => {
             let (display_name, email, phone): (String, Option<String>, Option<String>) =
                 sqlx::query_as("SELECT display_name, email, phone FROM account WHERE id = $1")
                     .bind(other)
@@ -274,8 +306,17 @@ async fn view(conn: &mut PgConnection, id: Uuid, account: Uuid) -> Result<Exchan
         you,
         claimant,
         invitation_open,
+        other_party_left,
         draft,
     ))
+}
+
+/// Whether an account has been deleted.
+async fn deleted(conn: &mut PgConnection, account: Uuid) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT status = 'DELETED' FROM account WHERE id = $1")
+        .bind(account)
+        .fetch_one(&mut *conn)
+        .await
 }
 
 // ---- Creating, listing, viewing ---------------------------------------------
@@ -302,6 +343,7 @@ pub async fn create(
     body: CreateExchange,
 ) -> Result<ExchangeView, ApiError> {
     let mut tx = db.begin().await?;
+    acting(&mut tx, session.account_id).await?;
 
     // One creation at a time per account, so that counting and inserting
     // cannot be raced past the limit.
@@ -438,6 +480,7 @@ pub async fn save_draft(
         return Err(ErrorCode::InvalidRequest.into());
     }
     let mut tx = db.begin().await?;
+    acting(&mut tx, session.account_id).await?;
     let (aggregate, _) = open_for(&mut tx, id, session.account_id, false).await?;
     if matches!(aggregate.exchange.state, State::Closed(_)) {
         return Err(ErrorCode::ActionNotAllowed.into());
@@ -684,7 +727,19 @@ pub async fn run_command(
                 note,
             )
         }
-        CommandDto::ConfirmCounterparty => (Command::ConfirmCounterparty, None),
+        CommandDto::ConfirmCounterparty => {
+            // Confirming says "this is who I meant", of someone shown by name
+            // and address. A claimant who deletes their account leaves the
+            // exchange as they go (`crate::deletion`), so nobody deleted
+            // should be found here. It is checked all the same: a signature
+            // left behind must never bind the initiator to nobody.
+            if let Some(claimant) = aggregate.account_of(Slot::B)
+                && deleted(&mut tx, claimant).await?
+            {
+                return Err(ErrorCode::ActionNotAllowed.into());
+            }
+            (Command::ConfirmCounterparty, None)
+        }
         CommandDto::RejectCounterparty => (Command::RejectCounterparty, None),
         CommandDto::ProposeEnd => (Command::ProposeEnd, None),
         CommandDto::AcceptEnd => (Command::AcceptEnd, None),
@@ -925,6 +980,7 @@ pub async fn claim_invitation(
     let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
     let account = session.account_id;
     let mut tx = db.begin().await?;
+    acting(&mut tx, account).await?;
 
     // Find the exchange first, so the locks are always taken in the same
     // order as everywhere else: the exchange, then the invitation.

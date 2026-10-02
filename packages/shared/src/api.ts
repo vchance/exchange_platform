@@ -14,6 +14,8 @@ import type { ReportReason } from './safety'
 type Schemas = components['schemas']
 export type BlockedPerson = Schemas['BlockedPerson']
 export type BlockStatus = Schemas['BlockStatus']
+export type CodeChannel = Schemas['CodeChannel']
+export type DeletionPreview = Schemas['DeletionPreview']
 export type InvitationPreview = Schemas['InvitationPreview']
 export type RevisionSent = Schemas['RevisionSent']
 export type RevisionView = Schemas['RevisionView']
@@ -173,6 +175,33 @@ export function createExchangeApi({ client, session, newKey }: ExchangeApiOption
 
     updateMe(update: Schemas['UpdateAccount']): Promise<Account> {
       return send(() => client.PATCH('/v1/me', { headers: headers(), body: update }))
+    },
+
+    // Deleting the account (DESIGN.md §4.1).
+
+    /** What deleting the account would do to the exchanges it is in. Changes nothing. */
+    deletionPreview(): Promise<DeletionPreview> {
+      return send(() => client.GET('/v1/me/deletion', { headers: headers() }))
+    },
+
+    /**
+     * Sends the code that confirms a deletion to the account's own email
+     * address or phone number. The service knows the address; none is sent.
+     */
+    requestDeletionCode(channel: CodeChannel): Promise<void> {
+      return send(() =>
+        client.POST('/v1/me/deletion/codes', { headers: headers(), body: { channel } }),
+      )
+    },
+
+    /**
+     * Deletes the account, for good. Once this resolves every session has
+     * ended, this one included; forgetting it on the device is the caller's job.
+     */
+    deleteAccount(channel: CodeChannel, code: string): Promise<void> {
+      return send(() =>
+        client.POST('/v1/me/deletion', { headers: headers(), body: { channel, code } }),
+      )
     },
 
     listExchanges(): Promise<ExchangeSummary[]> {

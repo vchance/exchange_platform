@@ -1,6 +1,7 @@
 import { isComplete } from '@exchange/shared';
 import { Stack, useRouter } from 'expo-router';
 
+import { AccountDeleted } from '../components/AccountDeleted';
 import { Button } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
 import { Gate } from '../screens/AccountSetup';
@@ -28,6 +29,7 @@ export default function Home() {
             : undefined,
         }}
       />
+      <AccountDeleted />
       <Gate>
         <HomeScreen />
       </Gate>

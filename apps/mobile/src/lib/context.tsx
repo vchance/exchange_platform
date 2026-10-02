@@ -39,6 +39,11 @@ export interface Session {
   /** Takes up a session the service just created, keeping its token in secure storage. */
   signedIn(created: SessionCreated): Promise<void>;
   signOut(): Promise<void>;
+  /**
+   * Stops acting as the account on this device without asking the service:
+   * for when the account has just been deleted, and its sessions with it.
+   */
+  forget(): Promise<void>;
   retry(): void;
 }
 
@@ -148,6 +153,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
           // Whether or not the service heard, this device stops acting as the
           // account: a refusal means the session had already ended.
         }
+        await dropSession();
+        setAccountState(null);
+      },
+      async forget() {
         await dropSession();
         setAccountState(null);
       },

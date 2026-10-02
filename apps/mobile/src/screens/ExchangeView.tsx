@@ -17,6 +17,7 @@ import { AppState, StyleSheet, Text, type ScrollView } from 'react-native';
 
 import { Consent } from '../components/Consent';
 import { InvitationFor, InvitationLink } from '../components/InvitationLink';
+import { OtherPartyLeft } from '../components/OtherPartyLeft';
 import { TermsView } from '../components/TermsView';
 import {
   Actions,
@@ -174,6 +175,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
         </Notice>
       )}
 
+      <OtherPartyLeft exchange={exchange} otherName={otherName} />
       <Counterparty
         exchange={exchange}
         otherName={otherName}

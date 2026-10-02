@@ -11,7 +11,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE};
 use axum::http::{HeaderMap, Method, Request, StatusCode};
-use exchange_backend::auth::{AuthRules, CodeSender, SendFuture, token_hash};
+use exchange_backend::auth::{AuthRules, CodeSender, Purpose, SendFuture, token_hash};
 use exchange_backend::db;
 use exchange_backend::domain::identity::Identifier;
 use exchange_backend::http::{self, AppState, Settings};
@@ -30,7 +30,7 @@ const PHONE_PREFIX: &str = "+1999";
 struct Outbox(Mutex<Vec<(String, String)>>);
 
 impl CodeSender for Outbox {
-    fn send<'a>(&'a self, to: &'a Identifier, code: &'a str) -> SendFuture<'a> {
+    fn send<'a>(&'a self, to: &'a Identifier, code: &'a str, _: Purpose) -> SendFuture<'a> {
         Box::pin(async move {
             self.0
                 .lock()

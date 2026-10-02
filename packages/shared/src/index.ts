@@ -66,6 +66,8 @@ export { ApiFailure, createExchangeApi, failureCode } from './api'
 export type {
   BlockedPerson,
   BlockStatus,
+  CodeChannel,
+  DeletionPreview,
   ExchangeApi,
   ExchangeApiOptions,
   InvitationPreview,
@@ -78,6 +80,20 @@ export type {
 } from './api'
 export { idempotencyKeys } from './idempotency'
 export type { IdempotencyKeys } from './idempotency'
+export {
+  codeDestinations,
+  deletedNotice,
+  deleteWithCode,
+  useAccountDeletion,
+  useDeletedNotice,
+} from './deletion'
+export type {
+  AccountDeletion,
+  CodeDestination,
+  DeletionApi,
+  DeletionOutcome,
+  DeletionStep,
+} from './deletion'
 export { sendCommand, useActions } from './actions'
 export type { Actions, CommandOutcome, CommandSender, FocusKeeper } from './actions'
 export { createI18n, isComplete } from './i18n'

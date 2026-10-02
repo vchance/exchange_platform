@@ -13,8 +13,8 @@ use std::sync::Arc;
 use axum::Router;
 use axum::body::Body;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
-use axum::http::{HeaderName, Method, Request, StatusCode};
-use exchange_backend::auth::{AuthRules, LogSender, generate_token, token_hash};
+use axum::http::{HeaderMap, HeaderName, Method, Request, StatusCode};
+use exchange_backend::auth::{AuthRules, CodeSender, LogSender, generate_token, token_hash};
 use exchange_backend::db;
 use exchange_backend::domain::Rules;
 use exchange_backend::http::{self, AppState, Settings};
@@ -91,6 +91,7 @@ async fn database(name: &'static str) -> &'static (String, String) {
 
 pub struct Reply {
     pub status: StatusCode,
+    pub headers: HeaderMap,
     pub body: Value,
 }
 
@@ -133,6 +134,15 @@ impl App {
     }
 
     pub async fn start_with(database_name: &'static str, rules: Rules) -> Self {
+        Self::start_sending(database_name, rules, Arc::new(LogSender)).await
+    }
+
+    /// With one-time codes handed to `code_sender`, for tests that read them.
+    pub async fn start_sending(
+        database_name: &'static str,
+        rules: Rules,
+        code_sender: Arc<dyn CodeSender>,
+    ) -> Self {
         let (owner_url, app_url) = database(database_name).await;
         let db = connect(app_url).await;
         let state = AppState {
@@ -144,7 +154,7 @@ impl App {
                 rules: rules.clone(),
                 consent_version: CONSENT_VERSION.to_owned(),
             }),
-            code_sender: Arc::new(LogSender),
+            code_sender,
         };
         Self {
             router: http::router(state),
@@ -213,9 +223,11 @@ impl App {
 
         let response = self.router.clone().oneshot(request).await.unwrap();
         let status = response.status();
+        let headers = response.headers().clone();
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         Reply {
             status,
+            headers,
             body: serde_json::from_slice(&bytes).unwrap_or(Value::Null),
         }
     }
