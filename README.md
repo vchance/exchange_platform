@@ -137,11 +137,23 @@ The workflow names the Rust and Node versions it uses; raise them there when the
 Each party can read everything an exchange holds and take a copy away (`DESIGN.md` §10, §14.1). Like the exchange itself, the record is visible only to its two parties, and it names them only as the agreement does: no email address, phone number or account ID is in it.
 
 - `GET /v1/exchanges/{id}/history` is what happened, oldest first, with what the parties wrote along the way: the message sent with a revision, a note on a delivery, the reason for a dispute, a statement about closing. It answers with the latest 50 events (`limit`, at most 200) and says where the page before starts.
-- `GET /v1/exchanges/{id}/record` is the copy: one self-contained JSON document (`format: "exchange-record"`, `format_version: 1`) with how the exchange stands, every revision sent and what became of it, every signature, and the whole history. It says in words, in the reader's language, what a signature rests on (one one-time code, nothing more), and that what the parties recorded about delivery is their own account and was not checked.
+- `GET /v1/exchanges/{id}/record` is the copy: one self-contained JSON document (`format: "exchange-record"`, `format_version: 2`) with how the exchange stands, every revision sent and what became of it, every signature, and the whole history. It says in words, in the reader's language, what a signature rests on (one one-time code, nothing more), and that what the parties recorded about delivery is their own account and was not checked.
 - Each revision in the copy carries `signed`, exactly what was signed, and `content_hash`. The hash is the SHA-256 of `signed` as canonical JSON (RFC 8785), so anyone holding the copy can recompute it; `backend/src/domain/canonical.rs` defines the format and `backend/tests/record.rs` recomputes it independently.
 - One document holds at most 500 events, and at most 50 revisions or about a megabyte of their text. A longer record continues in further documents: `part.next` says where the next one starts and `part.complete` says when one document is all of it.
 
+- Someone who opened the invitation and was removed before being confirmed (below) stays in the record without being named: what they did is marked `by_removed_claimant`, and a signature they left is listed apart, under `void_signatures`, never among `signatures`.
+
 On the web, an exchange's page ends with its history, and `/exchanges/{id}/record` lays the whole record out for reading and printing; the browser's "save as PDF" is the PDF, and a button downloads the JSON copy.
+
+## Who opened the invitation
+
+An invitation link that names nobody can be opened by whoever holds it, so the person who opens it is not yet a party (`DESIGN.md` §8). Until the initiator confirms them:
+
+- They can read the proposal, sign it, and leave (`POST /v1/exchanges/{id}/leave`). Declining, proposing changes and everything else are refused with `AWAITING_CONFIRMATION`. A signature given now takes effect only when the initiator confirms.
+- The initiator answers "is this who you invited?" with `CONFIRM_COUNTERPARTY` or `REJECT_COUNTERPARTY`. Rejecting removes them: the exchange no longer exists for them, anything they signed is void for good, and the proposal stays open for a new link (`POST /v1/exchanges/{id}/invitation`).
+- Blocking the initiator from that position leaves the exchange too.
+
+Someone the invitation named, or whom the initiator has confirmed, is a party and none of this applies to them. `backend/src/domain/exchange.rs` has the rules and `backend/tests/claimant.rs` runs them end to end; `backend/migrations/README.md` says how a signature stays tied to whoever held the place when it was made.
 
 ## Not built yet
 
