@@ -1,8 +1,10 @@
 import type { ErrorCode, ExchangeView } from '@exchange/api-client'
-import type { ReportReason } from '@exchange/shared'
+import { isUnconfirmedClaimant, type ReportReason } from '@exchange/shared'
 import { useEffect, useRef, useState } from 'react'
 
 import { useI18n } from '../app/context'
+import { navigate } from '../app/router'
+import { paths } from '../app/routes'
 import { Panel } from '../components/Panel'
 import { ReportForm } from '../components/ReportForm'
 import { Failure } from '../components/ui'
@@ -97,10 +99,20 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
   const report = (reason: ReportReason, details: string | null) =>
     void attempt(() => safetyApi.reportExchange(exchange.id, reason, details), 'reported', true)
 
+  // Someone the initiator has not confirmed cannot decline. Blocking takes
+  // them out of the exchange instead (DESIGN.md §8, §9).
+  const leaves = isUnconfirmedClaimant(exchange)
+
   const block = () =>
     void attempt(
       async () => {
         await safetyApi.block(exchange.id)
+        if (leaves) {
+          // The exchange is gone for them. The block is listed, and can be
+          // lifted, with the account.
+          navigate(paths.account)
+          return
+        }
         setBlocked(true)
         // Blocking withdraws or declines what was waiting to be signed.
         void reload()
@@ -177,8 +189,14 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
       {actions.panel === BLOCK && (
         <Panel title={fmt(w.block, name)}>
           <p>{fmt(w.blockStops, name)}</p>
-          <p>{w.blockEnds}</p>
-          <p>{w.blockKeeps}</p>
+          {leaves ? (
+            <p>{wording.claimant.blockLeaves}</p>
+          ) : (
+            <>
+              <p>{w.blockEnds}</p>
+              <p>{w.blockKeeps}</p>
+            </>
+          )}
           <p>{fmt(w.blockQuiet, name)}</p>
           <Failure code={failure} />
           <div className="actions">

@@ -1,6 +1,8 @@
 import type { ErrorCode, ExchangeView as Exchange } from '@exchange/api-client'
 import {
   consentShown,
+  isInvitationSpent,
+  isUnconfirmedClaimant,
   otherPartyName,
   remainingRequired,
   statusesOf,
@@ -18,6 +20,7 @@ import { TermsView } from '../components/TermsView'
 import { Failure, Notice, PageHeading, Written } from '../components/ui'
 import { useActions, type Actions } from '../lib/actions'
 import { api, failureCode, type RevisionView } from '../lib/api'
+import { ClaimantWaiting, ConfirmClaimant } from './Claimant'
 import { Ending } from './Ending'
 import { ExchangeSafety } from './ExchangeSafety'
 import { Fulfillment } from './Fulfillment'
@@ -222,7 +225,8 @@ interface CounterpartyProps {
 /**
  * Who is on the other side (DESIGN.md §8). Until someone opens the link the
  * initiator can replace it; once someone has, the initiator confirms it is
- * who they meant before any signature takes effect.
+ * who they meant before any signature takes effect, or removes them and
+ * makes a new link.
  */
 function Counterparty({
   exchange,
@@ -232,20 +236,30 @@ function Counterparty({
   onIssued,
   reload,
 }: CounterpartyProps) {
-  const { wording, fmt } = useI18n()
-  const w = wording.exchange
+  const { wording } = useI18n()
   const link = wording.invitationLink
   const initiator = exchange.you === 'A'
   const claimant = exchange.claimant ?? null
+  // Set when the initiator has just removed whoever opened the link, so the
+  // way to a new link can say why it is being offered.
+  const [removed, setRemoved] = useState(false)
 
   if (exchange.state !== 'NEGOTIATING') return null
 
   if (initiator && exchange.counterparty === 'UNCLAIMED') {
+    // The link was used by someone who is gone again, or ran out: there is
+    // none to lose or to have sent to the wrong person, only one to make.
+    const spent = isInvitationSpent(exchange) && !issued
     return (
       <section className="card" aria-labelledby="invitation-heading">
         <h2 id="invitation-heading">{link.heading}</h2>
-        {issued ? <InvitationLink key={issued} token={issued} /> : <p>{link.unclaimed}</p>}
-        <p>{link.reissueIntro}</p>
+        {removed && !issued && <Notice>{wording.claimant.rejected}</Notice>}
+        {issued ? (
+          <InvitationLink key={issued} token={issued} />
+        ) : (
+          <p>{spent ? wording.claimant.linkUsed : link.unclaimed}</p>
+        )}
+        {!spent && <p>{link.reissueIntro}</p>}
         <div className="actions">
           <button
             type="button"
@@ -263,36 +277,22 @@ function Counterparty({
   }
 
   if (initiator && exchange.counterparty === 'CLAIMED' && claimant) {
-    const signed = exchange.open_revision?.accepted_by.includes('B') ?? false
     return (
-      <section className="card" aria-labelledby="claimed-heading">
-        <h2 id="claimed-heading">{w.claimedHeading}</h2>
-        <p>
-          {fmt(w.claimedBody, { name: claimant.display_name, identifier: claimant.identifier })}
-        </p>
-        {signed && <p>{w.claimedSigned}</p>}
-        <div className="actions">
-          <button
-            type="button"
-            className="primary"
-            disabled={actions.busy}
-            onClick={() => void actions.run({ type: 'CONFIRM_COUNTERPARTY' })}
-          >
-            {w.confirmCounterparty}
-          </button>
-        </div>
-        <p className="hint">{w.notThem}</p>
-      </section>
+      <ConfirmClaimant
+        exchange={exchange}
+        claimant={claimant}
+        actions={actions}
+        onRejected={() => {
+          // Straight on to making a link for the person who was meant.
+          setRemoved(true)
+          actions.open('reissue')
+        }}
+      />
     )
   }
 
-  if (!initiator && exchange.counterparty === 'CLAIMED') {
-    const signed = exchange.open_revision?.accepted_by.includes('B') ?? false
-    return (
-      <p className="notice">
-        {fmt(signed ? w.waitingConfirmationSigned : w.waitingConfirmation, { name: otherName })}
-      </p>
-    )
+  if (isUnconfirmedClaimant(exchange)) {
+    return <ClaimantWaiting exchange={exchange} otherName={otherName} actions={actions} />
   }
   return null
 }
@@ -368,6 +368,9 @@ function OpenRevision({ exchange, revision, otherName, actions }: OpenRevisionPr
   const amendment = exchange.state === 'ACTIVE'
   // The initiator is never bound to someone they have not confirmed.
   const blocked = you === 'A' && exchange.counterparty !== 'CONFIRMED'
+  // Nor can someone they have not confirmed decline or answer with terms of
+  // their own: they can sign, or leave.
+  const signOnly = isUnconfirmedClaimant(exchange)
 
   return (
     <section className="card" aria-labelledby="open-heading">
@@ -437,17 +440,21 @@ function OpenRevision({ exchange, revision, otherName, actions }: OpenRevisionPr
                 {w.accept}
               </button>
             )}
-            <Link className="button" to={paths.revise(exchange.id)}>
-              {w.counter}
-            </Link>
-            <button
-              type="button"
-              aria-expanded={actions.panel === 'decline'}
-              disabled={actions.busy}
-              onClick={() => actions.open('decline')}
-            >
-              {w.decline}
-            </button>
+            {!signOnly && (
+              <>
+                <Link className="button" to={paths.revise(exchange.id)}>
+                  {w.counter}
+                </Link>
+                <button
+                  type="button"
+                  aria-expanded={actions.panel === 'decline'}
+                  disabled={actions.busy}
+                  onClick={() => actions.open('decline')}
+                >
+                  {w.decline}
+                </button>
+              </>
+            )}
           </div>
         </>
       )}

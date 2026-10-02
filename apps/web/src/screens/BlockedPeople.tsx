@@ -82,12 +82,26 @@ export function BlockedPeople() {
           <ul className="plain">
             {people.map((person) => (
               <li key={person.exchange_id} className="card">
-                <Link to={paths.exchange(person.exchange_id)} className="card-link">
-                  <Written inline>{nameOf(person)}</Written>
-                </Link>
+                {/* An exchange this person has left names whom they blocked,
+                    and is not theirs to open. */}
+                {person.left ? (
+                  <p>
+                    <Written inline>{nameOf(person)}</Written>
+                  </p>
+                ) : (
+                  <Link to={paths.exchange(person.exchange_id)} className="card-link">
+                    <Written inline>{nameOf(person)}</Written>
+                  </Link>
+                )}
                 <p className="hint">
                   {fmt(wording.home.reference, { code: person.display_code })}
                   <br />
+                  {person.left && (
+                    <>
+                      {wording.claimant.blockedAfterLeaving}
+                      <br />
+                    </>
+                  )}
                   {fmt(w.blockedSince, { date: moment(person.blocked_at) })}
                 </p>
                 <div className="actions">

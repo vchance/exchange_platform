@@ -311,6 +311,33 @@ function Version({ revision, name, when }: VersionProps) {
             </p>
           </li>
         ))}
+        {/* Left by someone who opened the invitation and was removed, or
+            left, before being confirmed (DESIGN.md §8). Kept because it
+            happened; it names nobody and counts for nothing. */}
+        {revision.void_signatures?.map((signature) => (
+          <li key={`void-${signature.signed_at}`} className="record-signature">
+            <p>
+              {fmt(wording.claimant.voidSignature, {
+                date: when(signature.signed_at),
+                since: when(signature.void_since),
+              })}
+            </p>
+            <p className="hint">
+              {fmt(w.verifiedBy, {
+                method:
+                  w.export.verification[signature.verification.method] ??
+                  signature.verification.description,
+              })}
+              <br />
+              {fmt(w.verifiedAt, { date: when(signature.verification.verified_at) })}
+              <br />
+              {fmt(w.consentShown, {
+                version: signature.consent.version,
+                language: signature.consent.language,
+              })}
+            </p>
+          </li>
+        ))}
       </ul>
     </section>
   )

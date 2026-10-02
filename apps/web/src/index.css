@@ -310,6 +310,15 @@ legend {
   background: var(--raised);
 }
 
+/* A notice holding more than one line of text ends where its last part does. */
+.notice > :first-child {
+  margin-block-start: 0;
+}
+
+.notice > :last-child {
+  margin-block-end: 0;
+}
+
 .notice-error {
   border-color: var(--alert);
   background: var(--alert-surface);

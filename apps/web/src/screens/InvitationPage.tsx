@@ -163,7 +163,21 @@ export function InvitationPage() {
 
       {preview && (
         <>
-          <p>{fmt(able ? w.introSignedIn : w.intro, { name: sender })}</p>
+          {/* An invitation that names nobody can be opened by whoever holds
+              the link, so its sender has to confirm them before they can do
+              more than sign (DESIGN.md §8). */}
+          {preview.bound ? (
+            <p>{fmt(able ? w.introSignedIn : w.intro, { name: sender })}</p>
+          ) : (
+            <p>
+              {fmt(
+                able
+                  ? wording.claimant.invitationIntroSignedIn
+                  : wording.claimant.invitationIntro,
+                { name: sender },
+              )}
+            </p>
+          )}
           <p>{w.notBinding}</p>
 
           <section
