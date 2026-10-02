@@ -20,7 +20,13 @@ use crate::exchanges::dto::{
 pub const FORMAT: &str = "exchange-record";
 
 /// Bumped whenever the document changes in a way a reader must know about.
-pub const FORMAT_VERSION: u32 = 1;
+///
+/// 2: an event from party B's place may have been made by someone who was
+/// removed from it before being confirmed (`by_removed_claimant`), who is
+/// not the party the document names as B; and a signature such a person
+/// left is listed apart, under `void_signatures`. `signatures` still holds
+/// only the signatures that count.
+pub const FORMAT_VERSION: u32 = 2;
 
 // ---- Requests ---------------------------------------------------------------
 
@@ -75,6 +81,11 @@ pub enum EventType {
     CounterpartyClaimed,
     /// The initiator confirmed who took it.
     CounterpartyConfirmed,
+    /// The initiator said whoever took it was not who they invited. That
+    /// person was removed, and the place was free to be taken again.
+    CounterpartyRejected,
+    /// Whoever took it left before the initiator had confirmed them.
+    CounterpartyReleased,
     /// A revision was sent, which signs it. Its note is the message sent
     /// with it.
     RevisionSent,
@@ -109,9 +120,11 @@ pub enum EventType {
 }
 
 impl EventType {
-    pub const ALL: [EventType; 21] = [
+    pub const ALL: [EventType; 23] = [
         EventType::CounterpartyClaimed,
         EventType::CounterpartyConfirmed,
+        EventType::CounterpartyRejected,
+        EventType::CounterpartyReleased,
         EventType::RevisionSent,
         EventType::RevisionSuperseded,
         EventType::RevisionAccepted,
@@ -138,6 +151,8 @@ impl EventType {
         match self {
             EventType::CounterpartyClaimed => "COUNTERPARTY_CLAIMED",
             EventType::CounterpartyConfirmed => "COUNTERPARTY_CONFIRMED",
+            EventType::CounterpartyRejected => "COUNTERPARTY_REJECTED",
+            EventType::CounterpartyReleased => "COUNTERPARTY_RELEASED",
             EventType::RevisionSent => "REVISION_SENT",
             EventType::RevisionSuperseded => "REVISION_SUPERSEDED",
             EventType::RevisionAccepted => "REVISION_ACCEPTED",
@@ -189,6 +204,12 @@ pub struct RecordEvent {
     pub sequence: i64,
     pub r#type: EventType,
     pub actor: Actor,
+    /// Set when the actor was someone who had opened the invitation and was
+    /// removed, or left, before the initiator confirmed them. `actor` is
+    /// then `B` for the place they were in; they are not the party this
+    /// record names as B, and the record does not say who they were.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub by_removed_claimant: Option<bool>,
     /// RFC 3339, UTC.
     pub at: String,
     /// What the actor wrote with it, exactly as written: the message sent
@@ -214,6 +235,11 @@ pub struct RecordEvent {
     /// that no confirmation by the initiator was needed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub invitation_named_them: Option<bool>,
+    /// When whoever opened the invitation was removed or left: whether they
+    /// had signed the revision then open, named in `revision`. If so, that
+    /// signature is void: it never took effect and never can.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_void: Option<bool>,
     /// When the exchange closed: how.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outcome: Option<OutcomeDto>,
@@ -315,6 +341,24 @@ pub struct Signature {
     pub consent: ConsentShown,
 }
 
+/// A signature that never took effect and never can. It was made by someone
+/// who had opened the invitation and was removed, or left, before the
+/// initiator confirmed them. It is kept because it happened. It names
+/// nobody: that person is not the party the revision names.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct VoidSignature {
+    /// The place the signer was in.
+    pub party: Slot,
+    /// RFC 3339, UTC.
+    pub signed_at: String,
+    /// The hash that was signed, in hex.
+    pub content_hash: String,
+    pub verification: Verification,
+    pub consent: ConsentShown,
+    /// When the signer was removed or left. RFC 3339, UTC.
+    pub void_since: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SettlementDto {
@@ -387,8 +431,12 @@ pub struct RecordRevision {
     #[schema(value_type = SignedDocument)]
     pub signed: serde_json::Value,
     /// The author's, made by sending it, then the other party's if they
-    /// accepted.
+    /// accepted. Only signatures that count are here.
     pub signatures: Vec<Signature>,
+    /// Signatures that do not count and never will, kept apart so that
+    /// nobody reading `signatures` takes one for the other party's.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub void_signatures: Vec<VoidSignature>,
 }
 
 /// Where a contribution of the agreement stands.

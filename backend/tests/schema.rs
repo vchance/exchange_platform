@@ -120,9 +120,12 @@ async fn agreement(conn: &mut PgConnection) -> Agreement {
     .await
     .unwrap();
 
+    // The initiator has confirmed who B is, without which nothing comes
+    // into force.
     sqlx::query(
-        "INSERT INTO participant (exchange_id, slot, account_id, display_name, alias)
-         VALUES ($1, 'A', $2, 'Ana', 'Party A'), ($1, 'B', $3, 'Ben', 'Party B')",
+        "INSERT INTO participant
+            (exchange_id, slot, account_id, display_name, alias, initiator_confirmed_at)
+         VALUES ($1, 'A', $2, 'Ana', 'Party A', NULL), ($1, 'B', $3, 'Ben', 'Party B', now())",
     )
     .bind(exchange)
     .bind(account_a)
@@ -427,6 +430,412 @@ async fn each_party_signs_a_revision_once() {
         .bind(a.revision)
         .bind(a.account_a)
     );
+}
+
+// ---- Who holds a slot, and what a signature rests on ------------------------
+
+/// A proposal from A, signed by sending it, with nobody yet in slot B.
+struct Proposal {
+    account_a: Uuid,
+    exchange: Uuid,
+    revision: Uuid,
+}
+
+async fn proposal(conn: &mut PgConnection) -> Proposal {
+    let account_a = account(conn).await;
+    let exchange: Uuid = sqlx::query_scalar(
+        "INSERT INTO exchange (display_code, timezone, created_by)
+         VALUES (substr(gen_random_uuid()::text, 1, 8), 'America/New_York', $1)
+         RETURNING id",
+    )
+    .bind(account_a)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO participant (exchange_id, slot, account_id, display_name, alias)
+         VALUES ($1, 'A', $2, 'Ana', 'Party A'), ($1, 'B', NULL, 'Ben', 'Party B')",
+    )
+    .bind(exchange)
+    .bind(account_a)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    let revision: Uuid = sqlx::query_scalar(
+        "INSERT INTO revision (exchange_id, sequence, author_slot, terms, expires_at, content_hash,
+                               party_a_name, party_b_name)
+         VALUES ($1, 1, 'A', 'Fix the fence for $500.', now() + interval '14 days', sha256('r1'),
+                 'Ana', 'Ben')
+         RETURNING id",
+    )
+    .bind(exchange)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE exchange SET state = 'NEGOTIATING', open_revision_id = $2 WHERE id = $1")
+        .bind(exchange)
+        .bind(revision)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let proposal = Proposal {
+        account_a,
+        exchange,
+        revision,
+    };
+    sign(&proposal, "A", account_a)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    proposal
+}
+
+/// `account` signing the proposal for `slot`. Whether it may is the test.
+fn sign<'q>(
+    proposal: &Proposal,
+    slot: &'q str,
+    account: Uuid,
+) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
+    sqlx::query(
+        "INSERT INTO acceptance
+            (exchange_id, revision_id, slot, account_id, content_hash, auth_method,
+             authenticated_at, consent_language, consent_version)
+         VALUES ($1, $2, $3, $4, sha256('r1'), 'EMAIL_OTP', now(), 'en', '1')",
+    )
+    .bind(proposal.exchange)
+    .bind(proposal.revision)
+    .bind(slot)
+    .bind(account)
+}
+
+/// Puts `account` in slot B, or takes whoever is there out of it.
+async fn set_invited_party(
+    conn: &mut PgConnection,
+    exchange: Uuid,
+    account: Option<Uuid>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE participant SET account_id = $2 WHERE exchange_id = $1 AND slot = 'B'")
+        .bind(exchange)
+        .bind(account)
+        .execute(conn)
+        .await
+        .map(|_| ())
+}
+
+/// slot, holding, account, whether it has ended; in that order.
+async fn holdings(conn: &mut PgConnection, exchange: Uuid) -> Vec<(String, i32, Uuid, bool)> {
+    sqlx::query_as(
+        "SELECT slot, holding, account_id, ended_at IS NOT NULL FROM slot_holding
+         WHERE exchange_id = $1 ORDER BY slot, holding",
+    )
+    .bind(exchange)
+    .fetch_all(conn)
+    .await
+    .unwrap()
+}
+
+/// The holding each signature on the proposal was made under, by slot.
+async fn signed_under(conn: &mut PgConnection, proposal: &Proposal) -> Vec<(String, i32, Uuid)> {
+    sqlx::query_as(
+        "SELECT slot, holding, account_id FROM acceptance
+         WHERE revision_id = $1 ORDER BY slot, holding",
+    )
+    .bind(proposal.revision)
+    .fetch_all(conn)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn the_database_keeps_who_has_held_each_slot() {
+    let mut tx = app().await;
+    let p = proposal(&mut tx).await;
+    let (stranger, ben) = (account(&mut tx).await, account(&mut tx).await);
+    let a = ("A".to_owned(), 1, p.account_a, false);
+    assert_eq!(
+        holdings(&mut tx, p.exchange).await,
+        std::slice::from_ref(&a)
+    );
+
+    // A stranger takes the invited party's place, is taken out again, and
+    // the person meant takes it. Every one of them stays on record.
+    set_invited_party(&mut tx, p.exchange, Some(stranger))
+        .await
+        .unwrap();
+    set_invited_party(&mut tx, p.exchange, None).await.unwrap();
+    set_invited_party(&mut tx, p.exchange, Some(ben))
+        .await
+        .unwrap();
+    assert_eq!(
+        holdings(&mut tx, p.exchange).await,
+        [
+            a.clone(),
+            ("B".to_owned(), 1, stranger, true),
+            ("B".to_owned(), 2, ben, false),
+        ]
+    );
+
+    // Coming back is a new holding, not the old one resumed.
+    set_invited_party(&mut tx, p.exchange, None).await.unwrap();
+    set_invited_party(&mut tx, p.exchange, Some(stranger))
+        .await
+        .unwrap();
+    assert_eq!(
+        holdings(&mut tx, p.exchange).await[1..],
+        [
+            ("B".to_owned(), 1, stranger, true),
+            ("B".to_owned(), 2, ben, true),
+            ("B".to_owned(), 3, stranger, false),
+        ]
+    );
+
+    // The application can read that record and cannot write it.
+    for statement in [
+        "INSERT INTO slot_holding (exchange_id, slot, holding, account_id)
+         SELECT exchange_id, slot, 9, account_id FROM slot_holding LIMIT 1",
+        "UPDATE slot_holding SET ended_at = now()",
+        "UPDATE slot_holding SET ended_at = NULL",
+        "DELETE FROM slot_holding",
+        "TRUNCATE slot_holding CASCADE",
+    ] {
+        let error = refused!(tx, INSUFFICIENT_PRIVILEGE, sqlx::query(statement));
+        assert!(
+            error.to_string().contains("permission denied"),
+            "{statement}: {error}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_record_of_who_held_a_slot_cannot_be_written_by_hand_whoever_asks() {
+    let mut tx = owner().await.begin().await.unwrap();
+    let p = proposal(&mut tx).await;
+    let stranger = account(&mut tx).await;
+    set_invited_party(&mut tx, p.exchange, Some(stranger))
+        .await
+        .unwrap();
+    set_invited_party(&mut tx, p.exchange, None).await.unwrap();
+
+    // Even the schema owner cannot reopen a holding, move its end, give it
+    // to someone else, end one whose holder is still in the slot, remove
+    // one, or add one the participant row never had.
+    for statement in [
+        "UPDATE slot_holding SET ended_at = NULL WHERE exchange_id = $1 AND slot = 'B'",
+        "UPDATE slot_holding SET ended_at = now() + interval '1 day'
+         WHERE exchange_id = $1 AND slot = 'B'",
+        "UPDATE slot_holding SET account_id = (SELECT created_by FROM exchange WHERE id = $1)
+         WHERE exchange_id = $1 AND slot = 'B'",
+        "UPDATE slot_holding SET ended_at = now() WHERE exchange_id = $1 AND slot = 'A'",
+        "DELETE FROM slot_holding WHERE exchange_id = $1",
+        "INSERT INTO slot_holding (exchange_id, slot, holding, account_id)
+         SELECT $1, 'B', 2, id FROM account ORDER BY created_at DESC LIMIT 1",
+        "INSERT INTO slot_holding (exchange_id, slot, holding, account_id, ended_at)
+         SELECT $1, 'A', 2, created_by, now() FROM exchange WHERE id = $1",
+    ] {
+        let error = refused!(
+            tx,
+            INSUFFICIENT_PRIVILEGE,
+            sqlx::query(statement).bind(p.exchange)
+        );
+        assert!(
+            error.to_string().contains("follows the participant row"),
+            "{statement}: {error}"
+        );
+    }
+    let error = refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query("TRUNCATE slot_holding CASCADE")
+    );
+    assert!(
+        error.to_string().contains("TRUNCATE is not allowed"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn only_an_invited_party_the_initiator_has_not_confirmed_can_be_taken_out() {
+    let mut tx = app().await;
+    let p = proposal(&mut tx).await;
+    let (ben, carla) = (account(&mut tx).await, account(&mut tx).await);
+    set_invited_party(&mut tx, p.exchange, Some(ben))
+        .await
+        .unwrap();
+
+    // Nobody takes a place that someone is in.
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query("UPDATE participant SET account_id = $2 WHERE exchange_id = $1 AND slot = 'B'")
+            .bind(p.exchange)
+            .bind(carla)
+    );
+    // The initiator is never taken out.
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "UPDATE participant SET account_id = NULL WHERE exchange_id = $1 AND slot = 'A'"
+        )
+        .bind(p.exchange)
+    );
+    // Only someone in the place can be confirmed.
+    let empty = proposal(&mut tx).await;
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "UPDATE participant SET initiator_confirmed_at = now()
+             WHERE exchange_id = $1 AND slot = 'B'"
+        )
+        .bind(empty.exchange)
+    );
+
+    // Once confirmed, the invited party is a party for good: they cannot be
+    // taken out, and the confirmation cannot be taken back to allow it.
+    sqlx::query(
+        "UPDATE participant SET initiator_confirmed_at = now()
+         WHERE exchange_id = $1 AND slot = 'B'",
+    )
+    .bind(p.exchange)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    for statement in [
+        "UPDATE participant SET account_id = NULL WHERE exchange_id = $1 AND slot = 'B'",
+        "UPDATE participant SET account_id = NULL, initiator_confirmed_at = NULL
+         WHERE exchange_id = $1 AND slot = 'B'",
+        "UPDATE participant SET initiator_confirmed_at = NULL
+         WHERE exchange_id = $1 AND slot = 'B'",
+    ] {
+        refused!(tx, CHECK, sqlx::query(statement).bind(p.exchange));
+    }
+    assert_eq!(
+        holdings(&mut tx, p.exchange).await[1],
+        ("B".to_owned(), 1, ben, false)
+    );
+}
+
+#[tokio::test]
+async fn a_signature_belongs_to_whoever_held_the_slot_when_it_was_made() {
+    let mut tx = app().await;
+    let p = proposal(&mut tx).await;
+    let (stranger, ben) = (account(&mut tx).await, account(&mut tx).await);
+
+    // Nobody is in the invited party's place, so nobody can sign for it.
+    refused!(tx, FOREIGN_KEY, sign(&p, "B", stranger));
+
+    // A stranger takes the place and signs.
+    set_invited_party(&mut tx, p.exchange, Some(stranger))
+        .await
+        .unwrap();
+    refused!(tx, FOREIGN_KEY, sign(&p, "B", ben));
+    sign(&p, "B", stranger).execute(&mut *tx).await.unwrap();
+    refused!(tx, UNIQUE, sign(&p, "B", stranger));
+
+    // The stranger is taken out. Their signature stays where it was, and
+    // they can add no other: not as themselves, and not by naming the
+    // holding they once had.
+    set_invited_party(&mut tx, p.exchange, None).await.unwrap();
+    refused!(tx, FOREIGN_KEY, sign(&p, "B", stranger));
+    set_invited_party(&mut tx, p.exchange, Some(ben))
+        .await
+        .unwrap();
+    refused!(tx, FOREIGN_KEY, sign(&p, "B", stranger));
+    refused!(
+        tx,
+        FOREIGN_KEY,
+        sqlx::query(
+            "INSERT INTO acceptance
+                (exchange_id, revision_id, slot, holding, account_id, content_hash, auth_method,
+                 authenticated_at, consent_language, consent_version)
+             VALUES ($1, $2, 'B', 1, $3, sha256('r1'), 'EMAIL_OTP', now(), 'en', '1')"
+        )
+        .bind(p.exchange)
+        .bind(p.revision)
+        .bind(stranger)
+    );
+
+    // The person now in the place signs the same revision in their own
+    // right, whatever holding the insert names.
+    sqlx::query(
+        "INSERT INTO acceptance
+            (exchange_id, revision_id, slot, holding, account_id, content_hash, auth_method,
+             authenticated_at, consent_language, consent_version)
+         VALUES ($1, $2, 'B', 1, $3, sha256('r1'), 'EMAIL_OTP', now(), 'en', '1')",
+    )
+    .bind(p.exchange)
+    .bind(p.revision)
+    .bind(ben)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    assert_eq!(
+        signed_under(&mut tx, &p).await,
+        [
+            ("A".to_owned(), 1, p.account_a),
+            ("B".to_owned(), 1, stranger),
+            ("B".to_owned(), 2, ben),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_revision_comes_into_force_only_on_the_signatures_of_those_who_hold_the_slots() {
+    let mut tx = app().await;
+    let p = proposal(&mut tx).await;
+    let (stranger, ben) = (account(&mut tx).await, account(&mut tx).await);
+    let in_force = "UPDATE exchange SET state = 'ACTIVE', open_revision_id = NULL,
+                    in_force_revision_id = $2 WHERE id = $1";
+    let confirm = "UPDATE participant SET initiator_confirmed_at = now()
+                   WHERE exchange_id = $1 AND slot = 'B'";
+    macro_rules! not_in_force {
+        ($why:expr) => {
+            let error = refused!(
+                tx,
+                CHECK,
+                sqlx::query(in_force).bind(p.exchange).bind(p.revision)
+            );
+            assert!(
+                error.to_string().contains("comes into force only"),
+                "{}: {error}",
+                $why
+            );
+        };
+    }
+
+    not_in_force!("only the initiator has signed");
+
+    // A stranger takes the place and signs. The initiator has not confirmed
+    // them, so it binds nobody.
+    set_invited_party(&mut tx, p.exchange, Some(stranger))
+        .await
+        .unwrap();
+    sign(&p, "B", stranger).execute(&mut *tx).await.unwrap();
+    not_in_force!("the signer is not confirmed");
+
+    // The stranger is taken out and the person meant comes in and is
+    // confirmed. Two signatures are on the revision, one for each slot, and
+    // one of them is nobody's any more.
+    set_invited_party(&mut tx, p.exchange, None).await.unwrap();
+    set_invited_party(&mut tx, p.exchange, Some(ben))
+        .await
+        .unwrap();
+    sqlx::query(confirm)
+        .bind(p.exchange)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    not_in_force!("the only signature for the invited party is a removed claimant's");
+
+    // The person in the place signs, and it comes into force.
+    sign(&p, "B", ben).execute(&mut *tx).await.unwrap();
+    sqlx::query(in_force)
+        .bind(p.exchange)
+        .bind(p.revision)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

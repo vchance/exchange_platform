@@ -336,8 +336,15 @@ pub async fn load_revision(
         })
         .collect();
 
+    // A signature counts for as long as the signer holds the slot they
+    // signed in. One left behind by a claimant who was removed before being
+    // confirmed is still in the record, and is nobody's acceptance.
     let accepted_by = sqlx::query_scalar::<_, String>(
-        "SELECT slot FROM acceptance WHERE revision_id = $1 ORDER BY slot",
+        "SELECT a.slot FROM acceptance a
+         JOIN slot_holding h
+           ON h.exchange_id = a.exchange_id AND h.slot = a.slot AND h.holding = a.holding
+         WHERE a.revision_id = $1 AND h.ended_at IS NULL
+         ORDER BY a.slot",
     )
     .bind(id)
     .fetch_all(&mut *conn)
@@ -483,7 +490,8 @@ pub async fn insert_revision(
 }
 
 /// The stored form of an event. `claimant` is the account holding the
-/// invited party's slot, recorded on the event that put them there.
+/// invited party's slot, recorded on the event that put them there and on
+/// the one that took them out again.
 fn event_row(
     event: &Event,
     claimant: Option<Uuid>,
@@ -497,6 +505,20 @@ fn event_row(
             json!({ "confirmed": confirmed, "account": claimant }),
         ),
         Event::CounterpartyConfirmed => ("COUNTERPARTY_CONFIRMED", None, None, none),
+        // Who was removed is kept here for the same reason as who claimed.
+        // The revision is the one they had signed, if they had.
+        Event::CounterpartyRejected { voided } => (
+            "COUNTERPARTY_REJECTED",
+            voided.map(|revision| revision.0),
+            None,
+            json!({ "account": claimant, "signature_void": voided.is_some() }),
+        ),
+        Event::CounterpartyReleased { voided } => (
+            "COUNTERPARTY_RELEASED",
+            voided.map(|revision| revision.0),
+            None,
+            json!({ "account": claimant, "signature_void": voided.is_some() }),
+        ),
         Event::RevisionSent { revision, .. } => ("REVISION_SENT", Some(revision.0), None, none),
         Event::RevisionSuperseded { revision } => {
             ("REVISION_SUPERSEDED", Some(revision.0), None, none)
@@ -562,10 +584,61 @@ fn event_row(
     }
 }
 
+/// Takes an unconfirmed claimant out of the invited party's slot, leaving it
+/// free to be claimed again.
+///
+/// Emptying the participant row is what ends their holding of the slot (the
+/// database does that itself, see `0006_slot_holdings.sql`), and with it any
+/// signature they gave: signatures count only while the holding they were
+/// made under is open. Nothing of what they did is removed. Their claim,
+/// their signature and the holding stay as they were, under their account.
+///
+/// What does go is what was theirs alone and binds nobody: a working copy,
+/// and messages still waiting to be sent to them about an exchange that is
+/// no longer theirs.
+async fn vacate(
+    conn: &mut PgConnection,
+    exchange: Uuid,
+    removed: Uuid,
+    now: OffsetDateTime,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE participant SET account_id = NULL, removal_requested_at = NULL
+         WHERE exchange_id = $1 AND slot = 'B' AND account_id = $2",
+    )
+    .bind(exchange)
+    .bind(removed)
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query("DELETE FROM exchange_draft WHERE exchange_id = $1 AND account_id = $2")
+        .bind(exchange)
+        .bind(removed)
+        .execute(&mut *conn)
+        .await?;
+
+    // One the worker is sending at this moment is locked by it and is let go:
+    // waiting for it would hold up the exchange for as long as a send takes.
+    sqlx::query(
+        "UPDATE outbox SET completed_at = $3, last_error = $4
+         WHERE id IN (SELECT id FROM outbox
+                      WHERE exchange_id = $1 AND recipient_account_id = $2
+                        AND completed_at IS NULL
+                      FOR UPDATE SKIP LOCKED)",
+    )
+    .bind(exchange)
+    .bind(removed)
+    .bind(now)
+    .bind(outbox::NO_LONGER_A_PARTY)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
 /// Stores a decision: appends its events, queues the message telling the
-/// other party, and brings the exchange row, the contribution statuses and
-/// the counterparty confirmation up to date. The caller holds the lock on the
-/// exchange row.
+/// other party, and brings the exchange row, the contribution statuses, the
+/// counterparty confirmation and who holds the invited party's slot up to
+/// date. The caller holds the lock on the exchange row.
 ///
 /// `note` is what the actor wrote with the command (a dispute reason, a
 /// statement) and is kept on the first event.
@@ -624,6 +697,18 @@ pub async fn persist(
         }
     }
 
+    // An unconfirmed claimant was removed, or left. Before anyone is told
+    // anything, so that what is closed here is only what was waiting for
+    // them from before.
+    let after = &decision.exchange;
+    if let (Counterparty::Claimed, Counterparty::Unclaimed, Some(removed)) = (
+        before.exchange.counterparty,
+        after.counterparty,
+        before.accounts[1],
+    ) {
+        vacate(conn, before.id, removed, now).await?;
+    }
+
     // Who is told (DESIGN.md §12). Queued here, with the events, so that a
     // message exists exactly when the event it is about does.
     if let Some(notification) = notification(&before.exchange, actor, &decision.events) {
@@ -644,7 +729,6 @@ pub async fn persist(
         }
     }
 
-    let after = &decision.exchange;
     for (id, status) in &after.statuses {
         if before.exchange.statuses.get(id) != Some(status) {
             sqlx::query(

@@ -48,6 +48,24 @@ The first migration allowed only `en` and `es` as an account's language and as a
 
 Upper bounds on free text, as backstops. Agreement history cannot be deleted, so nothing written into it may be unbounded. The service enforces the real, tighter limits (`domain::Limits`), which can change without a migration.
 
+## 0006_slot_holdings
+
+Someone who opened an invitation that named nobody can be removed, or can leave, before the initiator confirms them (`DESIGN.md` §8). The invited party's slot is then free for someone else, so `participant.account_id` is no longer set once and for all, and a signature can no longer be tied to it: the signature is permanent and the row is not.
+
+**`slot_holding`** has one row for each time an account held a slot: who, from when, and until when if it ended. A signature (`acceptance.holding`) now belongs to a holding.
+
+- The database writes the table itself, from changes to `participant.account_id`. The application role can read it and nothing else; no role can change a holding except to end it once, by emptying the slot.
+- Only the invited party's slot can be emptied, and only while the initiator has not confirmed them. A slot is emptied before someone else takes it. A confirmation is never taken back.
+- A signature is stamped by the database with the holding open in its slot when it is inserted, and must come from that holding's account. That is the old rule, "the signer is the account holding that slot", made to hold for the past as well.
+- One signature per revision, slot and holding: whoever takes a slot after someone was removed from it signs the same revision in their own right.
+- A revision comes into force only when both slots' current holders have signed it and the invited party is confirmed. A signature made under a holding that has ended counts for nothing, whoever tries to rely on it.
+
+Nothing is deleted: a removed person's claim event, their signature and their holding all stay, under their account.
+
+**Rejected.** Dropping the foreign key and checking the signer in a trigger alone would have left no record of who held the slot when. Letting several participant rows share a slot would have changed what every other table's reference to a slot means. A "void" flag on the signature would have meant updating an append-only table. Starting a fresh exchange for the next claimant would have changed the exchange ID, which is part of what the initiator signed.
+
+`backend/tests/schema.rs` checks these against the database alone, and `backend/tests/claimant.rs` through the API.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

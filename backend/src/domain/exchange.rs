@@ -52,9 +52,12 @@ pub enum State {
 /// knows by whom (DESIGN.md §8).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Counterparty {
+    /// Nobody holds the slot: nobody has claimed it yet, or whoever did was
+    /// removed or left before being confirmed.
     Unclaimed,
     /// Claimed through an unbound invitation; the initiator has not yet
-    /// confirmed who it is. No acceptance takes effect in this state.
+    /// confirmed who it is. No acceptance takes effect in this state, and
+    /// the claimant can do nothing but read, sign and leave.
     Claimed,
     Confirmed,
 }
@@ -150,6 +153,11 @@ pub enum Command {
     },
     /// The initiator confirms who claimed slot B.
     ConfirmCounterparty,
+    /// The initiator says the claimant is not who they invited. The claimant
+    /// is removed, and slot B is free to be claimed again.
+    RejectCounterparty,
+    /// A claimant the initiator has not confirmed gives up slot B.
+    ReleaseClaim,
     /// Send a revision, which signs it. In a draft or negotiation this is a
     /// proposal or counteroffer; on an active exchange it proposes an amendment.
     Send {
@@ -190,6 +198,16 @@ pub enum Event {
         confirmed: bool,
     },
     CounterpartyConfirmed,
+    /// The initiator removed an unconfirmed claimant. `voided` is the open
+    /// revision if the claimant had signed it: that signature never took
+    /// effect and now never can.
+    CounterpartyRejected {
+        voided: Option<RevisionId>,
+    },
+    /// An unconfirmed claimant left. `voided` as for a rejection.
+    CounterpartyReleased {
+        voided: Option<RevisionId>,
+    },
     RevisionSent {
         revision: RevisionId,
         by: Slot,
@@ -261,6 +279,8 @@ pub enum Refusal {
     RevisionExpired,
     #[error("the initiator has not yet confirmed the counterparty")]
     CounterpartyNotConfirmed,
+    #[error("until the initiator confirms them, a claimant can only sign or leave")]
+    AwaitingConfirmation,
     #[error("contribution {0:?} has been accepted and is locked")]
     ContributionLocked(ContributionId),
     #[error("contribution {0:?} is not part of the agreement in force")]
@@ -327,9 +347,17 @@ pub fn decide(
         (Actor::System, _) => return Err(Refusal::WrongActor),
 
         (Actor::Party(by), command) => {
+            if by == Slot::B
+                && step.exchange.counterparty == Counterparty::Claimed
+                && !open_to_unconfirmed_claimant(&command)
+            {
+                return Err(Refusal::AwaitingConfirmation);
+            }
             match command {
                 Command::ClaimCounterparty { pre_bound } => step.claim(by, pre_bound)?,
                 Command::ConfirmCounterparty => step.confirm(by)?,
+                Command::RejectCounterparty => step.reject(by)?,
+                Command::ReleaseClaim => step.release(by)?,
                 Command::Send { id, revision } => step.send(by, id, revision)?,
                 Command::Accept { revision } => step.accept(by, revision)?,
                 Command::Decline { revision } => step.decline(by, revision)?,
@@ -356,6 +384,44 @@ pub fn decide(
         events: step.events,
         exchange: step.exchange,
     })
+}
+
+/// Whether a command is one that a claimant the initiator has not confirmed
+/// may so much as try (DESIGN.md §8). Whoever holds a forwarded link can
+/// claim it, so until the initiator has said this is the person they
+/// invited, the claimant can read, sign and leave, and change nothing else:
+/// not decline, which would close the exchange, and not counter, which would
+/// replace the initiator's signed offer.
+///
+/// Every command is listed, so that a new one is refused here until someone
+/// decides otherwise.
+fn open_to_unconfirmed_claimant(command: &Command) -> bool {
+    match command {
+        Command::Accept { .. } | Command::ReleaseClaim => true,
+        // Only a revision's author can withdraw it. A claimant can be the
+        // author only in an exchange from before this rule, where taking
+        // their own offer back is their way out; for anyone else the rule
+        // for withdrawing refuses.
+        Command::Withdraw { .. } => true,
+        // None of these is the claimant's to do, confirmed or not. Each is
+        // answered by its own rule.
+        Command::ClaimCounterparty { .. }
+        | Command::ConfirmCounterparty
+        | Command::RejectCounterparty
+        | Command::ExpireRevision
+        | Command::LapseCloseRequest
+        | Command::PromptInactivity
+        | Command::CloseInactive => true,
+        Command::Send { .. }
+        | Command::Decline { .. }
+        | Command::Contribution { .. }
+        | Command::ProposeEnd
+        | Command::AcceptEnd
+        | Command::CancelEnd
+        | Command::RequestClose
+        | Command::RetractClose
+        | Command::AddStatement => false,
+    }
 }
 
 struct Step<'a> {
@@ -409,6 +475,55 @@ impl Step<'_> {
             self.bring_into_force()?;
         }
         Ok(())
+    }
+
+    fn reject(&mut self, by: Slot) -> Result<(), Refusal> {
+        if by != Slot::A {
+            return Err(Refusal::WrongActor);
+        }
+        let voided = self.vacate()?;
+        self.events.push(Event::CounterpartyRejected { voided });
+        Ok(())
+    }
+
+    fn release(&mut self, by: Slot) -> Result<(), Refusal> {
+        if by != Slot::B {
+            return Err(Refusal::WrongActor);
+        }
+        let voided = self.vacate()?;
+        self.events.push(Event::CounterpartyReleased { voided });
+        Ok(())
+    }
+
+    /// Empties slot B of a claimant the initiator has not confirmed. If they
+    /// had signed the open revision, that signature goes with them: it was
+    /// waiting on a confirmation that will now never come. Returns the
+    /// revision it was on.
+    ///
+    /// The offer itself stays open, signed by the initiator as before, for
+    /// whoever claims the slot next.
+    fn vacate(&mut self) -> Result<Option<RevisionId>, Refusal> {
+        // Someone the initiator confirmed, or named in the invitation, is a
+        // party for good.
+        if self.exchange.counterparty != Counterparty::Claimed {
+            return Err(Refusal::NotAllowed);
+        }
+        let mut voided = None;
+        if let Some(open) = &mut self.exchange.open {
+            // Only in an exchange from before unconfirmed claimants were
+            // stopped from countering. Taking the claimant out would leave
+            // a negotiation with nothing on the table; the offer has to go
+            // first, withdrawn by them or answered by the initiator.
+            if open.author == Slot::B {
+                return Err(Refusal::NotAllowed);
+            }
+            if open.accepted {
+                open.accepted = false;
+                voided = Some(open.id);
+            }
+        }
+        self.exchange.counterparty = Counterparty::Unclaimed;
+        Ok(voided)
     }
 
     // ---- Revisions --------------------------------------------------------

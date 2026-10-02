@@ -211,19 +211,295 @@ fn confirming_after_the_offer_ran_out_does_not_revive_it() {
 }
 
 #[test]
-fn the_initiator_cannot_accept_a_counteroffer_from_an_unconfirmed_counterparty() {
+fn a_counteroffer_has_to_wait_until_the_initiator_has_confirmed_the_claimant() {
     let mut scenario = Scenario::negotiating();
     scenario.ok(B, Command::ClaimCounterparty { pre_bound: false }, day(1));
-    scenario.ok(B, send(2, fence_job()), day(1));
+    assert_eq!(
+        scenario.refused(B, send(2, fence_job()), day(1)),
+        Refusal::AwaitingConfirmation
+    );
 
+    scenario.ok(A, Command::ConfirmCounterparty, day(2));
+    scenario.ok(B, send(2, fence_job()), day(2));
+    scenario.ok(A, Command::Accept { revision: rev(2) }, day(2));
+    assert_eq!(scenario.exchange.state, State::Active);
+}
+
+// ---- A claimant the initiator has not confirmed ---------------------------
+
+/// Someone has claimed an invitation that named nobody.
+fn claimed() -> Scenario {
+    let mut scenario = Scenario::negotiating();
+    scenario.ok(B, Command::ClaimCounterparty { pre_bound: false }, day(1));
+    scenario
+}
+
+/// An exchange from before unconfirmed claimants were stopped from
+/// countering: the claimant's own offer is the one on the table.
+fn claimed_with_the_claimants_offer_open() -> Scenario {
+    let mut scenario = claimed();
+    let open = scenario.exchange.open.as_mut().unwrap();
+    open.id = rev(2);
+    open.author = Slot::B;
+    scenario
+}
+
+#[test]
+fn an_unconfirmed_claimant_can_sign_or_leave_and_nothing_else() {
+    let scenario = claimed();
+    let refusals = [
+        (send(2, fence_job()), Refusal::AwaitingConfirmation),
+        (
+            Command::Decline { revision: rev(1) },
+            Refusal::AwaitingConfirmation,
+        ),
+        (act(1, Action::Confirm), Refusal::AwaitingConfirmation),
+        (Command::ProposeEnd, Refusal::AwaitingConfirmation),
+        (Command::AcceptEnd, Refusal::AwaitingConfirmation),
+        (Command::CancelEnd, Refusal::AwaitingConfirmation),
+        (Command::RequestClose, Refusal::AwaitingConfirmation),
+        (Command::RetractClose, Refusal::AwaitingConfirmation),
+        (Command::AddStatement, Refusal::AwaitingConfirmation),
+        // Not theirs to do, confirmed or not.
+        (Command::Withdraw { revision: rev(1) }, Refusal::WrongActor),
+        (Command::ConfirmCounterparty, Refusal::WrongActor),
+        (Command::RejectCounterparty, Refusal::WrongActor),
+        (
+            Command::ClaimCounterparty { pre_bound: false },
+            Refusal::NotAllowed,
+        ),
+        (Command::ExpireRevision, Refusal::WrongActor),
+        (Command::LapseCloseRequest, Refusal::WrongActor),
+        (Command::PromptInactivity, Refusal::WrongActor),
+        (Command::CloseInactive, Refusal::WrongActor),
+    ];
+    for (command, refusal) in refusals {
+        assert_eq!(
+            scenario.refused(B, command.clone(), day(1)),
+            refusal,
+            "{command:?}"
+        );
+    }
+
+    for command in [Command::Accept { revision: rev(1) }, Command::ReleaseClaim] {
+        let mut scenario = claimed();
+        scenario.ok(B, command, day(1));
+        assert_eq!(scenario.exchange.state, State::Negotiating);
+    }
+}
+
+#[test]
+fn the_limits_end_when_the_initiator_confirms_and_never_apply_to_someone_the_invitation_named() {
+    let mut confirmed = claimed();
+    confirmed.ok(A, Command::ConfirmCounterparty, day(2));
+    let mut named = Scenario::negotiating();
+    named.ok(B, Command::ClaimCounterparty { pre_bound: true }, day(1));
+
+    for scenario in [confirmed, named] {
+        for command in [Command::Decline { revision: rev(1) }, send(2, fence_job())] {
+            let decision = decide(
+                &scenario.exchange,
+                B,
+                command.clone(),
+                day(2),
+                &scenario.rules,
+            );
+            assert!(decision.is_ok(), "{command:?}");
+        }
+    }
+}
+
+#[test]
+fn the_initiator_can_say_the_claimant_is_not_who_they_invited() {
+    let mut scenario = claimed();
+    let offer = scenario.exchange.open.clone();
+
+    scenario.ok(A, Command::RejectCounterparty, day(2));
+    assert_eq!(
+        scenario.events,
+        vec![Event::CounterpartyRejected { voided: None }]
+    );
+    assert_eq!(scenario.exchange.counterparty, Counterparty::Unclaimed);
+    assert_eq!(scenario.exchange.state, State::Negotiating);
+    assert_eq!(
+        scenario.exchange.open, offer,
+        "the initiator's offer stands, signed by them and nobody else"
+    );
+
+    // The slot is empty again: nobody can act for it, and there is nobody
+    // to confirm or to remove a second time.
+    assert_eq!(
+        scenario.refused(B, Command::Accept { revision: rev(1) }, day(2)),
+        Refusal::NotAllowed
+    );
+    for command in [Command::ConfirmCounterparty, Command::RejectCounterparty] {
+        assert_eq!(scenario.refused(A, command, day(2)), Refusal::NotAllowed);
+    }
+
+    // Someone else claims it, signs, and is confirmed.
+    scenario.ok(B, Command::ClaimCounterparty { pre_bound: false }, day(3));
+    scenario.ok(B, Command::Accept { revision: rev(1) }, day(3));
+    scenario.ok(A, Command::ConfirmCounterparty, day(4));
+    assert_eq!(scenario.exchange.state, State::Active);
+}
+
+#[test]
+fn a_removed_claimants_signature_never_takes_effect() {
+    for removal in [(A, Command::RejectCounterparty), (B, Command::ReleaseClaim)] {
+        let (by, command) = removal.clone();
+        let mut scenario = claimed();
+        scenario.ok(B, Command::Accept { revision: rev(1) }, day(1));
+        assert!(scenario.exchange.open.as_ref().unwrap().accepted);
+
+        scenario.ok(by, command.clone(), day(2));
+        let voided = Some(rev(1));
+        assert_eq!(
+            scenario.events,
+            vec![if by == A {
+                Event::CounterpartyRejected { voided }
+            } else {
+                Event::CounterpartyReleased { voided }
+            }],
+            "the event says which signature went with them"
+        );
+        assert!(!scenario.exchange.open.as_ref().unwrap().accepted);
+
+        // Whoever comes next, however they come, the old signature is not
+        // theirs: confirming them, or their having been named, binds nobody
+        // until they sign for themselves.
+        for pre_bound in [false, true] {
+            let mut next = Scenario {
+                exchange: scenario.exchange.clone(),
+                events: Vec::new(),
+                rules: Rules::default(),
+            };
+            next.ok(B, Command::ClaimCounterparty { pre_bound }, day(3));
+            if !pre_bound {
+                next.ok(A, Command::ConfirmCounterparty, day(3));
+                assert_eq!(next.events, vec![Event::CounterpartyConfirmed]);
+            }
+            assert_eq!(next.exchange.state, State::Negotiating, "{command:?}");
+            assert_eq!(next.exchange.in_force, None);
+
+            next.ok(B, Command::Accept { revision: rev(1) }, day(3));
+            assert_eq!(next.exchange.state, State::Active);
+        }
+    }
+}
+
+#[test]
+fn a_claimant_can_leave_before_being_confirmed() {
+    let mut scenario = claimed();
+    let offer = scenario.exchange.open.clone();
+
+    scenario.ok(B, Command::ReleaseClaim, day(2));
+    assert_eq!(
+        scenario.events,
+        vec![Event::CounterpartyReleased { voided: None }]
+    );
+    assert_eq!(scenario.exchange.counterparty, Counterparty::Unclaimed);
+    assert_eq!(scenario.exchange.state, State::Negotiating);
+    assert_eq!(scenario.exchange.open, offer);
+    assert_eq!(
+        scenario.refused(B, Command::ReleaseClaim, day(2)),
+        Refusal::NotAllowed,
+        "nobody is there to leave"
+    );
+}
+
+#[test]
+fn only_an_unconfirmed_claimant_can_be_removed_or_leave() {
+    // Nobody has claimed the slot.
+    let unclaimed = Scenario::negotiating();
+    // The initiator confirmed the claimant.
+    let mut confirmed = claimed();
+    confirmed.ok(A, Command::ConfirmCounterparty, day(2));
+    // The invitation named them.
+    let mut named = Scenario::negotiating();
+    named.ok(B, Command::ClaimCounterparty { pre_bound: true }, day(1));
+    // The agreement is in force.
+    let active = Scenario::active();
+    // The exchange closed with the claimant still unconfirmed.
+    let mut closed = claimed();
+    closed.ok(A, Command::Withdraw { revision: rev(1) }, day(2));
+
+    for scenario in [unclaimed, confirmed, named, active, closed] {
+        assert_eq!(
+            scenario.refused(A, Command::RejectCounterparty, day(3)),
+            Refusal::NotAllowed
+        );
+        assert_eq!(
+            scenario.refused(B, Command::ReleaseClaim, day(3)),
+            Refusal::NotAllowed
+        );
+    }
+
+    // Removing is the initiator's to do and leaving is the claimant's.
+    let scenario = claimed();
+    assert_eq!(
+        scenario.refused(B, Command::RejectCounterparty, day(2)),
+        Refusal::WrongActor
+    );
+    assert_eq!(
+        scenario.refused(A, Command::ReleaseClaim, day(2)),
+        Refusal::WrongActor
+    );
+    for command in [Command::RejectCounterparty, Command::ReleaseClaim] {
+        assert_eq!(
+            scenario.refused(Actor::System, command, day(2)),
+            Refusal::WrongActor
+        );
+    }
+}
+
+#[test]
+fn removing_a_claimant_leaves_the_offer_to_run_out_on_its_own_date() {
+    let mut scenario = claimed();
+    scenario.ok(B, Command::Accept { revision: rev(1) }, day(1));
+    scenario.ok(A, Command::RejectCounterparty, day(2));
+
+    assert_eq!(scenario.exchange.open.as_ref().unwrap().expires_at, day(14));
+    scenario.ok(Actor::System, Command::ExpireRevision, day(14));
+    assert_eq!(
+        scenario.closed(),
+        Some(Outcome::NotAgreed(NotAgreed::Expired))
+    );
+}
+
+#[test]
+fn a_claimants_offer_from_before_the_rule_has_to_go_before_they_can() {
+    let scenario = claimed_with_the_claimants_offer_open();
+
+    // Taking the claimant out would leave a negotiation with nothing on the
+    // table.
+    assert_eq!(
+        scenario.refused(A, Command::RejectCounterparty, day(2)),
+        Refusal::NotAllowed
+    );
+    assert_eq!(
+        scenario.refused(B, Command::ReleaseClaim, day(2)),
+        Refusal::NotAllowed
+    );
+    // The initiator is still never bound to someone they have not confirmed.
     assert_eq!(
         scenario.refused(A, Command::Accept { revision: rev(2) }, day(2)),
         Refusal::CounterpartyNotConfirmed
     );
 
-    scenario.ok(A, Command::ConfirmCounterparty, day(2));
-    scenario.ok(A, Command::Accept { revision: rev(2) }, day(2));
-    assert_eq!(scenario.exchange.state, State::Active);
+    // The claimant can take their offer back, which ends it as it always did.
+    let mut withdrawn = claimed_with_the_claimants_offer_open();
+    withdrawn.ok(B, Command::Withdraw { revision: rev(2) }, day(2));
+    assert_eq!(
+        withdrawn.closed(),
+        Some(Outcome::NotAgreed(NotAgreed::Withdrawn))
+    );
+
+    // Or the initiator answers it with their own, and can then remove them.
+    let mut answered = claimed_with_the_claimants_offer_open();
+    answered.ok(A, send(3, fence_job()), day(2));
+    answered.ok(A, Command::RejectCounterparty, day(2));
+    assert_eq!(answered.exchange.counterparty, Counterparty::Unclaimed);
+    assert_eq!(answered.exchange.open.as_ref().unwrap().id, rev(3));
 }
 
 #[test]

@@ -64,6 +64,7 @@ pub fn router(state: AppState) -> Router {
         exchanges::save_draft,
         exchanges::send_revision,
         exchanges::run_command,
+        exchanges::leave,
         record::history,
         record::record,
         exchanges::reissue_invitation,

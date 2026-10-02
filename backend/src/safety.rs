@@ -16,12 +16,19 @@
 //!   agreement in force it drops the proposed amendment. Otherwise the person
 //!   blocked could sign an offer the blocker left open and bind them after
 //!   the block.
+//! * A blocker who had opened the other's invitation and not yet been
+//!   confirmed leaves that exchange instead (§8): they cannot decline, and
+//!   leaving voids whatever they signed there, so that the person they
+//!   blocked cannot bind them by confirming them afterwards. The offer stays
+//!   open for someone else. The block itself outlasts the exchange they
+//!   shared: it is listed, and can be lifted, through the exchange they left.
 //! * An agreement already in force is left alone, and so is everything either
 //!   party can do in it afterwards: every exchange must be able to end
 //!   (§3, invariant 5).
 //!
-//! The person blocked is told nothing. What they can see is a withdrawal or
-//! a refusal like any other, and an invitation link that no longer works.
+//! The person blocked is told nothing. What they can see is a withdrawal, a
+//! refusal or a departure like any other, and an invitation link that no
+//! longer works.
 
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
@@ -31,7 +38,8 @@ use uuid::Uuid;
 
 use crate::auth;
 use crate::domain::Rules;
-use crate::domain::exchange::{Actor, Command, decide};
+use crate::domain::exchange::{Actor, Command, Counterparty, decide};
+use crate::domain::revision::Slot;
 use crate::error::{ApiError, ErrorCode};
 use crate::exchanges::dto::rfc3339;
 use crate::exchanges::repo;
@@ -129,6 +137,11 @@ pub struct BlockedPerson {
     pub name: String,
     /// RFC 3339.
     pub blocked_at: String,
+    /// Set when the caller is no longer in that exchange and cannot open it:
+    /// they had opened its invitation and left before being confirmed. It
+    /// still names the person, and unblocking through it still works.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left: Option<bool>,
 }
 
 // ---- Shared steps -----------------------------------------------------------
@@ -420,7 +433,9 @@ pub async fn block(
 
 /// Ends, in the blocker's name, every revision still waiting to be signed
 /// between the two: one the blocker sent is withdrawn, one sent to them is
-/// declined. Runs in the transaction that stores the block.
+/// declined. Where the blocker is in the exchange only as a claimant the
+/// other has not confirmed, they leave it instead. Runs in the transaction
+/// that stores the block.
 async fn end_open_proposals(
     conn: &mut PgConnection,
     rules: &Rules,
@@ -460,34 +475,74 @@ async fn end_open_proposals(
         if aggregate.account_of(slot.other()) != Some(blocked) {
             continue;
         }
-        let Some(open) = &aggregate.exchange.open else {
-            continue;
-        };
+        let mut commands = Vec::new();
+        // A blocker the initiator has not confirmed can neither decline nor
+        // take a signature back. They leave, which undoes both: whatever
+        // they signed is void and the exchange is no longer theirs.
+        if slot == Slot::B && aggregate.exchange.counterparty == Counterparty::Claimed {
+            commands.push(Command::ReleaseClaim);
+        }
+        if let Some(open) = &aggregate.exchange.open {
+            let revision = open.id;
+            commands.push(if open.author == slot {
+                Command::Withdraw { revision }
+            } else {
+                Command::Decline { revision }
+            });
+        }
 
-        let revision = open.id;
-        let command = if open.author == slot {
-            Command::Withdraw { revision }
-        } else {
-            Command::Decline { revision }
-        };
         let actor = Actor::Party(slot);
-        // The rules decide, as for any command. The one thing they refuse
-        // here is declining a revision the blocker has already signed and
-        // that waits only for the initiator to confirm who they are: no
-        // command takes a signature back. That one is left as it stands.
-        let Ok(decision) = decide(&aggregate.exchange, actor, command, at, rules) else {
-            continue;
-        };
-        repo::persist(conn, &aggregate, &decision, actor, None, at).await?;
+        // The rules decide, as for any command, and the first they allow is
+        // what happens. Where they allow none, the exchange is left as it
+        // stands.
+        let decision = commands
+            .into_iter()
+            .find_map(|command| decide(&aggregate.exchange, actor, command, at, rules).ok());
+        if let Some(decision) = decision {
+            repo::persist(conn, &aggregate, &decision, actor, None, at).await?;
+        }
     }
     Ok(())
 }
 
 /// Removes the caller's block on the other party of this exchange. Nothing
 /// that the block ended comes back.
+///
+/// A block made by a claimant the initiator had not confirmed took them out
+/// of the exchange (see the top of this file), and it must not be left
+/// standing with no way to lift it. So someone who once held the invited
+/// party's place can still lift, through that exchange, a block they have
+/// on its initiator. That is all it answers them: with no such block there
+/// is, for them as for any stranger, no such exchange.
 pub async fn unblock(db: &PgPool, blocker: Uuid, exchange: Uuid) -> Result<(), ApiError> {
     let mut conn = db.acquire().await?;
-    let blocked = other_party(&mut conn, exchange, blocker).await?;
+    let party = match as_party(&mut conn, exchange, blocker).await {
+        Ok(other) => Some(other),
+        Err(error) if error.code == ErrorCode::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    let Some(other) = party else {
+        let lifted = sqlx::query(
+            "DELETE FROM account_block b
+             USING slot_holding mine, participant theirs
+             WHERE mine.exchange_id = $1 AND mine.account_id = $2
+               AND theirs.exchange_id = mine.exchange_id AND theirs.slot <> mine.slot
+               AND b.blocker_account_id = mine.account_id
+               AND b.blocked_account_id = theirs.account_id",
+        )
+        .bind(exchange)
+        .bind(blocker)
+        .execute(&mut *conn)
+        .await?
+        .rows_affected();
+        return if lifted == 0 {
+            Err(ErrorCode::NotFound.into())
+        } else {
+            Ok(())
+        };
+    };
+
+    let blocked = other.account.ok_or(ErrorCode::ActionNotAllowed)?;
     sqlx::query(
         "DELETE FROM account_block WHERE blocker_account_id = $1 AND blocked_account_id = $2",
     )
@@ -502,22 +557,25 @@ pub async fn unblock(db: &PgPool, blocker: Uuid, exchange: Uuid) -> Result<(), A
 ///
 /// A block is stored between two accounts and does not say which exchange it
 /// was made through, so each person is shown by the most recent exchange the
-/// two share.
+/// two share. An exchange the caller is still a party to comes before one
+/// they only once held a place in, which is all there is to show for a block
+/// that took them out of it.
 pub async fn blocked_people(db: &PgPool, blocker: Uuid) -> Result<Vec<BlockedPerson>, ApiError> {
-    let rows: Vec<(Uuid, String, String, OffsetDateTime)> = sqlx::query_as(
-        "SELECT exchange_id, display_code, name, blocked_at
+    let rows: Vec<(Uuid, String, String, OffsetDateTime, bool)> = sqlx::query_as(
+        "SELECT exchange_id, display_code, name, blocked_at, left_it
          FROM (
              SELECT DISTINCT ON (b.blocked_account_id)
                     e.id AS exchange_id, e.display_code, theirs.display_name AS name,
-                    b.created_at AS blocked_at
+                    b.created_at AS blocked_at, mine.ended_at IS NOT NULL AS left_it
              FROM account_block b
-             JOIN participant mine ON mine.account_id = b.blocker_account_id
+             JOIN slot_holding mine ON mine.account_id = b.blocker_account_id
              JOIN participant theirs
                ON theirs.exchange_id = mine.exchange_id
+              AND theirs.slot <> mine.slot
               AND theirs.account_id = b.blocked_account_id
              JOIN exchange e ON e.id = mine.exchange_id
              WHERE b.blocker_account_id = $1
-             ORDER BY b.blocked_account_id, e.created_at DESC, e.id
+             ORDER BY b.blocked_account_id, mine.ended_at IS NOT NULL, e.created_at DESC, e.id
          ) latest
          ORDER BY blocked_at DESC, exchange_id
          LIMIT $2",
@@ -530,11 +588,12 @@ pub async fn blocked_people(db: &PgPool, blocker: Uuid) -> Result<Vec<BlockedPer
     Ok(rows
         .into_iter()
         .map(
-            |(exchange_id, display_code, name, blocked_at)| BlockedPerson {
+            |(exchange_id, display_code, name, blocked_at, left)| BlockedPerson {
                 exchange_id,
                 display_code,
                 name,
                 blocked_at: rfc3339(blocked_at),
+                left: left.then_some(true),
             },
         )
         .collect())

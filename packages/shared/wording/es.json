@@ -26,6 +26,10 @@
           "subject": "Te confirmaron ({code})",
           "body": "La otra parte confirmó que eres la persona a la que invitó. Ya pueden llegar a un acuerdo."
         },
+        "CLAIMANT_LEFT": {
+          "subject": "La persona que abrió tu invitación salió del intercambio ({code})",
+          "body": "La persona que usó tu enlace de invitación salió del intercambio antes de que la confirmaras. Nada de lo que firmó tiene efecto. Tu propuesta sigue abierta: crea un enlace de invitación nuevo para la persona a la que querías invitar."
+        },
         "REVISION_SENT": {
           "subject": "Hay nuevos términos para revisar ({code})",
           "body": "La otra parte envió nuevos términos. Revísalos y luego acéptalos, recházalos o envía los tuyos."
@@ -356,6 +360,27 @@
     "ownInvitation": "Este es tu propio enlace de invitación. Envíaselo a la otra parte; tú no puedes usarlo.",
     "alreadyResponded": "Si ya respondiste a esta invitación, está entre tus intercambios."
   },
+  "claimant": {
+    "reject": "No es a quien invité",
+    "rejectTitle": "¿No es a quien invitaste?",
+    "rejectRemoves": "{name} sale de este intercambio y ya no podrá verlo.",
+    "rejectVoids": "Todo lo que haya firmado aquí queda sin efecto y nunca podrá tenerlo.",
+    "rejectKeeps": "Tu propuesta sigue abierta. El enlace que enviaste no se puede volver a usar, así que crearás uno nuevo para la persona a la que querías invitar.",
+    "rejectQuiet": "No se le envía ningún mensaje al respecto. Para esa persona, el intercambio simplemente deja de estar ahí.",
+    "confirmReject": "Sí, retirar a esa persona",
+    "rejected": "Esa persona ya no está en el intercambio, y nada de lo que firmó tiene efecto. Crea un enlace nuevo para la persona a la que querías invitar.",
+    "linkUsed": "El enlace que enviaste ya se usó y no se puede volver a usar. Ahora no hay nadie contigo en este intercambio.",
+    "limits": "Hasta que te confirme, no puedes rechazar estos términos ni proponer cambios. En cambio, puedes salir de este intercambio.",
+    "leave": "Salir de este intercambio",
+    "leaveText": "Dejarás de ver este intercambio, y el enlace que abriste no volverá a funcionar. A {name} se le avisa que saliste, y puede invitar a otra persona.",
+    "leaveVoids": "Todo lo que hayas firmado aquí queda sin efecto y nunca podrá tenerlo.",
+    "confirmLeave": "Sí, salir",
+    "invitationIntro": "{name} quiere acordar esto contigo. Léelo y luego inicia sesión para responder. Puedes firmarlo de inmediato. Para poder rechazarlo o proponer cambios, {name} tiene que confirmar antes que eres la persona a la que invitó.",
+    "invitationIntroSignedIn": "{name} quiere acordar esto contigo. Léelo y luego responde. Puedes firmarlo de inmediato. Para poder rechazarlo o proponer cambios, {name} tiene que confirmar antes que eres la persona a la que invitó.",
+    "blockLeaves": "Sales de este intercambio y ya no podrás verlo. Todo lo que hayas firmado en él queda sin efecto.",
+    "blockedAfterLeaving": "Ya no estás en este intercambio.",
+    "voidSignature": "Firmada el {date} por alguien que había abierto la invitación y que fue retirado del intercambio, o salió de él, el {since}, antes de ser confirmado. Esta firma no tiene efecto: nunca lo tuvo y nunca podrá tenerlo."
+  },
   "safety": {
     "heading": "Denunciar o bloquear",
     "report": "Denunciar este intercambio",
@@ -421,7 +446,7 @@
     "claimedBody": "Alguien inició sesión y abrió tu invitación: {name}, {identifier}. ¿Es la persona a la que querías invitar?",
     "claimedSigned": "Esa persona ya firmó. Su firma surte efecto cuando confirmes.",
     "confirmCounterparty": "Sí, es a quien invité",
-    "notThem": "Si no lo es, no confirmes. Retira tu propuesta y empieza de nuevo.",
+    "notThem": "Si no lo es, dilo. Esa persona sale del intercambio, y puedes enviar un enlace nuevo a la persona a la que querías invitar.",
     "waitingConfirmation": "{name} todavía no ha confirmado que eres la persona a la que invitó. Puedes firmar ahora; tu firma surte efecto cuando lo confirme.",
     "waitingConfirmationSigned": "Ya firmaste. Tu firma surte efecto cuando {name} confirme que eres la persona a la que invitó.",
     "proposalHeading": "Propuesta pendiente de firma",
@@ -561,6 +586,7 @@
       "you": {
         "COUNTERPARTY_CLAIMED": "Abriste la invitación y te uniste al intercambio.",
         "COUNTERPARTY_CONFIRMED": "Confirmaste que la persona que se unió es a quien invitaste.",
+        "COUNTERPARTY_REJECTED": "Dijiste que la persona que había abierto la invitación no era a quien invitaste. Esa persona salió del intercambio, y todo lo que firmó quedó sin efecto.",
         "REVISION_SENT": "Enviaste la versión {number} y, al enviarla, la firmaste.",
         "REVISION_ACCEPTED": "Firmaste la versión {number}.",
         "REVISION_DECLINED": "Rechazaste la versión {number}.",
@@ -579,6 +605,7 @@
       "named": {
         "COUNTERPARTY_CLAIMED": "{name} abrió la invitación y se unió al intercambio.",
         "COUNTERPARTY_CONFIRMED": "{name} confirmó que la persona que se unió es a quien invitó.",
+        "COUNTERPARTY_REJECTED": "{name} dijo que la persona que había abierto la invitación no era a quien invitó. Esa persona salió del intercambio, y todo lo que firmó quedó sin efecto.",
         "REVISION_SENT": "{name} envió la versión {number} y, al enviarla, la firmó.",
         "REVISION_ACCEPTED": "{name} firmó la versión {number}.",
         "REVISION_DECLINED": "{name} rechazó la versión {number}.",
@@ -594,7 +621,13 @@
         "CLOSE_REQUEST_RETRACTED": "{name} retiró la solicitud de cerrar el intercambio.",
         "STATEMENT_ADDED": "{name} agregó una declaración."
       },
+      "formerClaimant": {
+        "COUNTERPARTY_CLAIMED": "Alguien abrió la invitación y se unió al intercambio. Esa persona fue retirada después, o salió, antes de ser confirmada.",
+        "REVISION_SENT": "La persona que había abierto la invitación envió la versión {number}. Ya no forma parte del intercambio.",
+        "REVISION_ACCEPTED": "La persona que había abierto la invitación firmó la versión {number}. Ya no forma parte del intercambio, y esa firma no tiene efecto."
+      },
       "neutral": {
+        "COUNTERPARTY_RELEASED": "La persona que había abierto la invitación salió del intercambio antes de ser confirmada. Todo lo que firmó quedó sin efecto.",
         "REVISION_SUPERSEDED": "La versión {number} quedó sin efecto antes de que ambas partes la firmaran.",
         "REVISION_EXPIRED": "La versión {number} venció antes de que ambas partes la firmaran.",
         "AGREEMENT_IN_FORCE": "La versión {number}, ya firmada por ambas partes, pasó a ser el acuerdo.",
@@ -625,6 +658,7 @@
     "CONTRIBUTION_LOCKED": "Este elemento ya fue aceptado y no se puede cambiar.",
     "REVISION_EXPIRED": "Esta oferta ha vencido. Pide una nueva o envía la tuya.",
     "COUNTERPARTY_NOT_CONFIRMED": "Confirma quién es la otra parte antes de aceptar.",
+    "AWAITING_CONFIRMATION": "Podrás hacerlo cuando la persona que te invitó te haya confirmado. Hasta entonces puedes firmar los términos o salir del intercambio.",
     "INVALID_REVISION": "Hay que corregir algunos términos antes de enviar.",
     "INVALID_REQUEST": "Algo en la solicitud no es correcto. Revísalo e inténtalo de nuevo.",
     "INVALID_IDENTIFIER": "Escribe un correo electrónico válido o un número de teléfono con su código de país.",

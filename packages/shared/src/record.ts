@@ -1,7 +1,13 @@
 import type { components, RevisionTerms } from '@exchange/api-client'
 
 import type { MessageValues } from './message'
-import type { NeutralEventType, PartyEventType, RecordNoteKind, Wording } from './wording/types'
+import type {
+  FormerClaimantEventType,
+  NeutralEventType,
+  PartyEventType,
+  RecordNoteKind,
+  Wording,
+} from './wording/types'
 
 type Schemas = components['schemas']
 export type RecordDocument = Schemas['RecordDocument']
@@ -19,6 +25,7 @@ type Slot = Schemas['Slot']
  */
 
 const NEUTRAL: ReadonlySet<string> = new Set<NeutralEventType>([
+  'COUNTERPARTY_RELEASED',
   'REVISION_SUPERSEDED',
   'REVISION_EXPIRED',
   'AGREEMENT_IN_FORCE',
@@ -50,6 +57,14 @@ export function eventMessage(
   }
   if (NEUTRAL.has(event.type)) {
     return { message: words.neutral[event.type as NeutralEventType], values }
+  }
+  // Done from the invited party's place by someone who was later removed
+  // from it, or left (DESIGN.md §8). The record gives that place a name, and
+  // it is not theirs; nor are they the reader, even if the reader is in that
+  // place now. Checked with `in`: an exchange older than the rule could hold
+  // something else of theirs, which is then said the ordinary way.
+  if (event.by_removed_claimant && event.type in words.formerClaimant) {
+    return { message: words.formerClaimant[event.type as FormerClaimantEventType], values }
   }
   const type = event.type as PartyEventType
   if (event.actor !== 'SYSTEM' && event.actor === reader) {

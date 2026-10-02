@@ -80,5 +80,12 @@ export {
   startingDraft,
 } from './composer'
 export type { ComposerKind, DraftSaver, SaveState } from './composer'
+export {
+  isAwaitingYourConfirmation,
+  isInvitationSpent,
+  isUnconfirmedClaimant,
+  leaveExchange,
+} from './claimant'
+export type { Leaver } from './claimant'
 export { REPORT_DETAILS_MAX_CHARS, REPORT_REASONS } from './safety'
 export type { ReportReason } from './safety'

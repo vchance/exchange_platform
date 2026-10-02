@@ -17,6 +17,7 @@ export type NotificationKind =
   | 'INVITATION_CLAIMED'
   | 'INVITATION_CLAIMED_UNCONFIRMED'
   | 'COUNTERPARTY_CONFIRMED'
+  | 'CLAIMANT_LEFT'
   | 'REVISION_SENT'
   | 'AMENDMENT_PROPOSED'
   | 'ACCEPTANCE_WAITING'
@@ -44,8 +45,13 @@ export type NotificationKind =
   | 'CLOSED_UNRESOLVED'
   | 'CLOSED_INACTIVE'
 
-/** Events worded without saying who caused them. */
+/**
+ * Events worded without saying who caused them. Someone who opened the
+ * invitation and left before being confirmed is one of them: the record
+ * names the two parties, and that person was never one.
+ */
 export type NeutralEventType =
+  | 'COUNTERPARTY_RELEASED'
   | 'REVISION_SUPERSEDED'
   | 'REVISION_EXPIRED'
   | 'AGREEMENT_IN_FORCE'
@@ -57,6 +63,15 @@ export type NeutralEventType =
  * the typecheck until each language has words for it.
  */
 export type PartyEventType = Exclude<Schemas['EventType'], NeutralEventType | 'EXCHANGE_CLOSED'>
+
+/**
+ * What someone can have done from the invited party's place before being
+ * removed from it or leaving it (DESIGN.md §8): open the invitation, sign,
+ * and, in an exchange older than the rule against it, send terms of their
+ * own. These are worded without a name, since the name the agreement gives
+ * that place is not theirs.
+ */
+export type FormerClaimantEventType = 'COUNTERPARTY_CLAIMED' | 'REVISION_SENT' | 'REVISION_ACCEPTED'
 
 /** What a note written with an event is: a message, a reason, a statement, or just a note. */
 export type RecordNoteKind = 'message' | 'note' | 'reason' | 'statement'
@@ -288,6 +303,42 @@ export interface Wording {
     ownInvitation: string
     alreadyResponded: string
   }
+  /**
+   * Someone who opened an invitation that named nobody, until the initiator
+   * confirms them (DESIGN.md §8): what the initiator is told about removing
+   * them, and what they are told about the little they can do until then.
+   */
+  claimant: {
+    /** The initiator's other answer to "is this who you invited?". */
+    reject: string
+    rejectTitle: string
+    /** Uses `{name}`: the claimant's own display name, which the initiator was shown. */
+    rejectRemoves: string
+    rejectVoids: string
+    rejectKeeps: string
+    rejectQuiet: string
+    confirmReject: string
+    /** Shown to the initiator once the claimant is gone. */
+    rejected: string
+    /** In place of "nobody has opened your link yet", when someone has and is gone. */
+    linkUsed: string
+    /** To the claimant: what they can and cannot do while unconfirmed. */
+    limits: string
+    leave: string
+    /** Uses `{name}`: the initiator. */
+    leaveText: string
+    leaveVoids: string
+    confirmLeave: string
+    /** The invitation page's introduction when the invitation names nobody. Uses `{name}`. */
+    invitationIntro: string
+    invitationIntroSignedIn: string
+    /** What blocking does for a claimant, in place of declining what is open. */
+    blockLeaves: string
+    /** On a blocked person's entry, when the exchange it names is one the reader has left. */
+    blockedAfterLeaving: string
+    /** On the record page. Uses `{date}`, when it was signed, and `{since}`, when it became void. */
+    voidSignature: string
+  }
   /** Reporting an exchange and blocking the other party (DESIGN.md §9). */
   safety: {
     heading: string
@@ -469,10 +520,13 @@ export interface Wording {
      * did it and `named` names them, with `{name}`; an event about a revision
      * may use `{number}`. An event about a contribution ends where the
      * contribution's description, the parties' own words, is shown after it.
+     * `formerClaimant` is for what was done by someone since removed from
+     * the invited party's place, and names nobody.
      */
     events: {
       you: Record<PartyEventType, string>
       named: Record<PartyEventType, string>
+      formerClaimant: Record<FormerClaimantEventType, string>
       neutral: Record<NeutralEventType, string>
       closed: Record<Schemas['OutcomeDto'], string>
     }

@@ -164,7 +164,8 @@ pub async fn send_revision(
 }
 
 /// Does one thing to an exchange: accept, decline or withdraw a revision,
-/// act on a contribution, confirm the counterparty, or end or close it.
+/// act on a contribution, confirm or reject whoever claimed the invitation,
+/// or end or close it.
 #[utoipa::path(
     post,
     path = "/v1/exchanges/{id}/commands",
@@ -204,6 +205,31 @@ pub async fn run_command(
     Ok(Json(view))
 }
 
+/// Gives up the invited party's place. For someone who opened an invitation
+/// link and has not been confirmed by the initiator: it is their way out,
+/// since they cannot decline. Anything they signed is void, and from then on
+/// the exchange does not exist for them.
+#[utoipa::path(
+    post,
+    path = "/v1/exchanges/{id}/leave",
+    params(("id" = String, Path, description = "Exchange ID")),
+    responses(
+        (status = 204, description = "Left"),
+        (status = 401, description = "Not signed in", body = ErrorBody),
+        (status = 403, description = "The initiator cannot leave their own exchange", body = ErrorBody),
+        (status = 404, description = "No such exchange for this account", body = ErrorBody),
+        (status = 409, description = "The caller has been confirmed, and is a party for good", body = ErrorBody)
+    )
+)]
+pub async fn leave(
+    State(state): State<AppState>,
+    session: Session,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    service::leave(&state.db, &state.settings, &session, exchange_id(&id)?).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Replaces the invitation link. The previous link stops working.
 #[utoipa::path(
     post,
@@ -213,7 +239,7 @@ pub async fn run_command(
     responses(
         (status = 200, description = "The new link token, shown once", body = InvitationIssued),
         (status = 403, description = "Only the initiator can invite", body = ErrorBody),
-        (status = 409, description = "The invitation has already been claimed", body = ErrorBody)
+        (status = 409, description = "Someone is in the invited party's place", body = ErrorBody)
     )
 )]
 pub async fn reissue_invitation(

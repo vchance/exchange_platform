@@ -1,6 +1,7 @@
 import type { components, ExchangeView } from '@exchange/api-client'
 
 import type { RevisionView, SendRevision } from './api'
+import { isUnconfirmedClaimant } from './claimant'
 import { consentShown } from './consent'
 import { decimalForInput } from './decimal'
 import {
@@ -46,9 +47,13 @@ export function baseRevision(exchange: ExchangeView): RevisionView | null {
   return exchange.open_revision ?? exchange.in_force_revision ?? null
 }
 
-/** Whether there is anything to compose: not on a closed exchange, nor one with no terms to start from. */
+/**
+ * Whether there is anything to compose: not on a closed exchange, nor one
+ * with no terms to start from, nor by a claimant the initiator has not
+ * confirmed, who cannot propose changes yet.
+ */
 export function canCompose(exchange: ExchangeView): boolean {
-  if (exchange.state === 'CLOSED') return false
+  if (exchange.state === 'CLOSED' || isUnconfirmedClaimant(exchange)) return false
   return exchange.state === 'DRAFT' || baseRevision(exchange) !== null
 }
 

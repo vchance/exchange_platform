@@ -240,6 +240,27 @@ async fn view(conn: &mut PgConnection, id: Uuid, account: Uuid) -> Result<Exchan
         _ => None,
     };
 
+    // With nobody in the invited party's place, the initiator needs to know
+    // whether the link they sent can still bring someone in. It cannot once
+    // it has been used, and it has been if a claimant was removed or left.
+    let waiting_for_a_claim = you == Slot::A
+        && aggregate.exchange.state == State::Negotiating
+        && aggregate.exchange.counterparty == Counterparty::Unclaimed;
+    let invitation_open = if waiting_for_a_claim {
+        let open: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM invitation
+                            WHERE exchange_id = $1 AND claimed_by IS NULL
+                              AND revoked_at IS NULL AND expires_at > $2)",
+        )
+        .bind(id)
+        .bind(now())
+        .fetch_one(&mut *conn)
+        .await?;
+        Some(open)
+    } else {
+        None
+    };
+
     let draft: Option<Value> = sqlx::query_scalar(
         "SELECT body FROM exchange_draft WHERE exchange_id = $1 AND account_id = $2",
     )
@@ -248,7 +269,13 @@ async fn view(conn: &mut PgConnection, id: Uuid, account: Uuid) -> Result<Exchan
     .fetch_optional(&mut *conn)
     .await?;
 
-    Ok(ExchangeView::build(&aggregate, you, claimant, draft))
+    Ok(ExchangeView::build(
+        &aggregate,
+        you,
+        claimant,
+        invitation_open,
+        draft,
+    ))
 }
 
 // ---- Creating, listing, viewing ---------------------------------------------
@@ -658,6 +685,7 @@ pub async fn run_command(
             )
         }
         CommandDto::ConfirmCounterparty => (Command::ConfirmCounterparty, None),
+        CommandDto::RejectCounterparty => (Command::RejectCounterparty, None),
         CommandDto::ProposeEnd => (Command::ProposeEnd, None),
         CommandDto::AcceptEnd => (Command::AcceptEnd, None),
         CommandDto::CancelEnd => (Command::CancelEnd, None),
@@ -727,10 +755,44 @@ pub async fn run_command(
     Ok(view)
 }
 
+/// The caller, having opened an invitation and not yet been confirmed by the
+/// initiator, gives up their place (DESIGN.md §8). Anything they signed is
+/// void, and the exchange is no longer theirs to see. It is their one way
+/// out, since they cannot decline.
+///
+/// Unlike the other changes this names no version: nothing the exchange has
+/// become since the caller last looked is a reason to keep them in it. And
+/// it has no reply to repeat: once it has worked, the exchange is gone for
+/// the caller, and a second try is told so like anyone else's would be.
+pub async fn leave(
+    db: &PgPool,
+    settings: &Settings,
+    session: &Session,
+    id: Uuid,
+) -> Result<(), ApiError> {
+    let mut tx = db.begin().await?;
+    let (aggregate, slot) = open_for(&mut tx, id, session.account_id, true).await?;
+    let at = now();
+    within_change_rate(&mut tx, id, slot, &settings.rules).await?;
+
+    let actor = Actor::Party(slot);
+    let decision = decide(
+        &aggregate.exchange,
+        actor,
+        Command::ReleaseClaim,
+        at,
+        &settings.rules,
+    )?;
+    repo::persist(&mut tx, &aggregate, &decision, actor, None, at).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 // ---- Invitations ------------------------------------------------------------
 
 /// Replaces the invitation link, for when it was lost, expired or sent to
-/// the wrong person. The old link stops working.
+/// the wrong person, or when whoever used it was removed or left. The old
+/// link stops working.
 pub async fn reissue_invitation(
     db: &PgPool,
     rules: &Rules,
@@ -878,8 +940,10 @@ pub async fn claim_invitation(
         .ok_or_else(unavailable)?;
     let at = now();
 
-    // Claiming twice with the same account is harmless.
-    if found.claimed_by == Some(account) {
+    // Claiming twice with the same account is harmless, for as long as the
+    // place is still theirs. For someone since removed from it, the link is
+    // spent like any other, and says so the same way.
+    if found.claimed_by == Some(account) && aggregate.accounts[1] == Some(account) {
         return view(&mut tx, exchange, account).await;
     }
 

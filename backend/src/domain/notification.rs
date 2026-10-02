@@ -19,6 +19,9 @@ pub enum Notice {
     /// Someone joined through an unbound link; the initiator must confirm them.
     InvitationClaimedUnconfirmed,
     CounterpartyConfirmed,
+    /// Whoever had opened the invitation left before being confirmed; the
+    /// initiator can send a new link.
+    ClaimantLeft,
     /// A proposal or counteroffer during negotiation.
     RevisionSent,
     AmendmentProposed,
@@ -50,10 +53,11 @@ pub enum Notice {
 }
 
 impl Notice {
-    pub const ALL: [Notice; 29] = [
+    pub const ALL: [Notice; 30] = [
         Notice::InvitationClaimed,
         Notice::InvitationClaimedUnconfirmed,
         Notice::CounterpartyConfirmed,
+        Notice::ClaimantLeft,
         Notice::RevisionSent,
         Notice::AmendmentProposed,
         Notice::AcceptanceWaiting,
@@ -87,6 +91,7 @@ impl Notice {
             Notice::InvitationClaimed => "INVITATION_CLAIMED",
             Notice::InvitationClaimedUnconfirmed => "INVITATION_CLAIMED_UNCONFIRMED",
             Notice::CounterpartyConfirmed => "COUNTERPARTY_CONFIRMED",
+            Notice::ClaimantLeft => "CLAIMANT_LEFT",
             Notice::RevisionSent => "REVISION_SENT",
             Notice::AmendmentProposed => "AMENDMENT_PROPOSED",
             Notice::AcceptanceWaiting => "ACCEPTANCE_WAITING",
@@ -139,6 +144,11 @@ fn notice(before: &Exchange, event: &Event) -> Option<Notice> {
         Event::CounterpartyClaimed { confirmed: true } => Notice::InvitationClaimed,
         Event::CounterpartyClaimed { confirmed: false } => Notice::InvitationClaimedUnconfirmed,
         Event::CounterpartyConfirmed => Notice::CounterpartyConfirmed,
+        // The initiator did it and needs no telling. The person removed is
+        // told nothing: the exchange is no longer theirs, and a message about
+        // it would say more than that.
+        Event::CounterpartyRejected { .. } => return None,
+        Event::CounterpartyReleased { .. } => Notice::ClaimantLeft,
         Event::RevisionSent { .. } if amending => Notice::AmendmentProposed,
         Event::RevisionSent { .. } => Notice::RevisionSent,
         // Nobody needs telling by itself: it only ever accompanies the new
@@ -312,17 +322,12 @@ mod tests {
             to_a(Notice::InvitationClaimedUnconfirmed)
         );
         assert_eq!(
-            s.run(B, send(2, fence_job())),
-            to_a(Notice::RevisionSent),
-            "a counteroffer, which also supersedes revision 1"
-        );
-        assert_eq!(
-            s.run(A, send(3, fence_job())),
+            s.run(A, send(2, fence_job())),
             to_b(Notice::RevisionSent),
-            "the initiator may counter before confirming"
+            "the initiator may change their offer before confirming, which also supersedes revision 1"
         );
         assert_eq!(
-            s.run(B, Command::Accept { revision: rev(3) }),
+            s.run(B, Command::Accept { revision: rev(2) }),
             to_a(Notice::AcceptanceWaiting)
         );
         assert_eq!(
@@ -330,6 +335,34 @@ mod tests {
             to_b(Notice::AgreementInForce),
             "confirming brought the waiting acceptance into force"
         );
+
+        let mut s = Scenario::negotiating();
+        assert_eq!(
+            s.run(B, send(2, fence_job())),
+            to_a(Notice::RevisionSent),
+            "a counteroffer"
+        );
+    }
+
+    #[test]
+    fn a_claimant_who_leaves_is_news_to_the_initiator_and_one_removed_is_told_nothing() {
+        let unconfirmed = || {
+            let mut s = Scenario::draft();
+            s.run(A, send(1, fence_job()));
+            s.run(B, Command::ClaimCounterparty { pre_bound: false });
+            s
+        };
+
+        let mut s = unconfirmed();
+        assert_eq!(s.run(B, Command::ReleaseClaim), to_a(Notice::ClaimantLeft));
+
+        // The initiator did it; the person removed gets no message, signed
+        // or not.
+        let mut s = unconfirmed();
+        assert_eq!(s.run(A, Command::RejectCounterparty), None);
+        let mut s = unconfirmed();
+        s.run(B, Command::Accept { revision: rev(1) });
+        assert_eq!(s.run(A, Command::RejectCounterparty), None);
     }
 
     #[test]

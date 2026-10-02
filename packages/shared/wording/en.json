@@ -26,6 +26,10 @@
           "subject": "You’ve been confirmed ({code})",
           "body": "The other party has confirmed that you are the person they invited. The two of you can now reach an agreement."
         },
+        "CLAIMANT_LEFT": {
+          "subject": "The person who opened your invitation has left ({code})",
+          "body": "The person who used your invitation link has left the exchange before you confirmed them. Nothing they signed has any effect. Your proposal is still open: create a new invitation link for the person you meant to invite."
+        },
         "REVISION_SENT": {
           "subject": "New terms to review ({code})",
           "body": "The other party has sent new terms. Review them, then accept them, decline them or send your own."
@@ -356,6 +360,27 @@
     "ownInvitation": "This is your own invitation link. Send it to the other party; you can’t use it yourself.",
     "alreadyResponded": "If you have already responded to it, it is among your exchanges."
   },
+  "claimant": {
+    "reject": "Not who I invited",
+    "rejectTitle": "Not who you invited?",
+    "rejectRemoves": "{name} is removed from this exchange and can no longer see it.",
+    "rejectVoids": "Anything they signed here is void and can never take effect.",
+    "rejectKeeps": "Your proposal stays open. The link you sent can’t be used again, so you’ll create a new one for the person you meant to invite.",
+    "rejectQuiet": "They aren’t sent a message about it. For them, the exchange is simply no longer there.",
+    "confirmReject": "Yes, remove them",
+    "rejected": "They’ve been removed, and nothing they signed has any effect. Create a new link for the person you meant to invite.",
+    "linkUsed": "The link you sent has been used and can’t be used again. Nobody is in this exchange with you now.",
+    "limits": "Until they confirm you, you can’t decline these terms or propose changes. You can leave this exchange instead.",
+    "leave": "Leave this exchange",
+    "leaveText": "You’ll no longer see this exchange, and the link you opened won’t work again. {name} is told that you left, and can invite someone else.",
+    "leaveVoids": "Anything you signed here is void and can never take effect.",
+    "confirmLeave": "Yes, leave",
+    "invitationIntro": "{name} wants to agree this with you. Read it, then sign in to respond. You can sign it straight away. Before you can decline it or propose changes, {name} has to confirm that you are the person they invited.",
+    "invitationIntroSignedIn": "{name} wants to agree this with you. Read it, then respond. You can sign it straight away. Before you can decline it or propose changes, {name} has to confirm that you are the person they invited.",
+    "blockLeaves": "You leave this exchange and can no longer see it. Anything you signed in it is void.",
+    "blockedAfterLeaving": "You are no longer in this exchange.",
+    "voidSignature": "Signed on {date} by someone who had opened the invitation and was removed, or left, on {since}, before being confirmed. This signature is void: it never took effect and never can."
+  },
   "safety": {
     "heading": "Report or block",
     "report": "Report this exchange",
@@ -421,7 +446,7 @@
     "claimedBody": "Someone signed in and opened your invitation: {name}, {identifier}. Is this the person you meant to invite?",
     "claimedSigned": "They have already signed. Their signature takes effect when you confirm.",
     "confirmCounterparty": "Yes, this is who I invited",
-    "notThem": "If it isn’t, don’t confirm. Withdraw your proposal and start again.",
+    "notThem": "If it isn’t, say so. They are removed from the exchange, and you can send a new link to the person you meant to invite.",
     "waitingConfirmation": "{name} has not yet confirmed that you are the person they invited. You can sign now; your signature takes effect once they confirm.",
     "waitingConfirmationSigned": "You have signed. Your signature takes effect once {name} confirms that you are the person they invited.",
     "proposalHeading": "Proposal waiting to be signed",
@@ -561,6 +586,7 @@
       "you": {
         "COUNTERPARTY_CLAIMED": "You opened the invitation and joined the exchange.",
         "COUNTERPARTY_CONFIRMED": "You confirmed that the person who joined is the one you invited.",
+        "COUNTERPARTY_REJECTED": "You said the person who had opened the invitation was not who you invited. They were removed, and anything they signed is void.",
         "REVISION_SENT": "You sent version {number} and, by sending it, signed it.",
         "REVISION_ACCEPTED": "You signed version {number}.",
         "REVISION_DECLINED": "You declined version {number}.",
@@ -579,6 +605,7 @@
       "named": {
         "COUNTERPARTY_CLAIMED": "{name} opened the invitation and joined the exchange.",
         "COUNTERPARTY_CONFIRMED": "{name} confirmed that the person who joined is the one they invited.",
+        "COUNTERPARTY_REJECTED": "{name} said the person who had opened the invitation was not who they invited. That person was removed, and anything they signed is void.",
         "REVISION_SENT": "{name} sent version {number} and, by sending it, signed it.",
         "REVISION_ACCEPTED": "{name} signed version {number}.",
         "REVISION_DECLINED": "{name} declined version {number}.",
@@ -594,7 +621,13 @@
         "CLOSE_REQUEST_RETRACTED": "{name} took back the request to close the exchange.",
         "STATEMENT_ADDED": "{name} added a statement."
       },
+      "formerClaimant": {
+        "COUNTERPARTY_CLAIMED": "Someone opened the invitation and joined the exchange. They were later removed from it, or left, before being confirmed.",
+        "REVISION_SENT": "The person who had opened the invitation sent version {number}. They are no longer part of the exchange.",
+        "REVISION_ACCEPTED": "The person who had opened the invitation signed version {number}. They are no longer part of the exchange, and that signature is void."
+      },
       "neutral": {
+        "COUNTERPARTY_RELEASED": "The person who had opened the invitation left the exchange before being confirmed. Anything they signed is void.",
         "REVISION_SUPERSEDED": "Version {number} was set aside before both parties had signed it.",
         "REVISION_EXPIRED": "Version {number} expired before both parties had signed it.",
         "AGREEMENT_IN_FORCE": "Version {number}, now signed by both parties, became the agreement.",
@@ -625,6 +658,7 @@
     "CONTRIBUTION_LOCKED": "This item has been accepted and can’t be changed.",
     "REVISION_EXPIRED": "This offer has expired. Ask for a new one or send your own.",
     "COUNTERPARTY_NOT_CONFIRMED": "Confirm who the other party is before accepting.",
+    "AWAITING_CONFIRMATION": "You can do this once the person who invited you has confirmed you. Until then you can sign the terms or leave the exchange.",
     "INVALID_REVISION": "Some of the terms need fixing before this can be sent.",
     "INVALID_REQUEST": "Something in that request wasn’t right. Check it and try again.",
     "INVALID_IDENTIFIER": "Enter a valid email address, or a phone number with its country code.",

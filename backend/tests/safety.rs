@@ -801,8 +801,11 @@ async fn a_block_ends_what_was_waiting_to_be_signed_between_the_two() {
 
     // Ana's offer to Ben, which he could otherwise still sign.
     let (offered, offered_revision) = negotiation(&app, ana, ben).await;
-    // Ben's offer to Ana.
+    // Ben's offer to Ana, whom he has confirmed, so that she can decline it.
     let (received, _) = negotiation(&app, ben, ana).await;
+    app.command(ben, &received, json!({ "type": "CONFIRM_COUNTERPARTY" }))
+        .await
+        .ok();
     // An amendment Ana proposed to the agreement in force.
     let mut amended = fence_job(deal.repair, deal.payment);
     amended["terms"] = json!("Repair the back fence and the gate.");
@@ -940,21 +943,125 @@ async fn a_claim_racing_a_block_never_leaves_an_offer_open_to_the_person_blocked
 }
 
 #[tokio::test]
-async fn a_signature_waiting_on_confirmation_is_not_taken_back_by_a_block() {
+async fn a_block_by_someone_not_yet_confirmed_takes_them_out_of_the_exchange() {
     let app = app().await;
     let ana = app.user("Ana").await;
     let ben = app.user("Ben").await;
+    let carla = app.user("Carla").await;
 
-    // Ben has signed Ana's offer; it waits for her to confirm who he is.
+    // Ben has opened Ana's link and signed her offer; it waits for her to
+    // confirm who he is. Carla has opened another of Ana's and not signed.
     let (exchange, revision) = negotiation(&app, &ana, &ben).await;
     app.command(&ben, &exchange, accept(&revision)).await.ok();
+    let (unsigned, _) = negotiation(&app, &ana, &carla).await;
+    let offers = [
+        app.view(&ana, &exchange).await["open_revision"]["terms"].clone(),
+        app.view(&ana, &unsigned).await["open_revision"]["terms"].clone(),
+    ];
 
-    // No command lets Ben take that signature back, and a block does not
-    // invent one. The exchange is left exactly as it stood.
-    let before = app.view(&ana, &exchange).await;
+    // He cannot decline, and no command takes a signature back. Blocking
+    // her must still leave nothing she could bind him with: he leaves.
     block(&app, &ben, &exchange).await;
-    assert_eq!(app.view(&ana, &exchange).await, before);
-    assert_eq!(has_blocked(&app, &ben, &exchange).await, true);
+    block(&app, &carla, &unsigned).await;
+
+    for ((exchange, who), offer) in [(&exchange, &ben), (&unsigned, &carla)]
+        .into_iter()
+        .zip(offers)
+    {
+        let view = app.view(&ana, exchange).await;
+        assert_eq!(
+            (&view["state"], &view["counterparty"], &view["claimant"]),
+            (&json!("NEGOTIATING"), &json!("UNCLAIMED"), &Value::Null),
+            "her offer stays open, with nobody in the other place"
+        );
+        assert_eq!(view["open_revision"]["accepted_by"], json!(["A"]));
+        assert_eq!(view["open_revision"]["terms"], offer);
+        // Nothing is left for her to confirm.
+        app.command(&ana, exchange, json!({ "type": "CONFIRM_COUNTERPARTY" }))
+            .await
+            .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+
+        // She sees someone leave, as anyone might, and nothing of a block.
+        let history = events(&app, exchange).await;
+        assert_eq!(
+            history.last().unwrap(),
+            &("COUNTERPARTY_RELEASED".to_owned(), Some("B".to_owned()))
+        );
+        assert_eq!(
+            notices(&app, &ana, exchange).await.last().unwrap(),
+            "CLAIMANT_LEFT"
+        );
+        assert_eq!(
+            block_call(&app, &ana, Method::GET, exchange).await.ok(),
+            json!({ "blocked": false, "name": "Ben Ortiz" })
+        );
+
+        // The exchange is gone for whoever left it.
+        app.get(who, &format!("/v1/exchanges/{exchange}"))
+            .await
+            .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
+        block_call(&app, who, Method::GET, exchange)
+            .await
+            .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
+    }
+
+    // The block stands: a new link from Ana is a dead one to Ben.
+    let (_, _, token) = propose(&app, &ana).await;
+    claim(&app, &ben, &token)
+        .await
+        .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+
+    // It is still his to see and to lift, through the exchange he left,
+    // which is the only one the two ever shared.
+    let people = blocked_people(&app, &ben).await;
+    assert_eq!(people.len(), 1);
+    assert_eq!(
+        (
+            &people[0]["exchange_id"],
+            &people[0]["name"],
+            &people[0]["left"]
+        ),
+        (&json!(exchange), &json!("Ana Ruiz"), &json!(true))
+    );
+    // Someone who never blocked her gets nothing from that exchange, having
+    // been in it or not.
+    let dana = app.user("Dana").await;
+    let (visited, _) = negotiation(&app, &ana, &dana).await;
+    app.call(
+        Some(&dana),
+        Method::POST,
+        &format!("/v1/exchanges/{visited}/leave"),
+        None,
+        &[],
+    )
+    .await;
+    for (who, exchange) in [(&dana, &visited), (&dana, &exchange)] {
+        block_call(&app, who, Method::DELETE, exchange)
+            .await
+            .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
+    }
+
+    done(block_call(&app, &ben, Method::DELETE, &exchange).await);
+    assert_eq!(blocked_people(&app, &ben).await, Vec::<Value>::new());
+    block_call(&app, &ben, Method::DELETE, &exchange)
+        .await
+        .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
+
+    // With the block lifted he can open a link from her again. What he
+    // signed before he left does not come back with him.
+    let token = app
+        .post(
+            &ana,
+            &format!("/v1/exchanges/{exchange}/invitation"),
+            json!({}),
+        )
+        .await
+        .ok()["invitation_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let view = claim(&app, &ben, &token).await.ok();
+    assert_eq!(view["open_revision"]["accepted_by"], json!(["A"]));
 }
 
 #[tokio::test]

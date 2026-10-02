@@ -514,7 +514,7 @@
         "tags": [
           "exchanges"
         ],
-        "summary": "Does one thing to an exchange: accept, decline or withdraw a revision,\nact on a contribution, confirm the counterparty, or end or close it.",
+        "summary": "Does one thing to an exchange: accept, decline or withdraw a revision,\nact on a contribution, confirm or reject whoever claimed the invitation,\nor end or close it.",
         "operationId": "run_command",
         "parameters": [
           {
@@ -780,7 +780,72 @@
             }
           },
           "409": {
-            "description": "The invitation has already been claimed",
+            "description": "Someone is in the invited party's place",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchanges/{id}/leave": {
+      "post": {
+        "tags": [
+          "exchanges"
+        ],
+        "summary": "Gives up the invited party's place. For someone who opened an invitation\nlink and has not been confirmed by the initiator: it is their way out,\nsince they cannot decline. Anything they signed is void, and from then on\nthe exchange does not exist for them.",
+        "operationId": "leave",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Left"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The initiator cannot leave their own exchange",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The caller has been confirmed, and is a party for good",
             "content": {
               "application/json": {
                 "schema": {
@@ -1487,6 +1552,13 @@
             "type": "string",
             "format": "uuid"
           },
+          "left": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Set when the caller is no longer in that exchange and cannot open it:\nthey had opened its invitation and left before being confirmed. It\nstill names the person, and unblocking through it still works."
+          },
           "name": {
             "type": "string",
             "description": "Their name as written in that exchange."
@@ -1616,6 +1688,21 @@
                 "type": "string",
                 "enum": [
                   "CONFIRM_COUNTERPARTY"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The initiator says whoever claimed the invitation is not who they\ninvited. That person is removed, anything they signed is void, and a\nnew invitation link can be issued.",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "REJECT_COUNTERPARTY"
                 ]
               }
             }
@@ -2003,6 +2090,7 @@
           "CONTRIBUTION_LOCKED",
           "REVISION_EXPIRED",
           "COUNTERPARTY_NOT_CONFIRMED",
+          "AWAITING_CONFIRMATION",
           "INVALID_REVISION",
           "INVALID_REQUEST",
           "INVALID_IDENTIFIER",
@@ -2029,6 +2117,8 @@
         "enum": [
           "COUNTERPARTY_CLAIMED",
           "COUNTERPARTY_CONFIRMED",
+          "COUNTERPARTY_REJECTED",
+          "COUNTERPARTY_RELEASED",
           "REVISION_SENT",
           "REVISION_SUPERSEDED",
           "REVISION_ACCEPTED",
@@ -2196,6 +2286,13 @@
                 "type": "null"
               }
             ]
+          },
+          "invitation_open": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Only for the initiator, and only while nobody is in the invited\nparty's place: whether an invitation link is out that can still be\nused. It is not once the link has been used, even by someone since\nremoved, or has expired; a new one has to be issued."
           },
           "open_revision": {
             "oneOf": [
@@ -2600,6 +2697,13 @@
             "type": "string",
             "description": "RFC 3339, UTC."
           },
+          "by_removed_claimant": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Set when the actor was someone who had opened the invitation and was\nremoved, or left, before the initiator confirmed them. `actor` is\nthen `B` for the place they were in; they are not the party this\nrecord names as B, and the record does not say who they were."
+          },
           "contribution": {
             "oneOf": [
               {
@@ -2656,6 +2760,13 @@
             "type": "integer",
             "format": "int64",
             "description": "Position in the exchange's history, counting from 1."
+          },
+          "signature_void": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "When whoever opened the invitation was removed or left: whether they\nhad signed the revision then open, named in `revision`. If so, that\nsignature is void: it never took effect and never can."
           },
           "status": {
             "oneOf": [
@@ -2872,7 +2983,7 @@
             "items": {
               "$ref": "#/components/schemas/Signature"
             },
-            "description": "The author's, made by sending it, then the other party's if they\naccepted."
+            "description": "The author's, made by sending it, then the other party's if they\naccepted. Only signatures that count are here."
           },
           "signed": {
             "$ref": "#/components/schemas/SignedDocument",
@@ -2880,6 +2991,13 @@
           },
           "standing": {
             "$ref": "#/components/schemas/RevisionStanding"
+          },
+          "void_signatures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VoidSignature"
+            },
+            "description": "Signatures that do not count and never will, kept apart so that\nnobody reading `signatures` takes one for the other party's."
           }
         }
       },
@@ -3037,7 +3155,7 @@
             "items": {
               "$ref": "#/components/schemas/Slot"
             },
-            "description": "Who has signed it. The author always has."
+            "description": "Who has signed it. The author always has. A signature left by someone\nwho was removed from the invited party's place is not counted."
           },
           "author": {
             "$ref": "#/components/schemas/Slot"
@@ -3405,6 +3523,42 @@
           "EMAIL_OTP",
           "PHONE_OTP"
         ]
+      },
+      "VoidSignature": {
+        "type": "object",
+        "description": "A signature that never took effect and never can. It was made by someone\nwho had opened the invitation and was removed, or left, before the\ninitiator confirmed them. It is kept because it happened. It names\nnobody: that person is not the party the revision names.",
+        "required": [
+          "party",
+          "signed_at",
+          "content_hash",
+          "verification",
+          "consent",
+          "void_since"
+        ],
+        "properties": {
+          "consent": {
+            "$ref": "#/components/schemas/ConsentShown"
+          },
+          "content_hash": {
+            "type": "string",
+            "description": "The hash that was signed, in hex."
+          },
+          "party": {
+            "$ref": "#/components/schemas/Slot",
+            "description": "The place the signer was in."
+          },
+          "signed_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "verification": {
+            "$ref": "#/components/schemas/Verification"
+          },
+          "void_since": {
+            "type": "string",
+            "description": "When the signer was removed or left. RFC 3339, UTC."
+          }
+        }
       }
     }
   }

@@ -179,7 +179,8 @@ export interface paths {
         put?: never;
         /**
          * Does one thing to an exchange: accept, decline or withdraw a revision,
-         *     act on a contribution, confirm the counterparty, or end or close it.
+         *     act on a contribution, confirm or reject whoever claimed the invitation,
+         *     or end or close it.
          */
         post: operations["run_command"];
         delete?: never;
@@ -239,6 +240,28 @@ export interface paths {
         put?: never;
         /** Replaces the invitation link. The previous link stops working. */
         post: operations["reissue_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gives up the invited party's place. For someone who opened an invitation
+         *     link and has not been confirmed by the initiator: it is their way out,
+         *     since they cannot decline. Anything they signed is void, and from then on
+         *     the exchange does not exist for them.
+         */
+        post: operations["leave"];
         delete?: never;
         options?: never;
         head?: never;
@@ -480,6 +503,12 @@ export interface components {
             display_code: string;
             /** Format: uuid */
             exchange_id: string;
+            /**
+             * @description Set when the caller is no longer in that exchange and cannot open it:
+             *     they had opened its invitation and left before being confirmed. It
+             *     still names the person, and unblocking through it still works.
+             */
+            left?: boolean | null;
             /** @description Their name as written in that exchange. */
             name: string;
         };
@@ -515,6 +544,9 @@ export interface components {
         } | {
             /** @enum {string} */
             type: "CONFIRM_COUNTERPARTY";
+        } | {
+            /** @enum {string} */
+            type: "REJECT_COUNTERPARTY";
         } | {
             /** @enum {string} */
             type: "PROPOSE_END";
@@ -640,13 +672,13 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
          * @enum {string}
          */
-        EventType: "COUNTERPARTY_CLAIMED" | "COUNTERPARTY_CONFIRMED" | "REVISION_SENT" | "REVISION_SUPERSEDED" | "REVISION_ACCEPTED" | "REVISION_DECLINED" | "REVISION_WITHDRAWN" | "REVISION_EXPIRED" | "AGREEMENT_IN_FORCE" | "CONTRIBUTION_CLAIMED" | "CONTRIBUTION_CLAIM_RETRACTED" | "CONTRIBUTION_CONFIRMED" | "CONTRIBUTION_DISPUTED" | "CONTRIBUTION_WAIVED" | "END_PROPOSED" | "END_PROPOSAL_CANCELLED" | "CLOSE_REQUESTED" | "CLOSE_REQUEST_RETRACTED" | "STATEMENT_ADDED" | "INACTIVITY_PROMPTED" | "EXCHANGE_CLOSED";
+        EventType: "COUNTERPARTY_CLAIMED" | "COUNTERPARTY_CONFIRMED" | "COUNTERPARTY_REJECTED" | "COUNTERPARTY_RELEASED" | "REVISION_SENT" | "REVISION_SUPERSEDED" | "REVISION_ACCEPTED" | "REVISION_DECLINED" | "REVISION_WITHDRAWN" | "REVISION_EXPIRED" | "AGREEMENT_IN_FORCE" | "CONTRIBUTION_CLAIMED" | "CONTRIBUTION_CLAIM_RETRACTED" | "CONTRIBUTION_CONFIRMED" | "CONTRIBUTION_DISPUTED" | "CONTRIBUTION_WAIVED" | "END_PROPOSED" | "END_PROPOSAL_CANCELLED" | "CLOSE_REQUESTED" | "CLOSE_REQUEST_RETRACTED" | "STATEMENT_ADDED" | "INACTIVITY_PROMPTED" | "EXCHANGE_CLOSED";
         ExchangeSummary: {
             closed_outcome?: components["schemas"]["OutcomeDto"] | null;
             display_code: string;
@@ -675,6 +707,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             in_force_revision?: components["schemas"]["RevisionView"] | null;
+            /**
+             * @description Only for the initiator, and only while nobody is in the invited
+             *     party's place: whether an invitation link is out that can still be
+             *     used. It is not once the link has been used, even by someone since
+             *     removed, or has expired; a new one has to be issued.
+             */
+            invitation_open?: boolean | null;
             open_revision?: components["schemas"]["RevisionView"] | null;
             state: components["schemas"]["StateDto"];
             timezone: string;
@@ -832,6 +871,13 @@ export interface components {
             actor: components["schemas"]["Actor"];
             /** @description RFC 3339, UTC. */
             at: string;
+            /**
+             * @description Set when the actor was someone who had opened the invitation and was
+             *     removed, or left, before the initiator confirmed them. `actor` is
+             *     then `B` for the place they were in; they are not the party this
+             *     record names as B, and the record does not say who they were.
+             */
+            by_removed_claimant?: boolean | null;
             contribution?: components["schemas"]["ContributionRef"] | null;
             /**
              * @description When the invited party joined: whether the invitation named them, so
@@ -852,6 +898,12 @@ export interface components {
              * @description Position in the exchange's history, counting from 1.
              */
             sequence: number;
+            /**
+             * @description When whoever opened the invitation was removed or left: whether they
+             *     had signed the revision then open, named in `revision`. If so, that
+             *     signature is void: it never took effect and never can.
+             */
+            signature_void?: boolean | null;
             status?: components["schemas"]["Status"] | null;
             /**
              * @description When a revision came into force: where each of its contributions
@@ -914,12 +966,17 @@ export interface components {
             sequence: number;
             /**
              * @description The author's, made by sending it, then the other party's if they
-             *     accepted.
+             *     accepted. Only signatures that count are here.
              */
             signatures: components["schemas"]["Signature"][];
             /** @description What the signatures cover, word for word. */
             signed: components["schemas"]["SignedDocument"];
             standing: components["schemas"]["RevisionStanding"];
+            /**
+             * @description Signatures that do not count and never will, kept apart so that
+             *     nobody reading `signatures` takes one for the other party's.
+             */
+            void_signatures?: components["schemas"]["VoidSignature"][];
         };
         /**
          * @description Why an exchange is being reported. A fixed list, so that a reviewer can
@@ -970,7 +1027,10 @@ export interface components {
             terms: string;
         };
         RevisionView: {
-            /** @description Who has signed it. The author always has. */
+            /**
+             * @description Who has signed it. The author always has. A signature left by someone
+             *     who was removed from the invited party's place is not counted.
+             */
             accepted_by: components["schemas"]["Slot"][];
             author: components["schemas"]["Slot"];
             /** @description SHA-256 of the signed terms, in hex. */
@@ -1111,6 +1171,24 @@ export interface components {
         };
         /** @enum {string} */
         VerificationMethod: "EMAIL_OTP" | "PHONE_OTP";
+        /**
+         * @description A signature that never took effect and never can. It was made by someone
+         *     who had opened the invitation and was removed, or left, before the
+         *     initiator confirmed them. It is kept because it happened. It names
+         *     nobody: that person is not the party the revision names.
+         */
+        VoidSignature: {
+            consent: components["schemas"]["ConsentShown"];
+            /** @description The hash that was signed, in hex. */
+            content_hash: string;
+            /** @description The place the signer was in. */
+            party: components["schemas"]["Slot"];
+            /** @description RFC 3339, UTC. */
+            signed_at: string;
+            verification: components["schemas"]["Verification"];
+            /** @description When the signer was removed or left. RFC 3339, UTC. */
+            void_since: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -1759,7 +1837,64 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The invitation has already been claimed */
+            /** @description Someone is in the invited party's place */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    leave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The initiator cannot leave their own exchange */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller has been confirmed, and is a party for good */
             409: {
                 headers: {
                     [name: string]: unknown;

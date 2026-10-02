@@ -256,6 +256,10 @@ pub enum CommandDto {
     },
     /// The initiator confirms who claimed the invitation.
     ConfirmCounterparty,
+    /// The initiator says whoever claimed the invitation is not who they
+    /// invited. That person is removed, anything they signed is void, and a
+    /// new invitation link can be issued.
+    RejectCounterparty,
     ProposeEnd,
     AcceptEnd,
     CancelEnd,
@@ -303,8 +307,11 @@ pub enum OutcomeDto {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CounterpartyDto {
+    /// Nobody is in the invited party's place: nobody has opened the
+    /// invitation yet, or whoever did was removed or left.
     Unclaimed,
-    /// Claimed, waiting for the initiator to confirm who it is.
+    /// Claimed, waiting for the initiator to confirm who it is. Until then
+    /// the claimant can sign or leave, and nothing else.
     Claimed,
     Confirmed,
 }
@@ -325,7 +332,8 @@ pub struct RevisionView {
     pub note: Option<String>,
     /// RFC 3339.
     pub expires_at: String,
-    /// Who has signed it. The author always has.
+    /// Who has signed it. The author always has. A signature left by someone
+    /// who was removed from the invited party's place is not counted.
     pub accepted_by: Vec<Slot>,
     /// SHA-256 of the signed terms, in hex.
     pub content_hash: String,
@@ -354,6 +362,11 @@ pub struct ExchangeView {
     pub you: Slot,
     pub counterparty: CounterpartyDto,
     pub claimant: Option<Claimant>,
+    /// Only for the initiator, and only while nobody is in the invited
+    /// party's place: whether an invitation link is out that can still be
+    /// used. It is not once the link has been used, even by someone since
+    /// removed, or has expired; a new one has to be issued.
+    pub invitation_open: Option<bool>,
     /// The revision awaiting acceptance, if any.
     pub open_revision: Option<RevisionView>,
     /// The agreement currently binding, if any.
@@ -448,6 +461,7 @@ impl ExchangeView {
         aggregate: &Aggregate,
         you: Slot,
         claimant: Option<Claimant>,
+        invitation_open: Option<bool>,
         draft: Option<serde_json::Value>,
     ) -> Self {
         let exchange = &aggregate.exchange;
@@ -484,6 +498,7 @@ impl ExchangeView {
                 Counterparty::Confirmed => CounterpartyDto::Confirmed,
             },
             claimant,
+            invitation_open,
             open_revision: aggregate.open.as_ref().map(RevisionView::from_record),
             in_force_revision: aggregate.in_force.as_ref().map(RevisionView::from_record),
             contributions,

@@ -243,6 +243,17 @@ export function createExchangeApi({ client, session, newKey }: ExchangeApiOption
       )
     },
 
+    /**
+     * Gives up the invited party's place, for someone the initiator has not
+     * confirmed (DESIGN.md §8). Afterwards the exchange no longer exists for
+     * them, so there is nothing to answer with.
+     */
+    leaveExchange(id: string): Promise<void> {
+      return send(() =>
+        client.POST('/v1/exchanges/{id}/leave', { headers: headers(), params: { path: { id } } }),
+      )
+    },
+
     /** Replaces the invitation link and returns the new token, which is shown once. */
     async reissueInvitation(id: string, boundTo: string | null): Promise<string> {
       const issued = await send(() =>

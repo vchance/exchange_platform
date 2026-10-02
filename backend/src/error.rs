@@ -26,6 +26,9 @@ pub enum ErrorCode {
     RevisionExpired,
     /// The initiator must confirm who the counterparty is first.
     CounterpartyNotConfirmed,
+    /// The caller opened an invitation that named nobody, and the initiator
+    /// has not confirmed them yet. Until then they can sign or leave.
+    AwaitingConfirmation,
     /// The revision breaks a rule and was not sent.
     InvalidRevision,
     /// The request body is missing, malformed or out of range.
@@ -94,6 +97,7 @@ impl From<ErrorCode> for ApiError {
             | ContributionLocked
             | RevisionExpired
             | CounterpartyNotConfirmed
+            | AwaitingConfirmation
             | IdentifierInUse
             | VersionConflict
             | ProfileIncomplete
@@ -120,6 +124,7 @@ impl From<Refusal> for ApiError {
             Refusal::StaleRevision => ErrorCode::StaleRevision,
             Refusal::RevisionExpired => ErrorCode::RevisionExpired,
             Refusal::CounterpartyNotConfirmed => ErrorCode::CounterpartyNotConfirmed,
+            Refusal::AwaitingConfirmation => ErrorCode::AwaitingConfirmation,
             Refusal::ContributionLocked(_) => ErrorCode::ContributionLocked,
             Refusal::UnknownContribution(_) => ErrorCode::NotFound,
             Refusal::InvalidRevision(_) => ErrorCode::InvalidRevision,

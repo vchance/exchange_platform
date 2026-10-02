@@ -26,7 +26,7 @@ use self::dto::{
     Actor, ConsentShown, Continuation, ContributionRef, EventType, FORMAT, FORMAT_VERSION,
     HistoryPage, Part, Parties, RecordContribution, RecordDocument, RecordEvent, RecordExchange,
     RecordRevision, RevisionRef, RevisionStanding, RevisionStatus, Signature, Verification,
-    VerificationMethod,
+    VerificationMethod, VoidSignature,
 };
 use super::dto::{ContributionStatus, CounterpartyDto, OutcomeDto, rfc3339, state_dto};
 use super::repo::{self, Aggregate};
@@ -146,11 +146,21 @@ async fn events(
     // The message sent with a revision is kept on the revision. A
     // contribution is described as the agreement in force at the time
     // described it.
+    //
+    // Someone can be taken out of the invited party's place only before they
+    // are confirmed, and the place has one holder at a time. So whatever
+    // was done from that place up to the last such removal was done by
+    // someone since removed, and by nobody the record names.
     let query = format!(
         "SELECT e.sequence, e.type, e.actor_slot, e.occurred_at, e.data,
                 CASE WHEN e.type = 'REVISION_SENT' THEN r.note ELSE e.note END AS note,
                 e.revision_id, r.sequence AS revision_sequence,
-                e.contribution_id, s.description AS contribution_description
+                e.contribution_id, s.description AS contribution_description,
+                (e.actor_slot IS NOT DISTINCT FROM 'B' AND EXISTS (
+                    SELECT 1 FROM exchange_event x
+                    WHERE x.exchange_id = e.exchange_id AND x.sequence >= e.sequence
+                      AND x.type IN ('COUNTERPARTY_REJECTED', 'COUNTERPARTY_RELEASED')
+                )) AS by_removed_claimant
          FROM exchange_event e
          LEFT JOIN revision r ON r.exchange_id = e.exchange_id AND r.id = e.revision_id
          LEFT JOIN contribution_snapshot s
@@ -207,6 +217,7 @@ fn event(row: &PgRow) -> Option<RecordEvent> {
             Some(_) => Actor::B,
             None => Actor::System,
         },
+        by_removed_claimant: row.get::<bool, _>("by_removed_claimant").then_some(true),
         at: rfc3339(row.get("occurred_at")),
         note: row.get("note"),
         revision: row
@@ -224,6 +235,7 @@ fn event(row: &PgRow) -> Option<RecordEvent> {
         status: None,
         statuses: None,
         invitation_named_them: None,
+        signature_void: None,
         outcome: None,
         reason: None,
         waived: None,
@@ -232,6 +244,11 @@ fn event(row: &PgRow) -> Option<RecordEvent> {
     match kind {
         EventType::CounterpartyClaimed => {
             event.invitation_named_them = data["confirmed"].as_bool();
+        }
+        // The account that was removed is stored with these too, and stays
+        // there.
+        EventType::CounterpartyRejected | EventType::CounterpartyReleased => {
+            event.signature_void = data["signature_void"].as_bool();
         }
         EventType::ContributionClaimed
         | EventType::ContributionClaimRetracted
@@ -410,26 +427,39 @@ async fn standings(
     Ok(found)
 }
 
+/// The signatures on one revision: those that count, and those left by
+/// someone removed from the invited party's place before being confirmed.
+#[derive(Default)]
+struct Signed {
+    signatures: Vec<(Slot, Signature)>,
+    void: Vec<VoidSignature>,
+}
+
 /// Every signature on some revisions, in the order they were made.
 async fn signatures(
     conn: &mut PgConnection,
     exchange: Uuid,
     revisions: &[Uuid],
     wording: &notices::Export,
-) -> Result<HashMap<Uuid, Vec<(Slot, Signature)>>, sqlx::Error> {
+) -> Result<HashMap<Uuid, Signed>, sqlx::Error> {
+    // A signature stands or falls with the holding it was made under: the
+    // signer's time in that place. One whose holding ended is void from then.
     let rows = sqlx::query(
-        "SELECT revision_id, slot, content_hash, auth_method, authenticated_at,
-                consent_language, consent_version, accepted_at
-         FROM acceptance
-         WHERE exchange_id = $1 AND revision_id = ANY($2)
-         ORDER BY accepted_at, slot",
+        "SELECT a.revision_id, a.slot, a.content_hash, a.auth_method, a.authenticated_at,
+                a.consent_language, a.consent_version, a.accepted_at,
+                h.ended_at AS void_since
+         FROM acceptance a
+         JOIN slot_holding h
+           ON h.exchange_id = a.exchange_id AND h.slot = a.slot AND h.holding = a.holding
+         WHERE a.exchange_id = $1 AND a.revision_id = ANY($2)
+         ORDER BY a.accepted_at, a.slot",
     )
     .bind(exchange)
     .bind(revisions)
     .fetch_all(&mut *conn)
     .await?;
 
-    let mut found: HashMap<Uuid, Vec<(Slot, Signature)>> = HashMap::new();
+    let mut found: HashMap<Uuid, Signed> = HashMap::new();
     for row in &rows {
         let party = slot(row.get("slot"));
         // The database allows only these two; anything else would be a
@@ -438,26 +468,40 @@ async fn signatures(
             tracing::error!("a signature was verified by a method the record cannot describe");
             continue;
         };
-        let signature = Signature {
-            party,
-            // Filled in by the caller, which has the revision.
-            name: String::new(),
-            signed_at: rfc3339(row.get("accepted_at")),
-            content_hash: hex(&row.get::<Vec<u8>, _>("content_hash")),
-            verification: Verification {
-                method,
-                verified_at: rfc3339(row.get("authenticated_at")),
-                description: wording.verification(method),
-            },
-            consent: ConsentShown {
-                language: row.get("consent_language"),
-                version: row.get("consent_version"),
-            },
+        let signed_at = rfc3339(row.get("accepted_at"));
+        let content_hash = hex(&row.get::<Vec<u8>, _>("content_hash"));
+        let verification = Verification {
+            method,
+            verified_at: rfc3339(row.get("authenticated_at")),
+            description: wording.verification(method),
         };
-        found
-            .entry(row.get("revision_id"))
-            .or_default()
-            .push((party, signature));
+        let consent = ConsentShown {
+            language: row.get("consent_language"),
+            version: row.get("consent_version"),
+        };
+        let signed = found.entry(row.get("revision_id")).or_default();
+        match row.get::<Option<OffsetDateTime>, _>("void_since") {
+            Some(void_since) => signed.void.push(VoidSignature {
+                party,
+                signed_at,
+                content_hash,
+                verification,
+                consent,
+                void_since: rfc3339(void_since),
+            }),
+            None => signed.signatures.push((
+                party,
+                Signature {
+                    party,
+                    // Filled in by the caller, which has the revision.
+                    name: String::new(),
+                    signed_at,
+                    content_hash,
+                    verification,
+                    consent,
+                },
+            )),
+        }
     }
     Ok(found)
 }
@@ -519,9 +563,9 @@ async fn revisions(
     let revisions = loaded
         .into_iter()
         .map(|(row, record, signed)| {
-            let signatures = signatures
-                .remove(&record.id)
-                .unwrap_or_default()
+            let on_it = signatures.remove(&record.id).unwrap_or_default();
+            let signatures = on_it
+                .signatures
                 .into_iter()
                 .map(|(party, signature)| Signature {
                     name: match party {
@@ -548,6 +592,7 @@ async fn revisions(
                 content_hash: hex(&record.content_hash),
                 signed: serde_json::from_str(&signed).expect("the canonical document is JSON"),
                 signatures,
+                void_signatures: on_it.void,
             }
         })
         .collect();

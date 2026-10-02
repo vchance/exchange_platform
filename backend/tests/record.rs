@@ -304,7 +304,7 @@ async fn the_record_of_a_whole_exchange_tells_all_of_it() {
 
     // What it is, and that it is all of it.
     assert_eq!(record["format"], "exchange-record");
-    assert_eq!(record["format_version"], 1);
+    assert_eq!(record["format_version"], 2);
     assert_eq!(record["language"], "en");
     assert_eq!(record["prepared_for"], "A");
     assert_eq!(
@@ -645,6 +645,10 @@ async fn an_exchange_that_was_never_agreed_keeps_its_record() {
     )
     .await
     .ok();
+    // Until Ana has confirmed him he could only sign or leave.
+    app.command(&ana, &exchange, json!({ "type": "CONFIRM_COUNTERPARTY" }))
+        .await
+        .ok();
     app.command(
         &ben,
         &exchange,
@@ -685,12 +689,13 @@ async fn an_exchange_that_was_never_agreed_keeps_its_record() {
             [
                 "REVISION_SENT",
                 "COUNTERPARTY_CLAIMED",
+                "COUNTERPARTY_CONFIRMED",
                 "REVISION_DECLINED",
                 "EXCHANGE_CLOSED"
             ]
         );
-        assert_eq!(texts(&record["events"], "actor"), ["A", "B", "B", "B"]);
-        let closed = &record["events"][3];
+        assert_eq!(texts(&record["events"], "actor"), ["A", "B", "A", "B", "B"]);
+        let closed = &record["events"][4];
         assert_eq!(
             (&closed["outcome"], &closed["reason"]),
             (&json!("NOT_AGREED"), &json!("DECLINED"))

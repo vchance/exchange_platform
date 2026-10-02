@@ -18,6 +18,7 @@ pub fn router() -> Router<AppState> {
         .route("/exchanges/{id}/draft", put(exchanges::save_draft))
         .route("/exchanges/{id}/revisions", post(exchanges::send_revision))
         .route("/exchanges/{id}/commands", post(exchanges::run_command))
+        .route("/exchanges/{id}/leave", post(exchanges::leave))
         .route("/exchanges/{id}/history", get(record::history))
         .route("/exchanges/{id}/record", get(record::record))
         .route(

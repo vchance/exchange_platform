@@ -73,6 +73,10 @@ pub struct Delivery {
     pub rules: DeliveryRules,
 }
 
+/// Why a message was closed unsent when its recipient was removed from the
+/// exchange it is about, or left it.
+pub const NO_LONGER_A_PARTY: &str = "not sent: the recipient is no longer a party to the exchange";
+
 // ---- Writing ----------------------------------------------------------------
 
 /// Queues an email telling `recipient` about an event. Call it in the
