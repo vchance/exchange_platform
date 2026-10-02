@@ -1,4 +1,5 @@
 import type { ErrorCode, ExchangeSummary } from '@exchange/api-client'
+import { groupExchanges } from '@exchange/shared'
 import { useEffect, useState } from 'react'
 
 import { useI18n } from '../app/context'
@@ -8,15 +9,21 @@ import { paths } from '../app/routes'
 import { Failure, PageHeading, Written } from '../components/ui'
 import { api, failureCode } from '../lib/api'
 
-/** The signed-in person's exchanges, most recently changed first, and the way to start one. */
+/**
+ * The signed-in person's exchanges and the way to start one. What is in
+ * progress comes first, since that is what may be waiting on them; drafts
+ * they never sent come next; what is closed is kept but folded away, so it
+ * never buries the rest. Within a group, most recently changed first.
+ */
 export default function HomePage() {
-  const { wording, fmt, moment } = useI18n()
+  const { wording, fmt } = useI18n()
   const w = wording.home
 
   const [exchanges, setExchanges] = useState<ExchangeSummary[] | null>(null)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [starting, setStarting] = useState(false)
   const [tooMany, setTooMany] = useState(false)
+  const [showClosed, setShowClosed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -51,6 +58,8 @@ export default function HomePage() {
     }
   }
 
+  const groups = exchanges ? groupExchanges(exchanges) : null
+
   return (
     <>
       <PageHeading>{w.title}</PageHeading>
@@ -68,33 +77,77 @@ export default function HomePage() {
 
       {!exchanges && !failure && <p>{wording.common.loading}</p>}
       {exchanges?.length === 0 && <p>{w.empty}</p>}
-      {exchanges && exchanges.length > 0 && (
-        <ul className="plain cards">
-          {exchanges.map((exchange) => (
-            <li key={exchange.id} className="card">
-              <Link to={paths.exchange(exchange.id)} className="card-link">
-                {exchange.other_party_name ? (
-                  <Written inline>{fmt(w.withParty, { name: exchange.other_party_name })}</Written>
-                ) : (
-                  w.noParty
-                )}
-              </Link>
-              <p>
-                <span className="tag">
-                  {exchange.closed_outcome
-                    ? wording.outcomes[exchange.closed_outcome]
-                    : wording.states[exchange.state]}
-                </span>
-              </p>
-              <p className="hint">
-                {fmt(w.reference, { code: exchange.display_code })}
-                <br />
-                {fmt(w.updated, { date: moment(exchange.updated_at) })}
-              </p>
-            </li>
-          ))}
-        </ul>
+      {groups && (
+        <>
+          <Group id="open" heading={w.groupOpen} exchanges={groups.open} />
+          <Group id="drafts" heading={w.groupDrafts} exchanges={groups.drafts} />
+          {groups.closed.length > 0 && (
+            <section aria-labelledby="exchanges-closed">
+              <h2 id="exchanges-closed">{w.groupClosed}</h2>
+              <div className="actions">
+                <button
+                  type="button"
+                  aria-expanded={showClosed}
+                  onClick={() => setShowClosed((shown) => !shown)}
+                >
+                  {showClosed ? w.hideClosed : fmt(w.showClosed, { count: groups.closed.length })}
+                </button>
+              </div>
+              {showClosed && <Cards exchanges={groups.closed} />}
+            </section>
+          )}
+        </>
       )}
     </>
+  )
+}
+
+function Group({
+  id,
+  heading,
+  exchanges,
+}: {
+  id: string
+  heading: string
+  exchanges: readonly ExchangeSummary[]
+}) {
+  if (exchanges.length === 0) return null
+  return (
+    <section aria-labelledby={`exchanges-${id}`}>
+      <h2 id={`exchanges-${id}`}>{heading}</h2>
+      <Cards exchanges={exchanges} />
+    </section>
+  )
+}
+
+function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
+  const { wording, fmt, moment } = useI18n()
+  const w = wording.home
+  return (
+    <ul className="plain cards">
+      {exchanges.map((exchange) => (
+        <li key={exchange.id} className="card">
+          <Link to={paths.exchange(exchange.id)} className="card-link">
+            {exchange.other_party_name ? (
+              <Written inline>{fmt(w.withParty, { name: exchange.other_party_name })}</Written>
+            ) : (
+              w.noParty
+            )}
+          </Link>
+          <p>
+            <span className="tag">
+              {exchange.closed_outcome
+                ? wording.outcomes[exchange.closed_outcome]
+                : wording.states[exchange.state]}
+            </span>
+          </p>
+          <p className="hint">
+            {fmt(w.reference, { code: exchange.display_code })}
+            <br />
+            {fmt(w.updated, { date: moment(exchange.updated_at) })}
+          </p>
+        </li>
+      ))}
+    </ul>
   )
 }

@@ -1,5 +1,15 @@
 import type { components } from '@exchange/api-client'
-import { moveCommand, movesFor, noteFor, NOTE_MAX_CHARS, type Move } from '@exchange/shared'
+import {
+  moveCommand,
+  movesFor,
+  moveTextWording,
+  moveWording,
+  noteFor,
+  NOTE_MAX_CHARS,
+  statusWording,
+  waitingLong,
+  type Move,
+} from '@exchange/shared'
 import { useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
@@ -14,6 +24,8 @@ type Status = components['schemas']['Status']
 interface Props {
   contribution: Contribution
   status: Status
+  /** When it came to stand this way, RFC 3339; the service says. */
+  since: string | null
   you: Slot
   /** The other party's name, for telling the person who an action affects. */
   otherName: string
@@ -26,19 +38,33 @@ interface Props {
  * Where one contribution stands and what the reader can do about it: the
  * provider marks it delivered, the recipient confirms, disputes or waives
  * (DESIGN.md §5.2). A claim is never a confirmation, and the two are worded
- * differently so neither party mistakes one for the other.
+ * differently so neither party mistakes one for the other. Money is paid
+ * outside the product and only recorded here, so for money the words are for
+ * paying and receiving, never for delivering (DESIGN.md §11).
  */
-export function Fulfillment({ contribution, status, you, otherName, active, actions }: Props) {
-  const { wording } = useI18n()
+export function Fulfillment({ contribution, status, since, you, otherName, active, actions }: Props) {
+  const { wording, fmt, moment } = useI18n()
   const w = wording.exchange
+  const money = contribution.type === 'MONEY'
   const role = contribution.from === you ? 'PROVIDER' : 'RECIPIENT'
   const moves = active ? movesFor(status, role) : []
   const panelOf = (move: Move) => `move:${contribution.id}:${move}`
   const opened = moves.find((move) => actions.panel === panelOf(move))
+  // A claim nobody answers stays a claim (DESIGN.md §5.2). After a while the
+  // provider is pointed to the way out, rather than left waiting.
+  const stuck = active && role === 'PROVIDER' && waitingLong(status, since)
 
   return (
     <>
-      <p className="status">{wording.contributionStatus[status]}</p>
+      <p className="status">{statusWording(wording, status, money)}</p>
+      {stuck && since && (
+        <p className="notice">
+          {fmt(money ? w.waitingLongMoney : w.waitingLong, {
+            name: otherName,
+            date: moment(since),
+          })}
+        </p>
+      )}
       {moves.length > 0 && (
         <div className="actions">
           {moves.map((move) => (
@@ -49,7 +75,7 @@ export function Fulfillment({ contribution, status, you, otherName, active, acti
               disabled={actions.busy}
               onClick={() => actions.open(panelOf(move))}
             >
-              {w.moves[move]}
+              {moveWording(wording, move, money)}
             </button>
           ))}
         </div>
@@ -58,6 +84,7 @@ export function Fulfillment({ contribution, status, you, otherName, active, acti
         <MovePanel
           key={opened}
           move={opened}
+          money={money}
           contribution={contribution.id}
           otherName={otherName}
           actions={actions}
@@ -69,18 +96,20 @@ export function Fulfillment({ contribution, status, you, otherName, active, acti
 
 interface MovePanelProps {
   move: Move
+  money: boolean
   contribution: string
   otherName: string
   actions: Actions
 }
 
-function MovePanel({ move, contribution, otherName, actions }: MovePanelProps) {
+function MovePanel({ move, money, contribution, otherName, actions }: MovePanelProps) {
   const { wording, fmt } = useI18n()
   const w = wording.exchange
   const [note, setNote] = useState('')
   const [missing, setMissing] = useState(false)
 
   const { takes: takesNote, label } = noteFor(move)
+  const title = moveWording(wording, move, money)
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -90,9 +119,9 @@ function MovePanel({ move, contribution, otherName, actions }: MovePanelProps) {
   }
 
   return (
-    <Panel title={w.moves[move]}>
+    <Panel title={title}>
       <form noValidate onSubmit={submit}>
-        <p>{fmt(w.moveText[move], { name: otherName })}</p>
+        <p>{fmt(moveTextWording(wording, move, money), { name: otherName })}</p>
         {takesNote && (
           <Field label={w[label]} hint={w.noteRecord} error={missing ? w.noteRequired : null}>
             {(control) => (
@@ -112,7 +141,7 @@ function MovePanel({ move, contribution, otherName, actions }: MovePanelProps) {
         <Failure code={actions.failure} />
         <div className="actions">
           <button type="submit" className="primary" disabled={actions.busy}>
-            {w.moves[move]}
+            {title}
           </button>
           <button type="button" disabled={actions.busy} onClick={actions.close}>
             {wording.common.cancel}

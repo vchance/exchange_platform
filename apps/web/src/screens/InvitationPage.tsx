@@ -1,5 +1,4 @@
 import type { ErrorCode } from '@exchange/api-client'
-import { LAUNCH_CURRENCY } from '@exchange/shared'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 
 import { isComplete, useI18n, useSession } from '../app/context'
@@ -191,8 +190,12 @@ export function InvitationPage() {
                 <Written>{preview.revision.note}</Written>
               </>
             )}
-            {/* The preview names neither the exchange's currency nor its timezone. */}
-            <TermsView terms={preview.revision.terms} currency={LAUNCH_CURRENCY} you={null} />
+            <TermsView
+              terms={preview.revision.terms}
+              currency={preview.currency}
+              timezone={preview.timezone}
+              you={null}
+            />
             <p className="hint">{fmt(w.expires, { date: moment(preview.revision.expires_at) })}</p>
           </section>
 

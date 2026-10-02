@@ -16,6 +16,8 @@ interface Props {
   reader: Schemas['Slot'] | null
   /** How a moment in time is written here. */
   when(instant: string): string
+  /** The ids of the money contributions, which are spoken of in words for paying and receiving. */
+  money?: ReadonlySet<string>
 }
 
 /**
@@ -25,14 +27,14 @@ interface Props {
  * message, note, reason or statement. Those are shown exactly as written and
  * set apart as theirs (DESIGN.md §4.2).
  */
-export function EventList({ events, parties, reader, when }: Props) {
+export function EventList({ events, parties, reader, when, money }: Props) {
   const { wording, fmt } = useI18n()
   const w = wording.record
 
   return (
     <ol className="history">
       {events.map((event) => {
-        const { message, values } = eventMessage(event, w.events, reader, parties)
+        const { message, values } = eventMessage(event, w.events, reader, parties, money)
         return (
           <li key={event.sequence} className="history-entry">
             <p className="hint">
