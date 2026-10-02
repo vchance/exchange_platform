@@ -52,6 +52,7 @@ export type {
 } from './draft'
 export {
   isOverdue,
+  LONG_WAIT_DAYS,
   moveCommand,
   movesFor,
   noteFor,
@@ -60,8 +61,16 @@ export {
   remainingRequired,
   statusesOf,
   todayIn,
+  waitingLong,
 } from './fulfillment'
 export type { Move, MoveNote, Role } from './fulfillment'
+export { isMoney, moneyIds, moveTextWording, moveWording, statusWording } from './money'
+export { amendmentEffects, amendmentRefused, draftEffects } from './amendment'
+export type { AmendmentEffect, ItemEffect } from './amendment'
+export { groupExchanges } from './list'
+export type { GroupedExchanges } from './list'
+export { clientHeader, compareVersions, isClientTooOld, parseVersion } from './client-version'
+export type { ClientIdentity, ClientName } from './client-version'
 export { ApiFailure, createExchangeApi, failureCode } from './api'
 export type {
   BlockedPerson,

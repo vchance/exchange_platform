@@ -2,6 +2,7 @@ import type { components, RevisionTerms } from '@exchange/api-client'
 
 import type { MessageValues } from './message'
 import type {
+  ContributionEventType,
   FormerClaimantEventType,
   NeutralEventType,
   PartyEventType,
@@ -40,12 +41,17 @@ const NEUTRAL: ReadonlySet<string> = new Set<NeutralEventType>([
  *
  * The contribution an event is about and any note written with it are not
  * part of the sentence. They are the parties' own words, shown as such.
+ *
+ * `money` is the ids of the money contributions, which are paid outside the
+ * product and only recorded here, so what was done about one is said in
+ * words for paying and receiving rather than delivering.
  */
 export function eventMessage(
   event: RecordEvent,
   words: Wording['record']['events'],
   reader: Slot | null,
   parties: Parties,
+  money?: ReadonlySet<string>,
 ): { message: string; values: MessageValues } {
   const values: MessageValues = {}
   if (event.revision) values.number = event.revision.sequence
@@ -67,11 +73,22 @@ export function eventMessage(
     return { message: words.formerClaimant[event.type as FormerClaimantEventType], values }
   }
   const type = event.type as PartyEventType
+  const aboutMoney =
+    event.contribution !== undefined &&
+    event.contribution !== null &&
+    money?.has(event.contribution.id) === true &&
+    type in words.moneyNamed
   if (event.actor !== 'SYSTEM' && event.actor === reader) {
-    return { message: words.you[type], values }
+    return {
+      message: aboutMoney ? words.moneyYou[type as ContributionEventType] : words.you[type],
+      values,
+    }
   }
   if (event.actor !== 'SYSTEM') values.name = parties[event.actor]
-  return { message: words.named[type], values }
+  return {
+    message: aboutMoney ? words.moneyNamed[type as ContributionEventType] : words.named[type],
+    values,
+  }
 }
 
 /** What the note written with an event is, so it can be labelled. */

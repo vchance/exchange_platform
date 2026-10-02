@@ -3,6 +3,7 @@ import type { Command, components, ExchangeView } from '@exchange/api-client'
 type Status = components['schemas']['Status']
 type Due = components['schemas']['DueDto']
 type Slot = components['schemas']['Slot']
+type Parties = components['schemas']['Parties']
 
 /*
  * Which fulfillment actions to offer, mirroring the table in DESIGN.md §5.2.
@@ -89,12 +90,34 @@ export function otherSlot(you: Slot): Slot {
 
 /**
  * The other party's name as it is written in the latest terms, or empty when
- * nobody has been named yet.
+ * nobody has been named yet. An exchange with no revision to read, such as
+ * one closed without agreement, has no name in its view; `parties`, which
+ * its history carries, names both sides as the last terms did.
  */
-export function otherPartyName(exchange: ExchangeView): string {
+export function otherPartyName(exchange: ExchangeView, parties?: Parties | null): string {
+  const other = otherSlot(exchange.you)
   const latest = (exchange.open_revision ?? exchange.in_force_revision)?.terms
-  if (!latest) return ''
-  return otherSlot(exchange.you) === 'A' ? latest.party_a_name : latest.party_b_name
+  if (latest) return other === 'A' ? latest.party_a_name : latest.party_b_name
+  return parties?.[other] ?? ''
+}
+
+/** How long a delivery may go unconfirmed before the provider is pointed to the ways out. */
+export const LONG_WAIT_DAYS = 7
+
+/**
+ * Whether something marked delivered has waited a long time for the other
+ * party's confirmation (DESIGN.md §5.2): a claim nobody answers stays a
+ * claim, and the provider's way out is to ask to close.
+ */
+export function waitingLong(
+  status: Status,
+  since: string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (status !== 'CLAIMED' || !since) return false
+  const from = new Date(since).getTime()
+  if (Number.isNaN(from)) return false
+  return now.getTime() - from >= LONG_WAIT_DAYS * 24 * 60 * 60 * 1000
 }
 
 /** Where each contribution of the agreement in force stands. */

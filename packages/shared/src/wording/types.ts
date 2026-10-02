@@ -1,12 +1,19 @@
 import type { components, ErrorCode } from '@exchange/api-client'
 
+import type { AmendmentEffect } from '../amendment'
 import type { ProblemCode } from '../draft'
 import type { Move } from '../fulfillment'
 
 type Schemas = components['schemas']
 
 /** Why a closed exchange closed, as the service names the reasons. */
-export type ClosedReason = 'WITHDRAWN' | 'DECLINED' | 'EXPIRED' | 'CLOSE_REQUEST' | 'INACTIVE'
+export type ClosedReason =
+  | 'WITHDRAWN'
+  | 'DECLINED'
+  | 'EXPIRED'
+  | 'DISCARDED'
+  | 'CLOSE_REQUEST'
+  | 'INACTIVE'
 
 /**
  * Every notification the service can send: the names in `Notice` in
@@ -19,6 +26,7 @@ export type NotificationKind =
   | 'COUNTERPARTY_CONFIRMED'
   | 'CLAIMANT_LEFT'
   | 'REVISION_SENT'
+  | 'REVISION_SENT_UNCONFIRMED'
   | 'AMENDMENT_PROPOSED'
   | 'ACCEPTANCE_WAITING'
   | 'AGREEMENT_IN_FORCE'
@@ -76,6 +84,13 @@ export type PartyEventType = Exclude<Schemas['EventType'], NeutralEventType | 'E
  */
 export type FormerClaimantEventType = 'COUNTERPARTY_CLAIMED' | 'REVISION_SENT' | 'REVISION_ACCEPTED'
 
+/**
+ * What can happen to one contribution. Money is paid outside the product and
+ * only recorded here, so these are worded a second time for money, in words
+ * for paying and receiving rather than delivering (DESIGN.md §7, §11).
+ */
+export type ContributionEventType = Extract<Schemas['EventType'], `CONTRIBUTION_${string}`>
+
 /** What a note written with an event is: a message, a reason, a statement, or just a note. */
 export type RecordNoteKind = 'message' | 'note' | 'reason' | 'statement'
 
@@ -101,6 +116,9 @@ export interface Wording {
     checking: string
     connected: string
     unreachable: string
+    /** The web app's build is below the minimum the service accepts changes from. */
+    outdatedWeb: string
+    reload: string
   }
   /**
    * What the service sends when the other party does something, when an
@@ -222,6 +240,12 @@ export interface Wording {
     reference: string
     updated: string
     tooManyToday: string
+    /** The list in groups: what is in progress first, then drafts, then what is closed, folded away. */
+    groupOpen: string
+    groupDrafts: string
+    groupClosed: string
+    showClosed: string
+    hideClosed: string
   }
   states: Record<Schemas['StateDto'], string>
   outcomes: Record<Schemas['OutcomeDto'], string>
@@ -233,6 +257,8 @@ export interface Wording {
   }
   contributionTypes: Record<Schemas['ContributionType'], string>
   contributionStatus: Record<Schemas['Status'], string>
+  /** The same statuses for a money contribution, in words for paying and receiving. */
+  moneyStatus: Record<Schemas['Status'], string>
   /** Labels around an agreement's terms. The terms themselves are the parties' own words. */
   terms: {
     ownWords: string
@@ -253,6 +279,8 @@ export interface Wording {
     overdue: string
     timezone: string
     fingerprint: string
+    /** On every money contribution: paid outside the product and only recorded here. */
+    moneyOutside: string
   }
   composer: {
     titleFirst: string
@@ -309,6 +337,22 @@ export interface Wording {
     staleDraftKeep: string
     staleDraftDiscard: string
     notAvailable: string
+    /** Beside a money amount while it is written. */
+    moneyOutside: string
+    /** Throwing away a draft that was never sent, said in full before it is done. */
+    discard: string
+    discardText: string
+    confirmDiscard: string
+    /**
+     * What an amendment will do to each item of the agreement, predicted from
+     * the same rule the service applies (DESIGN.md §7).
+     */
+    effectsHeading: string
+    effectsIntro: string
+    effectsSteer: string
+    effects: Record<AmendmentEffect, string>
+    /** Uses `{count}`: items of the agreement the working copy no longer has. */
+    removedCount: string
   }
   /**
    * What a signer is shown before signing. Versioned: `CONSENT_VERSION` names
@@ -506,6 +550,21 @@ export interface Wording {
     /** What each fulfillment action is called, and what the person is told before doing it. */
     moves: Record<Move, string>
     moveText: Record<Move, string>
+    /**
+     * The same for money, which is paid outside the product and only recorded
+     * here: words for paying and receiving, not delivering.
+     */
+    moneyMoves: Record<Move, string>
+    moneyMoveText: Record<Move, string>
+    /**
+     * To the provider of something marked delivered, or paid, that the other
+     * party has left unconfirmed for a long time: the ways out. Uses `{name}`
+     * and `{date}`.
+     */
+    waitingLong: string
+    waitingLongMoney: string
+    /** Under a close request: when it lapses. Uses `{date}`. */
+    closeRequestLapses: string
     noteLabel: string
     reasonLabel: string
     remedyLabel: string
@@ -541,6 +600,7 @@ export interface Wording {
   record: {
     historyHeading: string
     historyEmpty: string
+    /** The way to read the page of history before the one shown. */
     historyEarlier: string
     open: string
     openHint: string
@@ -591,6 +651,9 @@ export interface Wording {
     events: {
       you: Record<PartyEventType, string>
       named: Record<PartyEventType, string>
+      /** The contribution events again, for a money contribution. */
+      moneyYou: Record<ContributionEventType, string>
+      moneyNamed: Record<ContributionEventType, string>
       formerClaimant: Record<FormerClaimantEventType, string>
       neutral: Record<NeutralEventType, string>
       closed: Record<Schemas['OutcomeDto'], string>
