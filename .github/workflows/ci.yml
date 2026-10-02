@@ -123,6 +123,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: npm run lint -w @exchange/web
 
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: npm test
+
       - name: Build the web app
         if: ${{ !cancelled() }}
         run: npm run build:web
