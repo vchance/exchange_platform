@@ -417,6 +417,13 @@
       "open": "Abrir la invitación",
       "invalid": "Eso no es un enlace de invitación. Copia el enlace completo del mensaje en el que llegó y pégalo aquí."
     },
+    "record": {
+      "openHint": "Todo lo que se envió, se firmó y se registró en este intercambio, para leerlo aquí y para compartirlo o guardarlo como archivo.",
+      "share": "Compartir o guardar una copia (JSON)",
+      "shareHint": "La copia es un archivo con todo lo que hay en esta pantalla, incluidos los términos y los dos nombres. Cualquier persona a la que se la envíes podrá leerlo todo.",
+      "shareUnavailable": "Este dispositivo no puede compartir ni guardar un archivo desde aquí. Puedes descargar una copia en la web.",
+      "shareFailed": "No se pudo preparar la copia para compartirla. Inténtalo de nuevo."
+    },
     "date": {
       "choose": "Elegir una fecha",
       "change": "Vence el {date}. Cambiar la fecha."

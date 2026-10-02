@@ -347,6 +347,18 @@ export interface Wording {
       open: string
       invalid: string
     }
+    /**
+     * The record screen, where it differs from the web's page: there is no
+     * printing, and the copy leaves through the system's share sheet.
+     */
+    record: {
+      openHint: string
+      share: string
+      /** Said beside the share button: what the copy holds and who can then read it. */
+      shareHint: string
+      shareUnavailable: string
+      shareFailed: string
+    }
     date: {
       choose: string
       /** What a screen reader says the date button does. Uses `{date}`. */

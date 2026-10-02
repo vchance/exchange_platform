@@ -6,6 +6,7 @@ import { Actions, Button, Heading, Label, Screen } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
 import { space, type, useColors } from '../lib/theme';
 import { ProfileForm } from './AccountSetup';
+import { BlockedPeople } from './BlockedPeople';
 
 /** The account: what it is verified with, its name and language, and signing out. */
 export function AccountScreen() {
@@ -47,6 +48,7 @@ export function AccountScreen() {
         </View>
       ) : null}
       <ProfileForm account={account} first={false} />
+      <BlockedPeople />
       <View style={[styles.rule, { backgroundColor: colors.border }]} />
       <Actions>
         <Button label={wording.nav.signOut} disabled={leaving} onPress={() => void leave()} />

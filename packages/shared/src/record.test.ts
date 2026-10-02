@@ -7,7 +7,10 @@ import {
   joinRecord,
   noteKind,
   readWholeRecord,
+  recordFile,
+  recordMoments,
   termsOfRevision,
+  verificationText,
   type RecordDocument,
   type RecordEvent,
   type RecordRevision,
@@ -225,4 +228,48 @@ test('a record that changed between two parts is read again', async () => {
   expect(reads).toBe(4)
   expect(whole.events.map((found) => found.sequence)).toEqual([1, 2, 3, 4, 5])
   expect(whole.exchange.last_event).toBe(5)
+})
+
+test('a time in a record is written in the exchange’s own zone, and says which', () => {
+  const instant = '2026-11-01T03:30:15Z'
+  // The same moment is a different day in the two zones; each says its own.
+  expect(recordMoments('en', 'America/Chicago')(instant)).toBe(
+    'October 31, 2026 at 10:30:15 PM CDT',
+  )
+  expect(recordMoments('en', 'Asia/Tokyo')(instant)).toMatch(
+    /^November 1, 2026 at 12:30:15 PM (GMT\+9|JST)$/,
+  )
+  expect(recordMoments('es', 'America/Chicago')(instant)).toContain('31 de octubre de 2026')
+})
+
+test('a zone the device does not know falls back to UTC, written with the time', () => {
+  expect(recordMoments('en', 'Nowhere/Invented')('2026-11-01T03:30:15Z')).toBe(
+    'November 1, 2026 at 3:30:15 AM UTC',
+  )
+})
+
+test('a moment that cannot be read is shown as it came', () => {
+  expect(recordMoments('en', 'America/Chicago')('not a time')).toBe('not a time')
+})
+
+test('how a signer was verified is told in the reader’s language when this build knows the method', () => {
+  const known = wordingFor('es').record.export.verification
+  const verified_at = '2026-10-02T15:00:00Z'
+  expect(
+    verificationText({ method: 'EMAIL_OTP', verified_at, description: 'from the record' }, known),
+  ).toBe(known.EMAIL_OTP)
+  // A method added to the service after this build was made.
+  const newer = { method: 'PASSKEY', verified_at, description: 'from the record' }
+  expect(verificationText(newer as never, known)).toBe('from the record')
+})
+
+test('the copy to keep is the record itself as a JSON file, nothing added or left out', () => {
+  const record = part([0, 0], null, [1], [1, 2])
+  const file = recordFile(record, 'exchange-record-AB12-CD34')
+  expect(file.name).toBe('exchange-record-AB12-CD34.json')
+  expect(file.type).toBe('application/json')
+  expect(JSON.parse(file.text)).toEqual(record)
+  // Laid out to be read, and ending as a text file does.
+  expect(file.text.startsWith('{\n  "format": "exchange-record"')).toBe(true)
+  expect(file.text.endsWith('}\n')).toBe(true)
 })

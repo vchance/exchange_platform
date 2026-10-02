@@ -196,11 +196,15 @@ test('when the exchange changed underneath, it is reloaded and the person is tol
   await screen.findByText(w.errors.VERSION_CONFLICT);
   await screen.findByText('Ben Ortiz proposed ending this exchange.');
   expect(screen.getAllByText(w.contributionStatus.PENDING)).toHaveLength(2);
-  const after = service.sent.slice(service.sent.findIndex((r) => r.path.endsWith('/commands')));
-  expect(after.map((request) => `${request.method} ${request.path}`)).toEqual([
-    `POST /v1/exchanges/${EXCHANGE}/commands`,
-    `GET /v1/exchanges/${EXCHANGE}`,
-  ]);
+  // The history is read again with it, since the exchange is a newer version.
+  await waitFor(() => {
+    const after = service.sent.slice(service.sent.findIndex((r) => r.path.endsWith('/commands')));
+    expect(after.map((request) => `${request.method} ${request.path}`)).toEqual([
+      `POST /v1/exchanges/${EXCHANGE}/commands`,
+      `GET /v1/exchanges/${EXCHANGE}`,
+      `GET /v1/exchanges/${EXCHANGE}/history`,
+    ]);
+  });
 });
 
 test('a draft opens in the composer, with the platform’s own date control', async () => {

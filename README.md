@@ -61,7 +61,7 @@ On a physical device the mobile app cannot reach the development machine as `loc
 
 ## Mobile app
 
-The app in `apps/mobile` takes an exchange from a draft to completion the way the web app does: sign in, profile, exchanges, composing and signing, invitations, and the exchange view. It does not yet show an exchange's history or record, or offer report and block; the calls for them are in `packages/shared` with the rest. Its screens are React Native components under `apps/mobile/src`; the routes are the files in `src/app`. What it knows about the API, the wording and the rules for a working copy comes from `packages/shared`, the same code the web app runs.
+The app in `apps/mobile` takes an exchange from a draft to completion the way the web app does: sign in, profile, exchanges, composing and signing, invitations, and the exchange view, with an exchange's history and record, and report and block. Its screens are React Native components under `apps/mobile/src`; the routes are the files in `src/app`. What it knows about the API, the wording and the rules for a working copy comes from `packages/shared`, the same code the web app runs.
 
 | Setting | What it is |
 |---|---|
@@ -71,11 +71,13 @@ The app in `apps/mobile` takes an exchange from a draft to completion the way th
 - **Session.** The app signs in for a token, keeps it in the device's secure storage through `expo-secure-store` and nowhere else, and sends it as a bearer token (`src/lib/session.ts`, `src/lib/token-store.ts`).
 - **Invitation links.** Until the web domain can open the app by itself, an invitation reaches the app in two ways: its own scheme, `exchange://{language}/i#{token}`, and pasting the link into the app ("Open an invitation" on the first screen). Either way the token is taken out of the link before the router sees it and is held in memory only (`src/lib/invitation.ts`, `src/app/+native-intent.ts`).
 - **Languages.** The device's language before sign-in and the account's after. Hermes, the engine the app runs on, has a narrower `Intl` than a browser: the shared formatting avoids what it lacks, and `src/lib/plural-rules.ts` supplies plural rules for every language from the Unicode data, so adding a language needs nothing in the app.
+- **History and the record.** The exchange screen ends with its history, and `/exchanges/{id}/record` lays the whole record out to be read from top to bottom, by eye or with a screen reader (`src/screens/History.tsx`, `src/screens/RecordScreen.tsx`). There is no printing: a party takes their copy away as the JSON document, through the system's share sheet. The share sheet takes a file, so the copy is written to the app's own cache first (`src/lib/record-sharer.ts`, with `expo-file-system` and `expo-sharing`). There is never more than one such copy, and it goes when the next is made, when the account signs out, and on iOS as soon as the sheet closes.
+- **Report and block.** On the exchange screen once someone has joined, on the invitation screen before signing in (report only), and as a list of the people blocked on the account screen (`src/screens/ExchangeSafety.tsx`, `InvitationReport.tsx`, `BlockedPeople.tsx`). What is sent, and what the person is then told, is decided in `packages/shared` and is the same as on the web.
 - **Tests.** `npm test -w @exchange/mobile` runs every test twice, as an iOS build and as an Android build would load the app, including one that runs the whole app against a stand-in for the service. Native modules are mocked there; nothing replaces running it on devices before a release.
 
 ### Running the screens in a browser
 
-The app's screens can be run in a browser with Expo's web target, to exercise them against a local API without a simulator. This is a test harness and nothing else: the web client people use is `apps/web`. Two files exist only for it and are bundled only for the web target, `src/lib/token-store.web.ts` (the session token in the tab's session storage, because secure storage has no web implementation) and `src/components/DateField.web.tsx` (the browser's date input in place of the native picker).
+The app's screens can be run in a browser with Expo's web target, to exercise them against a local API without a simulator. This is a test harness and nothing else: the web client people use is `apps/web`. Three files exist only for it and are bundled only for the web target: `src/lib/token-store.web.ts` (the session token in the tab's session storage, because secure storage has no web implementation), `src/components/DateField.web.tsx` (the browser's date input in place of the native picker) and `src/lib/record-sharer.web.ts` (a record's copy as a browser download, because a browser has no share sheet for a file; it shows what the copy holds and nothing about the sheet).
 
 A browser will not call the API from another origin, and the service allows none, so a small proxy stands between them on the development machine:
 
@@ -141,16 +143,16 @@ Each party can read everything an exchange holds and take a copy away (`DESIGN.m
 - Each revision in the copy carries `signed`, exactly what was signed, and `content_hash`. The hash is the SHA-256 of `signed` as canonical JSON (RFC 8785), so anyone holding the copy can recompute it; `backend/src/domain/canonical.rs` defines the format and `backend/tests/record.rs` recomputes it independently.
 - One document holds at most 500 events, and at most 50 revisions or about a megabyte of their text. A longer record continues in further documents: `part.next` says where the next one starts and `part.complete` says when one document is all of it.
 
-On the web, an exchange's page ends with its history, and `/exchanges/{id}/record` lays the whole record out for reading and printing; the browser's "save as PDF" is the PDF, and a button downloads the JSON copy.
+On the web, an exchange's page ends with its history, and `/exchanges/{id}/record` lays the whole record out for reading and printing; the browser's "save as PDF" is the PDF, and a button downloads the JSON copy. The mobile app has the same two, with the system's share sheet in place of printing and downloading.
 
 ## Not built yet
 
 The scaffold, the database schema (`backend/migrations/`), the domain rules (`backend/src/domain/`), sign-in (`backend/src/auth.rs`), the exchange API (`backend/src/exchanges/`, `backend/src/http/`), the web app's screens (`apps/web/src/`) and the mobile app's (`apps/mobile/src/`) exist: two people can take an exchange from a draft to completion in a browser or in the app. The mobile app has not yet been run on a device or a simulator. Still to build, in rough order:
 
-1. In the mobile app: an exchange's history and its record, and reporting and blocking, which the web app has. On the web: Wallet buttons.
+1. On the web: Wallet buttons.
 2. A real email and SMS provider, for one-time codes and for notifications. Notifications are already queued and delivered (`backend/src/notifications/`), but only to the log.
 3. Universal and app links, push, Wallet passes.
-4. Somewhere for staff to read reports and act on them. Report and block exist in the API and on the web (`backend/src/safety.rs`, `DESIGN.md` §9), and a report is stored with who made it, about which exchange and which party, and why; but there is no staff sign-in yet, so nothing reads them.
+4. Somewhere for staff to read reports and act on them. Report and block exist in the API, on the web and in the mobile app (`backend/src/safety.rs`, `DESIGN.md` §9), and a report is stored with who made it, about which exchange and which party, and why; but there is no staff sign-in yet, so nothing reads them.
 
 `DESIGN.md` §13.4 lists what the exchange API deliberately leaves out for now.
 

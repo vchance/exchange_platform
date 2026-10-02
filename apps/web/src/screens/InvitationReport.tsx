@@ -1,11 +1,9 @@
-import type { ErrorCode } from '@exchange/api-client'
-import type { ReportReason } from '@exchange/shared'
-import { useEffect, useRef, useState } from 'react'
+import { useInvitationReport } from '@exchange/shared'
+import { useEffect, useRef } from 'react'
 
 import { useI18n } from '../app/context'
 import { Panel } from '../components/Panel'
 import { ReportForm } from '../components/ReportForm'
-import { failureCode } from '../lib/api'
 import { safetyApi } from '../lib/safety'
 
 /**
@@ -17,10 +15,7 @@ import { safetyApi } from '../lib/safety'
 export function InvitationReport({ token }: { token: string }) {
   const { wording } = useI18n()
   const w = wording.safety
-  const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<ErrorCode | null>(null)
-  const [sent, setSent] = useState(false)
+  const { open, busy, failure, sent, begin, cancel, send } = useInvitationReport(safetyApi, token)
   const opener = useRef<HTMLButtonElement>(null)
   const announced = useRef<HTMLParagraphElement>(null)
 
@@ -28,20 +23,6 @@ export function InvitationReport({ token }: { token: string }) {
   useEffect(() => {
     if (sent) announced.current?.focus()
   }, [sent])
-
-  async function send(reason: ReportReason, details: string | null) {
-    setBusy(true)
-    setFailure(null)
-    try {
-      await safetyApi.reportInvitation(token, reason, details)
-      setOpen(false)
-      setSent(true)
-    } catch (error) {
-      setFailure(failureCode(error))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <section aria-label={w.reportProposal}>
@@ -56,11 +37,7 @@ export function InvitationReport({ token }: { token: string }) {
           className="link"
           aria-expanded={open}
           ref={opener}
-          onClick={() => {
-            setFailure(null)
-            setSent(false)
-            setOpen(true)
-          }}
+          onClick={begin}
         >
           {w.reportProposal}
         </button>
@@ -71,9 +48,9 @@ export function InvitationReport({ token }: { token: string }) {
             intro={w.reportProposalIntro}
             busy={busy}
             failure={failure}
-            onSend={(reason, details) => void send(reason, details)}
+            onSend={send}
             onCancel={() => {
-              setOpen(false)
+              cancel()
               opener.current?.focus()
             }}
           />
