@@ -1,0 +1,147 @@
+import type { components, RevisionTerms } from '@exchange/api-client'
+
+import type { MessageValues } from './message'
+import type { NeutralEventType, PartyEventType, RecordNoteKind, Wording } from './wording/types'
+
+type Schemas = components['schemas']
+export type RecordDocument = Schemas['RecordDocument']
+export type RecordEvent = Schemas['RecordEvent']
+export type RecordRevision = Schemas['RecordRevision']
+export type HistoryPage = Schemas['HistoryPage']
+type Continuation = Schemas['Continuation']
+type Parties = Schemas['Parties']
+type Slot = Schemas['Slot']
+
+/*
+ * Reading an exchange's record: its history, and the copy a party keeps
+ * (DESIGN.md §14.1). The service decides what the record holds; this only
+ * puts it into words and puts its parts together.
+ */
+
+const NEUTRAL: ReadonlySet<string> = new Set<NeutralEventType>([
+  'REVISION_SUPERSEDED',
+  'REVISION_EXPIRED',
+  'AGREEMENT_IN_FORCE',
+  'INACTIVITY_PROMPTED',
+])
+
+/**
+ * The sentence for one event, as a wording message and the values to fill it
+ * with. `reader` is the party reading, who is addressed as "you" for what
+ * they did themselves; with `null` everyone is named, as on a page that may
+ * be handed to someone else.
+ *
+ * The contribution an event is about and any note written with it are not
+ * part of the sentence. They are the parties' own words, shown as such.
+ */
+export function eventMessage(
+  event: RecordEvent,
+  words: Wording['record']['events'],
+  reader: Slot | null,
+  parties: Parties,
+): { message: string; values: MessageValues } {
+  const values: MessageValues = {}
+  if (event.revision) values.number = event.revision.sequence
+
+  if (event.type === 'EXCHANGE_CLOSED') {
+    // An exchange that closes always says how. One that somehow did not is
+    // described by the least it could mean.
+    return { message: words.closed[event.outcome ?? 'UNRESOLVED'], values }
+  }
+  if (NEUTRAL.has(event.type)) {
+    return { message: words.neutral[event.type as NeutralEventType], values }
+  }
+  const type = event.type as PartyEventType
+  if (event.actor !== 'SYSTEM' && event.actor === reader) {
+    return { message: words.you[type], values }
+  }
+  if (event.actor !== 'SYSTEM') values.name = parties[event.actor]
+  return { message: words.named[type], values }
+}
+
+/** What the note written with an event is, so it can be labelled. */
+export function noteKind(event: RecordEvent): RecordNoteKind {
+  switch (event.type) {
+    case 'REVISION_SENT':
+      return 'message'
+    case 'CONTRIBUTION_DISPUTED':
+      return 'reason'
+    case 'CLOSE_REQUESTED':
+    case 'STATEMENT_ADDED':
+      return 'statement'
+    default:
+      return 'note'
+  }
+}
+
+/** What a revision in the record says, in the shape the terms are read in everywhere else. */
+export function termsOfRevision(revision: RecordRevision): RevisionTerms {
+  const signed = revision.signed
+  return {
+    party_a_name: signed.parties.A,
+    party_b_name: signed.parties.B,
+    terms: signed.terms,
+    contributions: signed.contributions.map((contribution) => ({
+      id: contribution.id,
+      from: contribution.from,
+      type: contribution.type,
+      description: contribution.description,
+      quantity: contribution.quantity,
+      due: contribution.due,
+      completion_criteria: contribution.completion_criteria,
+      required: contribution.required,
+      amount_minor: contribution.amount_minor,
+    })),
+  }
+}
+
+/**
+ * Puts the parts of a long record together into one document. The parts must
+ * be consecutive, starting with the first. How the exchange stands is taken
+ * from the last part, which was read last.
+ */
+export function joinRecord(parts: readonly RecordDocument[]): RecordDocument {
+  const first = parts[0]
+  const last = parts[parts.length - 1]
+  if (parts.length === 1) return first
+  const whole = first.part.from.revisions_after === 0 && first.part.from.events_after === 0
+  return {
+    ...last,
+    revisions: parts.flatMap((part) => part.revisions),
+    events: parts.flatMap((part) => part.events),
+    part: {
+      from: first.part.from,
+      next: last.part.next ?? null,
+      complete: whole && !last.part.next,
+    },
+  }
+}
+
+/** More parts than this is not a record anyone reads on one page; stop asking. */
+const MOST_PARTS = 200
+
+/**
+ * Reads a whole record, however many parts it comes in. `read` fetches one
+ * part: the first when given `null`, otherwise the one that starts where the
+ * part before said the next would.
+ *
+ * Something can happen in the exchange between two parts. The parts then
+ * still join up, since history is only ever added to, but what an early part
+ * said about a revision may be out of date; so the record is read again, a
+ * couple of times at most.
+ */
+export async function readWholeRecord(
+  read: (from: Continuation | null) => Promise<RecordDocument>,
+): Promise<RecordDocument> {
+  for (let attempt = 1; ; attempt += 1) {
+    const parts = [await read(null)]
+    let next = parts[0].part.next
+    while (next && parts.length < MOST_PARTS) {
+      const part = await read(next)
+      parts.push(part)
+      next = part.part.next
+    }
+    const settled = parts[0].exchange.last_event === parts[parts.length - 1].exchange.last_event
+    if (settled || attempt === 3) return joinRecord(parts)
+  }
+}

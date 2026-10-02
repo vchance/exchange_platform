@@ -4,6 +4,8 @@ export type { ClosedReason, Wording } from './wording/types'
 export { CONSENT_VERSION } from './consent'
 export { formatMessage } from './message'
 export type { MessageValues } from './message'
+export { eventMessage, joinRecord, noteKind, readWholeRecord, termsOfRevision } from './record'
+export type { HistoryPage, RecordDocument, RecordEvent, RecordRevision } from './record'
 export {
   decimalForInput,
   formatMoney,
