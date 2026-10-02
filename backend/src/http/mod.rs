@@ -15,6 +15,7 @@ pub mod auth;
 pub mod exchanges;
 pub mod extract;
 pub mod health;
+pub mod safety;
 pub mod v1;
 
 /// What the handlers need besides the database.
@@ -65,6 +66,12 @@ pub fn router(state: AppState) -> Router {
         exchanges::reissue_invitation,
         exchanges::preview_invitation,
         exchanges::claim_invitation,
+        safety::report_exchange,
+        safety::report_invitation,
+        safety::block_status,
+        safety::block,
+        safety::unblock,
+        safety::blocked_people,
     ),
     components(schemas(ErrorBody, ErrorCode))
 )]

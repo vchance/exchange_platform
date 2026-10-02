@@ -92,6 +92,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The people the caller has blocked, most recently blocked first. */
+        get: operations["blocked_people"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/exchanges": {
         parameters: {
             query?: never;
@@ -122,6 +139,30 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/block": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the caller has blocked the other party of this exchange. */
+        get: operations["block_status"];
+        /**
+         * Blocks the other party of this exchange. Neither of the two can then join
+         *     an exchange the other starts. Whatever is waiting to be signed between
+         *     them is withdrawn or declined; an agreement in force stays in force. The
+         *     other party is not told.
+         */
+        put: operations["block"];
+        post?: never;
+        /** Removes the caller's block on the other party of this exchange. */
+        delete: operations["unblock"];
         options?: never;
         head?: never;
         patch?: never;
@@ -181,6 +222,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/exchanges/{id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reports an exchange, and with it the other party, for review. The other
+         *     party is not told. Reporting the same exchange again while the first
+         *     report is open changes nothing and is answered the same way.
+         */
+        post: operations["report_exchange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/exchanges/{id}/revisions": {
         parameters: {
             query?: never;
@@ -233,6 +295,28 @@ export interface paths {
          *     travels in the body so it never appears in a URL the service logs.
          */
         post: operations["preview_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/invitations/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reports the proposal behind an invitation link, and with it the person
+         *     who sent it. No sign-in needed: the token is the proof of having received
+         *     it, as for the preview, and travels in the body for the same reason. A
+         *     link that shows no preview takes no report.
+         */
+        post: operations["report_invitation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -317,6 +401,31 @@ export interface components {
             code: string;
             /** @description An email address, or a phone number in international form. */
             identifier: string;
+        };
+        /**
+         * @description Whether the caller has blocked the other party of an exchange. Says
+         *     nothing about whether the other party has blocked the caller.
+         */
+        BlockStatus: {
+            blocked: boolean;
+            /**
+             * @description The other party's name as the exchange writes it. An exchange closed
+             *     before anything was agreed shows no terms to read it from.
+             */
+            name: string;
+        };
+        /**
+         * @description Someone the caller has blocked, named as an exchange the two share names
+         *     them. The exchange is also how to unblock them.
+         */
+        BlockedPerson: {
+            /** @description RFC 3339. */
+            blocked_at: string;
+            display_code: string;
+            /** Format: uuid */
+            exchange_id: string;
+            /** @description Their name as written in that exchange. */
+            name: string;
         };
         /** @description Who claimed the invitation, shown to the initiator so they can confirm. */
         Claimant: {
@@ -519,6 +628,24 @@ export interface components {
             service: string;
             version: string;
         };
+        /**
+         * @description A report on the proposal behind an invitation link, from someone who need
+         *     not be signed in. The token is their proof of having received it.
+         */
+        NewInvitationReport: {
+            /** @description As for a report on an exchange. */
+            details?: string | null;
+            reason: components["schemas"]["ReportReason"];
+            token: string;
+        };
+        NewReport: {
+            /**
+             * @description What the reporter wants a reviewer to know. Optional, except with the
+             *     reason `OTHER`. At most 2,000 characters.
+             */
+            details?: string | null;
+            reason: components["schemas"]["ReportReason"];
+        };
         /** @enum {string} */
         OutcomeDto: "NOT_AGREED" | "COMPLETED" | "ENDED_BY_AGREEMENT" | "UNRESOLVED";
         QuantityDto: {
@@ -526,6 +653,12 @@ export interface components {
             amount: string;
             unit?: string | null;
         };
+        /**
+         * @description Why an exchange is being reported. A fixed list, so that a reviewer can
+         *     tell what kind of harm a report is about before reading it.
+         * @enum {string}
+         */
+        ReportReason: "HARASSMENT" | "PROHIBITED_TRADE" | "SCAM" | "IMPERSONATION" | "UNDERAGE" | "UNWANTED" | "OTHER";
         RequestCode: {
             /** @description An email address, or a phone number in international form. */
             identifier: string;
@@ -786,6 +919,35 @@ export interface operations {
             };
         };
     };
+    blocked_people: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Each by an exchange shared with them */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedPerson"][];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list: {
         parameters: {
             query?: never;
@@ -898,6 +1060,143 @@ export interface operations {
             };
             /** @description No such exchange for this account */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    block_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's own block, if any */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockStatus"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    block: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Blocked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Nobody has joined the exchange yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    unblock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not blocked any more */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Nobody has joined the exchange yet */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1052,6 +1351,76 @@ export interface operations {
             };
         };
     };
+    report_exchange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewReport"];
+            };
+        };
+        responses: {
+            /** @description Received */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Nobody has joined the exchange yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Details too long, or missing for `OTHER` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many reports today */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     send_revision: {
         parameters: {
             query?: never;
@@ -1184,6 +1553,64 @@ export interface operations {
             };
             /** @description The link is not valid, or no longer */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    report_invitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewInvitationReport"];
+            };
+        };
+        responses: {
+            /** @description Received */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The link is not valid, or no longer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The link is the caller's own */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Details too long, or missing for `OTHER` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many reports today */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

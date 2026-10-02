@@ -3,7 +3,7 @@ use axum::{Json, Router};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use super::{AppState, account, auth, exchanges};
+use super::{AppState, account, auth, exchanges, safety};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -24,6 +24,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/invitations/preview", post(exchanges::preview_invitation))
         .route("/invitations/claim", post(exchanges::claim_invitation))
+        .merge(safety::routes())
 }
 
 #[derive(Serialize, ToSchema)]
