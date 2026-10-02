@@ -456,6 +456,88 @@
         }
       }
     },
+    "/v1/exchanges/{id}/history": {
+      "get": {
+        "tags": [
+          "record"
+        ],
+        "summary": "What has happened in an exchange, oldest first, with what the parties\nwrote along the way: the message sent with a revision, a note on a claim,\nthe reason for a dispute, a statement. Answers with the latest events, 50\nunless `limit` says otherwise and never more than 200; `earlier` in the\nanswer is the `before` that reads the page before.",
+        "operationId": "history",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "description": "Return events before this sequence number. Leave out for the latest.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "How many events to return: 50 unless said, 200 at most.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The query is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/exchanges/{id}/invitation": {
       "post": {
         "tags": [
@@ -507,6 +589,89 @@
           },
           "409": {
             "description": "The invitation has already been claimed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchanges/{id}/record": {
+      "get": {
+        "tags": [
+          "record"
+        ],
+        "summary": "The record of an exchange as one self-contained document, for a party to\nkeep or hand to someone else: how it stands, every revision sent with\nwhat it says and what became of it, every signature and what it rests\non, and everything that happened, in order.",
+        "description": "One document holds at most 500 events, and at most 50 revisions or about\na megabyte of their text, whichever comes first. A longer record\ncontinues in further documents: `part.next` holds the two values to ask\nfor the next one with, and `part.complete` says when one document is all\nof it.",
+        "operationId": "record",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisions_after",
+            "in": "query",
+            "description": "Continue after the revision with this sequence number. Taken from\n`part.next` of the part before.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "events_after",
+            "in": "query",
+            "description": "Continue after the event with this sequence number. Taken from\n`part.next` of the part before.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The record, or one part of it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordDocument"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The query is not valid",
             "content": {
               "application/json": {
                 "schema": {
@@ -917,6 +1082,15 @@
           "WAIVE"
         ]
       },
+      "Actor": {
+        "type": "string",
+        "description": "Who did something: one of the two parties, or the service acting on a\ntimer.",
+        "enum": [
+          "A",
+          "B",
+          "SYSTEM"
+        ]
+      },
       "AddIdentifier": {
         "type": "object",
         "required": [
@@ -1174,6 +1348,40 @@
           }
         }
       },
+      "ConsentShown": {
+        "type": "object",
+        "description": "Which consent wording the signer was shown before signing.",
+        "required": [
+          "language",
+          "version"
+        ],
+        "properties": {
+          "language": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "Continuation": {
+        "type": "object",
+        "description": "Where to continue reading a record too long for one document.",
+        "required": [
+          "revisions_after",
+          "events_after"
+        ],
+        "properties": {
+          "events_after": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "revisions_after": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "ContributionDto": {
         "type": "object",
         "required": [
@@ -1229,6 +1437,23 @@
           },
           "type": {
             "$ref": "#/components/schemas/ContributionType"
+          }
+        }
+      },
+      "ContributionRef": {
+        "type": "object",
+        "description": "A contribution, with its description as the parties wrote it in the\nrevision the event happened under.",
+        "required": [
+          "id",
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -1413,6 +1638,33 @@
           "INTERNAL"
         ]
       },
+      "EventType": {
+        "type": "string",
+        "description": "Everything that can happen to an exchange. Events of any other kind are\nnot part of what the parties are shown.",
+        "enum": [
+          "COUNTERPARTY_CLAIMED",
+          "COUNTERPARTY_CONFIRMED",
+          "REVISION_SENT",
+          "REVISION_SUPERSEDED",
+          "REVISION_ACCEPTED",
+          "REVISION_DECLINED",
+          "REVISION_WITHDRAWN",
+          "REVISION_EXPIRED",
+          "AGREEMENT_IN_FORCE",
+          "CONTRIBUTION_CLAIMED",
+          "CONTRIBUTION_CLAIM_RETRACTED",
+          "CONTRIBUTION_CONFIRMED",
+          "CONTRIBUTION_DISPUTED",
+          "CONTRIBUTION_WAIVED",
+          "END_PROPOSED",
+          "END_PROPOSAL_CANCELLED",
+          "CLOSE_REQUESTED",
+          "CLOSE_REQUEST_RETRACTED",
+          "STATEMENT_ADDED",
+          "INACTIVITY_PROMPTED",
+          "EXCHANGE_CLOSED"
+        ]
+      },
       "ExchangeSummary": {
         "type": "object",
         "required": [
@@ -1588,6 +1840,38 @@
           }
         }
       },
+      "HistoryPage": {
+        "type": "object",
+        "description": "A stretch of an exchange's history, oldest first.",
+        "required": [
+          "you",
+          "parties",
+          "events"
+        ],
+        "properties": {
+          "earlier": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Set when there is history before this page: pass it as `before` to\nread the page before."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordEvent"
+            }
+          },
+          "parties": {
+            "$ref": "#/components/schemas/Parties"
+          },
+          "you": {
+            "$ref": "#/components/schemas/Slot",
+            "description": "Which side the reader is."
+          }
+        }
+      },
       "InvitationIssued": {
         "type": "object",
         "required": [
@@ -1662,6 +1946,34 @@
           }
         }
       },
+      "Notices": {
+        "type": "object",
+        "description": "What a reader of the document needs to be told, in its language.",
+        "required": [
+          "about",
+          "signatures",
+          "statements",
+          "content_hash"
+        ],
+        "properties": {
+          "about": {
+            "type": "string",
+            "description": "What this document is."
+          },
+          "content_hash": {
+            "type": "string",
+            "description": "How to recompute a content hash."
+          },
+          "signatures": {
+            "type": "string",
+            "description": "What a signature here rests on."
+          },
+          "statements": {
+            "type": "string",
+            "description": "That what the parties recorded about delivery is theirs alone."
+          }
+        }
+      },
       "OutcomeDto": {
         "type": "string",
         "enum": [
@@ -1670,6 +1982,51 @@
           "ENDED_BY_AGREEMENT",
           "UNRESOLVED"
         ]
+      },
+      "Part": {
+        "type": "object",
+        "description": "Which stretch of the record a document holds.",
+        "required": [
+          "from",
+          "complete"
+        ],
+        "properties": {
+          "complete": {
+            "type": "boolean",
+            "description": "This one document holds the whole record."
+          },
+          "from": {
+            "$ref": "#/components/schemas/Continuation",
+            "description": "Where this document starts. Zero and zero for the first."
+          },
+          "next": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Continuation",
+                "description": "Where the next one starts, when the record goes on."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Parties": {
+        "type": "object",
+        "description": "Each party's name as the agreement writes it: the agreement in force, or\nthe first proposal until there is one.",
+        "required": [
+          "A",
+          "B"
+        ],
+        "properties": {
+          "A": {
+            "type": "string"
+          },
+          "B": {
+            "type": "string"
+          }
+        }
       },
       "QuantityDto": {
         "type": "object",
@@ -1689,6 +2046,417 @@
           }
         }
       },
+      "RecordContribution": {
+        "type": "object",
+        "description": "Where a contribution of the agreement stands.",
+        "required": [
+          "id",
+          "from",
+          "description",
+          "required",
+          "status"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "from": {
+            "$ref": "#/components/schemas/Slot",
+            "description": "The party who owes it."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it came to stand this way. RFC 3339, UTC."
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        }
+      },
+      "RecordDocument": {
+        "type": "object",
+        "description": "The record of one exchange, as one self-contained document: a party's\ncopy to keep or to hand to someone else.",
+        "required": [
+          "format",
+          "format_version",
+          "generated_at",
+          "language",
+          "notices",
+          "prepared_for",
+          "exchange",
+          "parties",
+          "contributions",
+          "revisions",
+          "events",
+          "part"
+        ],
+        "properties": {
+          "contributions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordContribution"
+            },
+            "description": "Where each contribution of the agreement stands. These are the\nparties' own statements about delivery; the service did not check\nthem."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordEvent"
+            },
+            "description": "Everything that happened, oldest first."
+          },
+          "exchange": {
+            "$ref": "#/components/schemas/RecordExchange"
+          },
+          "format": {
+            "type": "string",
+            "description": "Always `exchange-record`."
+          },
+          "format_version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "language": {
+            "type": "string",
+            "description": "The language `notices` and the descriptions are written in. What the\nparties wrote is never translated."
+          },
+          "notices": {
+            "$ref": "#/components/schemas/Notices"
+          },
+          "part": {
+            "$ref": "#/components/schemas/Part"
+          },
+          "parties": {
+            "$ref": "#/components/schemas/Parties"
+          },
+          "prepared_for": {
+            "$ref": "#/components/schemas/Slot",
+            "description": "Which party this copy was made for. Both parties' copies hold the\nsame record."
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordRevision"
+            },
+            "description": "Every revision sent, oldest first."
+          }
+        }
+      },
+      "RecordEvent": {
+        "type": "object",
+        "description": "One entry in the history. The history is append-only: nothing in it is\never edited or removed, and a correction is a later entry.",
+        "required": [
+          "sequence",
+          "type",
+          "actor",
+          "at"
+        ],
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "contribution": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ContributionRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "invitation_named_them": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "When the invited party joined: whether the invitation named them, so\nthat no confirmation by the initiator was needed."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the actor wrote with it, exactly as written: the message sent\nwith a revision, a note on a claim, the reason for a dispute, or a\nstatement."
+          },
+          "outcome": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OutcomeDto",
+                "description": "When the exchange closed: how."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RevisionRef",
+                "description": "The revision the event is about; for an event about a contribution,\nthe agreement that was in force."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Position in the exchange's history, counting from 1."
+          },
+          "status": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Status",
+                "description": "Where the contribution stood as a result."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "statuses": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ContributionStatus"
+            },
+            "description": "When a revision came into force: where each of its contributions\nstood as a result. A contribution of the agreement before that is not\nlisted was removed by the amendment."
+          },
+          "type": {
+            "$ref": "#/components/schemas/EventType"
+          },
+          "waived": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "When the exchange ended by agreement: what was released, undelivered."
+          }
+        }
+      },
+      "RecordExchange": {
+        "type": "object",
+        "description": "How the exchange stands.",
+        "required": [
+          "id",
+          "display_code",
+          "timezone",
+          "currency",
+          "created_at",
+          "state",
+          "counterparty",
+          "last_event"
+        ],
+        "properties": {
+          "close_requested_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "close_requested_by": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Slot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "closed_outcome": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OutcomeDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closed_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "counterparty": {
+            "$ref": "#/components/schemas/CounterpartyDto"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "currency": {
+            "type": "string"
+          },
+          "display_code": {
+            "type": "string",
+            "description": "For telling exchanges apart. Not a credential."
+          },
+          "end_proposed_by": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Slot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "in_force_revision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RevisionRef",
+                "description": "The agreement: in force now, or in force when the exchange closed."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_event": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The sequence number of the latest event when this was written."
+          },
+          "open_revision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RevisionRef",
+                "description": "The revision waiting to be signed."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/StateDto"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "The timezone due dates are read in."
+          }
+        }
+      },
+      "RecordRevision": {
+        "type": "object",
+        "description": "A revision that was sent: what it says, who sent and signed it, and what\nbecame of it.",
+        "required": [
+          "id",
+          "sequence",
+          "author",
+          "sent_at",
+          "expires_at",
+          "standing",
+          "content_hash",
+          "signed",
+          "signatures"
+        ],
+        "properties": {
+          "answers": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RevisionRef",
+                "description": "The revision this one answered: the offer it replaced, or the\nagreement it proposed to amend."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/Slot"
+          },
+          "content_hash": {
+            "type": "string",
+            "description": "SHA-256 of `signed` as canonical JSON (RFC 8785), in hex."
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "When it would lapse if not signed by both. RFC 3339, UTC."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The message sent with it. Not part of what is signed."
+          },
+          "sent_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 for the first proposal, counting up."
+          },
+          "signatures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Signature"
+            },
+            "description": "The author's, made by sending it, then the other party's if they\naccepted."
+          },
+          "signed": {
+            "$ref": "#/components/schemas/SignedDocument",
+            "description": "What the signatures cover, word for word."
+          },
+          "standing": {
+            "$ref": "#/components/schemas/RevisionStanding"
+          }
+        }
+      },
       "RequestCode": {
         "type": "object",
         "required": [
@@ -1698,6 +2466,25 @@
           "identifier": {
             "type": "string",
             "description": "An email address, or a phone number in international form."
+          }
+        }
+      },
+      "RevisionRef": {
+        "type": "object",
+        "description": "A revision, named both ways: by ID, and by the number people see.",
+        "required": [
+          "id",
+          "sequence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 for the first proposal, counting up."
           }
         }
       },
@@ -1718,6 +2505,54 @@
             "description": "The link token for the invited party, returned once, when the first\nrevision is sent. Only its hash is kept."
           }
         }
+      },
+      "RevisionStanding": {
+        "type": "object",
+        "required": [
+          "status",
+          "since"
+        ],
+        "properties": {
+          "in_force_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it came into force, if it ever did."
+          },
+          "replaced_by": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RevisionRef",
+                "description": "The revision that took its place, where one did."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "since": {
+            "type": "string",
+            "description": "When it came to stand this way. RFC 3339, UTC."
+          },
+          "status": {
+            "$ref": "#/components/schemas/RevisionStatus"
+          }
+        }
+      },
+      "RevisionStatus": {
+        "type": "string",
+        "description": "What became of a revision.",
+        "enum": [
+          "OPEN",
+          "IN_FORCE",
+          "REPLACED",
+          "SUPERSEDED",
+          "VOIDED",
+          "DECLINED",
+          "WITHDRAWN",
+          "EXPIRED"
+        ]
       },
       "RevisionTerms": {
         "type": "object",
@@ -1882,6 +2717,172 @@
           }
         }
       },
+      "SettlementDto": {
+        "type": "string",
+        "enum": [
+          "OFF_PLATFORM",
+          "PROCESSOR"
+        ]
+      },
+      "Signature": {
+        "type": "object",
+        "description": "One party's signature on one exact revision.",
+        "required": [
+          "party",
+          "name",
+          "signed_at",
+          "content_hash",
+          "verification",
+          "consent"
+        ],
+        "properties": {
+          "consent": {
+            "$ref": "#/components/schemas/ConsentShown"
+          },
+          "content_hash": {
+            "type": "string",
+            "description": "The hash that was signed, in hex. It is the revision's own."
+          },
+          "name": {
+            "type": "string",
+            "description": "The signer's name as that revision writes it."
+          },
+          "party": {
+            "$ref": "#/components/schemas/Slot"
+          },
+          "signed_at": {
+            "type": "string",
+            "description": "RFC 3339, UTC."
+          },
+          "verification": {
+            "$ref": "#/components/schemas/Verification"
+          }
+        }
+      },
+      "SignedContribution": {
+        "type": "object",
+        "description": "A contribution as it is signed.",
+        "required": [
+          "id",
+          "from",
+          "type",
+          "description",
+          "due",
+          "required"
+        ],
+        "properties": {
+          "amount_minor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Whole minor units of the exchange's currency. Money only."
+          },
+          "completion_criteria": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "due": {
+            "$ref": "#/components/schemas/DueDto"
+          },
+          "from": {
+            "$ref": "#/components/schemas/Slot",
+            "description": "The party who owes it; the other receives it."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The same contribution keeps its ID from one revision to the next."
+          },
+          "quantity": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/QuantityDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "settlement": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SettlementDto",
+                "description": "Money only."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "$ref": "#/components/schemas/ContributionType"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SignedDocument": {
+        "type": "object",
+        "description": "Exactly what a signature covers. A revision's content hash is the SHA-256\nof this object written as canonical JSON (RFC 8785).",
+        "required": [
+          "v",
+          "exchange",
+          "currency",
+          "timezone",
+          "parties",
+          "terms",
+          "contributions",
+          "attachments"
+        ],
+        "properties": {
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "SHA-256 of each attached file, in hex."
+          },
+          "contributions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SignedContribution"
+            }
+          },
+          "currency": {
+            "type": "string"
+          },
+          "exchange": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parties": {
+            "$ref": "#/components/schemas/Parties"
+          },
+          "terms": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "The timezone due dates are read in."
+          },
+          "v": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The version of this layout.",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
       "Slot": {
         "type": "string",
         "description": "One side of the exchange. `A` is the initiator, `B` the invited counterparty.",
@@ -1936,6 +2937,35 @@
             "description": "A language tag. A regional tag falls back to its base language; an\nunsupported language is refused."
           }
         }
+      },
+      "Verification": {
+        "type": "object",
+        "description": "The evidence behind a signature: how the signer had shown the service who\nthey are. It is all the evidence there is.",
+        "required": [
+          "method",
+          "verified_at",
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "The same, in words, in the document's language."
+          },
+          "method": {
+            "$ref": "#/components/schemas/VerificationMethod"
+          },
+          "verified_at": {
+            "type": "string",
+            "description": "When the signer entered that code, which is when they signed in and\ncan be earlier than the signature. RFC 3339, UTC."
+          }
+        }
+      },
+      "VerificationMethod": {
+        "type": "string",
+        "enum": [
+          "EMAIL_OTP",
+          "PHONE_OTP"
+        ]
       }
     }
   }

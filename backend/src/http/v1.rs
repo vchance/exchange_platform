@@ -3,7 +3,7 @@ use axum::{Json, Router};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use super::{AppState, account, auth, exchanges};
+use super::{AppState, account, auth, exchanges, record};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -18,6 +18,8 @@ pub fn router() -> Router<AppState> {
         .route("/exchanges/{id}/draft", put(exchanges::save_draft))
         .route("/exchanges/{id}/revisions", post(exchanges::send_revision))
         .route("/exchanges/{id}/commands", post(exchanges::run_command))
+        .route("/exchanges/{id}/history", get(record::history))
+        .route("/exchanges/{id}/record", get(record::record))
         .route(
             "/exchanges/{id}/invitation",
             post(exchanges::reissue_invitation),
