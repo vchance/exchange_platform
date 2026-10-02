@@ -13,6 +13,10 @@ const shared = {
 };
 
 module.exports = {
+  // The first test of a suite that runs the whole app also loads and compiles
+  // the whole app. With nothing cached, on a small machine, that alone can
+  // take longer than the five seconds a test is given by default.
+  testTimeout: 30_000,
   projects: [
     { preset: 'jest-expo/ios', ...shared },
     { preset: 'jest-expo/android', ...shared },
