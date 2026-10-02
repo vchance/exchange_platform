@@ -3,5 +3,6 @@
 
 pub mod dto;
 pub mod record;
+pub mod reminders;
 pub mod repo;
 pub mod service;
