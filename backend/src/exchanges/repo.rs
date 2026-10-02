@@ -482,14 +482,19 @@ pub async fn insert_revision(
     Ok(())
 }
 
-fn event_row(event: &Event) -> (&'static str, Option<Uuid>, Option<Uuid>, Value) {
+/// The stored form of an event. `claimant` is the account holding the
+/// invited party's slot, recorded on the event that put them there.
+fn event_row(
+    event: &Event,
+    claimant: Option<Uuid>,
+) -> (&'static str, Option<Uuid>, Option<Uuid>, Value) {
     let none = json!({});
     match event {
         Event::CounterpartyClaimed { confirmed } => (
             "COUNTERPARTY_CLAIMED",
             None,
             None,
-            json!({ "confirmed": confirmed }),
+            json!({ "confirmed": confirmed, "account": claimant }),
         ),
         Event::CounterpartyConfirmed => ("COUNTERPARTY_CONFIRMED", None, None, none),
         Event::RevisionSent { revision, .. } => ("REVISION_SENT", Some(revision.0), None, none),
@@ -585,7 +590,7 @@ pub async fn persist(
 
     for (index, event) in decision.events.iter().enumerate() {
         sequence += 1;
-        let (kind, revision, contribution, data) = event_row(event);
+        let (kind, revision, contribution, data) = event_row(event, before.accounts[1]);
         sqlx::query(
             "INSERT INTO exchange_event
                 (exchange_id, sequence, type, actor_kind, actor_slot, contribution_id, revision_id,

@@ -16,10 +16,10 @@ use crate::auth;
 use crate::domain::Rules;
 use crate::domain::canonical::content_hash;
 use crate::domain::contribution::{Action, Status};
-use crate::domain::exchange::{self, Actor, Command, Counterparty, Decision, State, decide};
+use crate::domain::exchange::{self, Actor, Command, Counterparty, Decision, Event, State, decide};
 use crate::domain::identity::Identifier;
 use crate::domain::invitation;
-use crate::domain::revision::{ContributionId, RevisionId, Slot};
+use crate::domain::revision::{ContributionId, Revision, RevisionId, Slot};
 use crate::domain::risk::{Tier, required_tier};
 use crate::error::{ApiError, ErrorCode};
 use crate::http::Settings;
@@ -121,6 +121,50 @@ async fn require_signer(
     }
     // The record must name a language the consent wording exists in.
     languages::resolve(&consent.language).ok_or_else(|| ErrorCode::InvalidRequest.into())
+}
+
+/// Refuses a party changing one exchange faster than a person would (§9).
+/// Without it one party could flood the permanent history, or change the
+/// exchange so often that the other can never act on what they last saw.
+/// Called with the exchange locked.
+async fn within_change_rate(
+    conn: &mut PgConnection,
+    exchange: Uuid,
+    slot: Slot,
+    rules: &Rules,
+) -> Result<(), ApiError> {
+    let recent: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM exchange_event
+         WHERE exchange_id = $1 AND actor_slot = $2
+           AND occurred_at > now() - interval '1 minute'",
+    )
+    .bind(exchange)
+    .bind(slot.as_str())
+    .fetch_one(&mut *conn)
+    .await?;
+    if recent >= rules.changes_per_minute {
+        return Err(ErrorCode::TooManyRequests.into());
+    }
+    Ok(())
+}
+
+/// Sets the participant rows to the names a revision gives the parties.
+async fn name_participants(
+    conn: &mut PgConnection,
+    exchange: Uuid,
+    revision: &Revision,
+) -> Result<(), sqlx::Error> {
+    for (slot, name) in [("A", &revision.party_a), ("B", &revision.party_b)] {
+        sqlx::query(
+            "UPDATE participant SET display_name = $3 WHERE exchange_id = $1 AND slot = $2",
+        )
+        .bind(exchange)
+        .bind(slot)
+        .bind(name)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
 }
 
 struct Signature<'a> {
@@ -232,6 +276,13 @@ pub async fn create(
 ) -> Result<ExchangeView, ApiError> {
     let mut tx = db.begin().await?;
 
+    // One creation at a time per account, so that counting and inserting
+    // cannot be raced past the limit.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))")
+        .bind(session.account_id)
+        .execute(&mut *tx)
+        .await?;
+
     let recent: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM exchange
          WHERE created_by = $1 AND created_at > now() - interval '1 day'",
@@ -339,17 +390,26 @@ pub async fn list(db: &PgPool, session: &Session) -> Result<Vec<ExchangeSummary>
 }
 
 pub async fn get(db: &PgPool, session: &Session, id: Uuid) -> Result<ExchangeView, ApiError> {
-    let mut conn = db.acquire().await?;
-    view(&mut conn, id, session.account_id).await
+    // One snapshot for the several queries a view takes, so it never shows
+    // parts of two different versions.
+    let mut tx = db.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    view(&mut tx, id, session.account_id).await
 }
 
 /// Saves the caller's working copy. Private to them and never binding.
 pub async fn save_draft(
     db: &PgPool,
+    rules: &Rules,
     session: &Session,
     id: Uuid,
     body: Value,
 ) -> Result<(), ApiError> {
+    if body.to_string().len() > rules.limits.draft_bytes {
+        return Err(ErrorCode::InvalidRequest.into());
+    }
     let mut tx = db.begin().await?;
     let (aggregate, _) = open_for(&mut tx, id, session.account_id, false).await?;
     if matches!(aggregate.exchange.state, State::Closed(_)) {
@@ -411,9 +471,11 @@ pub async fn send_revision(
     user_agent: Option<&str>,
     body: SendRevision,
 ) -> Result<RevisionSent, ApiError> {
-    let at = now();
     let mut tx = db.begin().await?;
     let (aggregate, slot) = open_for(&mut tx, id, session.account_id, true).await?;
+    // Read once the lock is held, so a request that waited for another is
+    // judged, and its events stamped, in the order they were applied.
+    let at = now();
 
     if already_applied(&mut tx, session.account_id, &idempotency).await? {
         // The token was shown once, the first time; it cannot be shown again.
@@ -426,6 +488,7 @@ pub async fn send_revision(
     if body.expected_version != aggregate.version {
         return Err(ErrorCode::VersionConflict.into());
     }
+    within_change_rate(&mut tx, id, slot, &settings.rules).await?;
     let consent_language = require_signer(&mut tx, session, &body.consent, settings).await?;
 
     let revision = body.terms.into_domain(body.note)?;
@@ -446,7 +509,12 @@ pub async fn send_revision(
         .as_ref()
         .expect("sending leaves the revision open")
         .expires_at;
-    let hash = content_hash(aggregate.id, &aggregate.currency, &revision);
+    let hash = content_hash(
+        aggregate.id,
+        &aggregate.currency,
+        &aggregate.timezone,
+        &revision,
+    );
 
     repo::insert_revision(
         &mut tx,
@@ -486,25 +554,11 @@ pub async fn send_revision(
     )
     .await?;
 
-    // The participant rows follow the names in the latest revision.
-    for (party, name) in [("A", &revision.party_a), ("B", &revision.party_b)] {
-        sqlx::query(
-            "UPDATE participant SET display_name = $3 WHERE exchange_id = $1 AND slot = $2",
-        )
-        .bind(id)
-        .bind(party)
-        .bind(name)
-        .execute(&mut *tx)
-        .await?;
-    }
-
-    // The tier only ever goes up.
-    let tier = required_tier(&revision, false, settings.rules.tier_one_threshold_minor);
-    if tier == Tier::One {
-        sqlx::query("UPDATE exchange SET risk_tier = greatest(risk_tier, 1) WHERE id = $1")
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
+    // Until something is agreed, the parties are known by the names in the
+    // first proposal. A later revision changes them only by coming into
+    // force: a counteroffer or amendment that is declined renames nobody.
+    if aggregate.exchange.state == State::Draft {
+        name_participants(&mut tx, id, &revision).await?;
     }
 
     sqlx::query("DELETE FROM exchange_draft WHERE exchange_id = $1 AND account_id = $2")
@@ -545,9 +599,9 @@ pub async fn run_command(
     user_agent: Option<&str>,
     body: RunCommand,
 ) -> Result<ExchangeView, ApiError> {
-    let at = now();
     let mut tx = db.begin().await?;
     let (aggregate, slot) = open_for(&mut tx, id, session.account_id, true).await?;
+    let at = now();
 
     if already_applied(&mut tx, session.account_id, &idempotency).await? {
         return view(&mut tx, id, session.account_id).await;
@@ -555,6 +609,7 @@ pub async fn run_command(
     if body.expected_version != aggregate.version {
         return Err(ErrorCode::VersionConflict.into());
     }
+    within_change_rate(&mut tx, id, slot, &settings.rules).await?;
 
     let mut signing = None;
     let (command, note) = match body.command {
@@ -614,6 +669,15 @@ pub async fn run_command(
         }
     };
 
+    // Notes go into the permanent history, so they are bounded like
+    // everything else there.
+    if note
+        .as_ref()
+        .is_some_and(|note| note.chars().count() > settings.rules.note_max_chars)
+    {
+        return Err(ErrorCode::InvalidRequest.into());
+    }
+
     let actor = Actor::Party(slot);
     let decision = decide(&aggregate.exchange, actor, command, at, &settings.rules)?;
 
@@ -641,6 +705,23 @@ pub async fn run_command(
 
     repo::persist(&mut tx, &aggregate, &decision, actor, note.as_deref(), at).await?;
 
+    // The parties' names and the risk tier follow the agreement in force.
+    let came_into_force = decision
+        .events
+        .iter()
+        .any(|event| matches!(event, Event::AgreementInForce { .. }));
+    if let (true, Some(in_force)) = (came_into_force, &decision.exchange.in_force) {
+        name_participants(&mut tx, id, &in_force.revision).await?;
+        // The tier only ever goes up.
+        let threshold = settings.rules.tier_one_threshold_minor;
+        if required_tier(&in_force.revision, false, threshold) == Tier::One {
+            sqlx::query("UPDATE exchange SET risk_tier = greatest(risk_tier, 1) WHERE id = $1")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+
     let view = view(&mut tx, id, session.account_id).await?;
     tx.commit().await?;
     Ok(view)
@@ -657,9 +738,9 @@ pub async fn reissue_invitation(
     id: Uuid,
     options: Option<InvitationOptions>,
 ) -> Result<InvitationIssued, ApiError> {
-    let at = now();
     let mut tx = db.begin().await?;
     let (aggregate, slot) = open_for(&mut tx, id, session.account_id, true).await?;
+    let at = now();
     if slot != Slot::A {
         return Err(ErrorCode::WrongActor.into());
     }
@@ -667,6 +748,17 @@ pub async fn reissue_invitation(
         || aggregate.exchange.counterparty != Counterparty::Unclaimed
     {
         return Err(ErrorCode::ActionNotAllowed.into());
+    }
+
+    let recent: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM invitation
+         WHERE exchange_id = $1 AND created_at > now() - interval '1 day'",
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if recent >= rules.invitations_per_day {
+        return Err(ErrorCode::TooManyRequests.into());
     }
 
     sqlx::query(
@@ -769,7 +861,6 @@ pub async fn claim_invitation(
     token: &str,
 ) -> Result<ExchangeView, ApiError> {
     let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
-    let at = now();
     let account = session.account_id;
     let mut tx = db.begin().await?;
 
@@ -785,6 +876,7 @@ pub async fn claim_invitation(
     let found = find_invitation(&mut tx, token, true)
         .await?
         .ok_or_else(unavailable)?;
+    let at = now();
 
     // Claiming twice with the same account is harmless.
     if found.claimed_by == Some(account) {
@@ -844,7 +936,12 @@ pub async fn claim_invitation(
         .bind(at)
         .execute(&mut *tx)
         .await?;
-    repo::persist(&mut tx, &aggregate, &decision, actor, None, at).await?;
+    // Stored with the slot now filled, so the claim event records who
+    // claimed it. That fact then lives in the permanent history and not only
+    // in a row that can change.
+    let mut claimed = aggregate.clone();
+    claimed.accounts[1] = Some(account);
+    repo::persist(&mut tx, &claimed, &decision, actor, None, at).await?;
 
     let view = view(&mut tx, exchange, account).await?;
     tx.commit().await?;
@@ -874,8 +971,15 @@ pub async fn run_timers(
             at - rules.close_response_window,
         ),
         (
-            "SELECT id FROM exchange
-             WHERE state = 'ACTIVE' AND inactivity_prompted_at IS NULL AND last_activity_at <= $1",
+            // An exchange with a due date still inside the window is not idle
+            // yet, however long ago anyone acted (see `Exchange::idle_since`).
+            "SELECT e.id FROM exchange e
+             WHERE e.state = 'ACTIVE' AND e.inactivity_prompted_at IS NULL
+               AND e.last_activity_at <= $1
+               AND NOT EXISTS (
+                   SELECT 1 FROM contribution_snapshot s
+                   WHERE s.revision_id = e.in_force_revision_id
+                     AND s.due_date >= ($1 AT TIME ZONE 'UTC')::date)",
             Command::PromptInactivity,
             at - rules.inactivity_prompt_after,
         ),
@@ -893,25 +997,45 @@ pub async fn run_timers(
             .fetch_all(db)
             .await?;
         for id in ids {
-            let mut tx = db.begin().await?;
-            let Some(aggregate) = repo::load(&mut tx, id, true).await? else {
-                continue;
-            };
-            // The query is only a shortlist; the rules have the last word, and
-            // the exchange may have moved on since it was listed.
-            let Ok(decision) = decide(
-                &aggregate.exchange,
-                Actor::System,
-                command.clone(),
-                at,
-                rules,
-            ) else {
-                continue;
-            };
-            repo::persist(&mut tx, &aggregate, &decision, Actor::System, None, at).await?;
-            tx.commit().await?;
-            changed += 1;
+            // Each exchange on a task of its own: one that fails, or even
+            // panics, is logged and passed over, and the timers still run
+            // for every other exchange.
+            let (db, rules, command) = (db.clone(), rules.clone(), command.clone());
+            let outcome =
+                tokio::spawn(async move { run_timer(&db, &rules, id, command, at).await }).await;
+            match outcome {
+                Ok(Ok(true)) => changed += 1,
+                Ok(Ok(false)) => {}
+                Ok(Err(error)) => {
+                    tracing::error!(%error, exchange = %id, "a timer failed for one exchange")
+                }
+                Err(error) => {
+                    tracing::error!(%error, exchange = %id, "a timer panicked for one exchange")
+                }
+            }
         }
     }
     Ok(changed)
+}
+
+/// Runs one timer command on one exchange. Returns whether it changed.
+async fn run_timer(
+    db: &PgPool,
+    rules: &Rules,
+    id: Uuid,
+    command: Command,
+    at: OffsetDateTime,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let Some(aggregate) = repo::load(&mut tx, id, true).await? else {
+        return Ok(false);
+    };
+    // The query was only a shortlist; the rules have the last word, and the
+    // exchange may have moved on since it was listed.
+    let Ok(decision) = decide(&aggregate.exchange, Actor::System, command, at, rules) else {
+        return Ok(false);
+    };
+    repo::persist(&mut tx, &aggregate, &decision, Actor::System, None, at).await?;
+    tx.commit().await?;
+    Ok(true)
 }

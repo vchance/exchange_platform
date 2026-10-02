@@ -26,7 +26,8 @@ pub struct Rules {
     pub inactivity_prompt_after: Duration,
     /// Time after the prompt at which an idle exchange closes (§5.3).
     pub inactivity_close_after: Duration,
-    /// Longest note on a revision, in characters (§6).
+    /// Longest note, in characters: on a revision, a claim, a dispute, a close
+    /// request or a statement (§6).
     pub note_max_chars: usize,
     /// Total money in an agreement above which stronger verification is
     /// required, in minor units (§8).
@@ -37,6 +38,44 @@ pub struct Rules {
     pub invitation_ttl: Duration,
     /// Exchanges one account may create per day (§9). A placeholder.
     pub exchanges_per_day: i64,
+    /// Changes one party may make to one exchange per minute (§9). Keeps a
+    /// party from flooding the permanent history, and from changing the
+    /// exchange so fast the other can never act on what they see.
+    /// A placeholder.
+    pub changes_per_minute: i64,
+    /// Invitation links one exchange may be issued per day (§9). A placeholder.
+    pub invitations_per_day: i64,
+    /// How far ahead a due date may be set. A placeholder.
+    pub due_date_horizon: Duration,
+    /// Size limits on what a revision may contain. Placeholders.
+    pub limits: Limits,
+}
+
+/// How much a revision may hold. Agreement history is permanent, so
+/// everything written into it is bounded.
+#[derive(Clone, Debug)]
+pub struct Limits {
+    pub contributions: usize,
+    pub party_name_chars: usize,
+    pub terms_chars: usize,
+    /// A contribution's description, and its completion criteria.
+    pub description_chars: usize,
+    pub unit_chars: usize,
+    /// The unsent working copy, as stored.
+    pub draft_bytes: usize,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            contributions: 50,
+            party_name_chars: 200,
+            terms_chars: 20_000,
+            description_chars: 2_000,
+            unit_chars: 50,
+            draft_bytes: 200_000,
+        }
+    }
 }
 
 impl Default for Rules {
@@ -51,6 +90,10 @@ impl Default for Rules {
             fresh_code_window: Duration::minutes(10),
             invitation_ttl: Duration::days(14),
             exchanges_per_day: 20,
+            changes_per_minute: 20,
+            invitations_per_day: 5,
+            due_date_horizon: Duration::days(3650),
+            limits: Limits::default(),
         }
     }
 }

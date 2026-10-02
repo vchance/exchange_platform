@@ -595,6 +595,39 @@ async fn any_well_formed_language_tag_is_stored_and_nothing_else() {
 }
 
 #[tokio::test]
+async fn oversized_text_cannot_be_stored_whatever_the_service_allows() {
+    let mut tx = app().await;
+    let a = agreement(&mut tx).await;
+
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "INSERT INTO revision (exchange_id, sequence, author_slot, terms, expires_at,
+                                   content_hash, party_a_name, party_b_name)
+             VALUES ($1, 2, 'A', repeat('x', 100001), now() + interval '14 days',
+                     sha256('r2'), 'Ana', 'Ben')"
+        )
+        .bind(a.exchange)
+    );
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "INSERT INTO exchange_event (exchange_id, sequence, type, actor_kind, note)
+             VALUES ($1, 1, 'STATEMENT_ADDED', 'SYSTEM', repeat('x', 10001))"
+        )
+        .bind(a.exchange)
+    );
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query("UPDATE account SET display_name = repeat('x', 1001) WHERE id = $1")
+            .bind(a.account_a)
+    );
+}
+
+#[tokio::test]
 async fn references_stay_inside_one_exchange() {
     let mut tx = app().await;
     let a = agreement(&mut tx).await;

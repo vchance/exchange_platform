@@ -33,7 +33,11 @@ impl Identifier {
         let email = input.to_lowercase();
         let (local, domain) = email.rsplit_once('@').ok_or(InvalidIdentifier)?;
 
-        let valid = email.len() <= 254
+        // ASCII only, for now. Outside it, lowercasing is not one agreed
+        // function: this code and the database can disagree about a letter,
+        // and then the same address is two addresses.
+        let valid = email.is_ascii()
+            && email.len() <= 254
             && !local.is_empty()
             && !local.contains('@')
             && domain.contains('.')
@@ -106,6 +110,9 @@ mod tests {
             "ana@@example.com",
             "ana ruiz@example.com",
             "ana@exam ple.com",
+            "aña@example.com",
+            "ana@exämple.com",
+            "\u{38d}na@example.com",
         ] {
             assert_eq!(Identifier::parse(bad), Err(InvalidIdentifier), "{bad}");
         }

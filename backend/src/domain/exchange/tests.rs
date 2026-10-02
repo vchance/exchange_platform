@@ -737,16 +737,43 @@ fn only_the_requester_can_retract_a_close_request() {
 }
 
 #[test]
-fn the_other_party_can_answer_a_close_request_by_agreeing_to_end() {
+fn a_close_request_is_not_an_offer_to_release_everything() {
     let mut scenario = Scenario::active();
-    scenario.ok(A, Command::RequestClose, day(1));
-    assert_eq!(
-        scenario.refused(A, Command::AcceptEnd, day(2)),
-        Refusal::NotAllowed
-    );
+    scenario.ok(A, act(1, Action::Claim), day(1));
+    scenario.ok(A, Command::RequestClose, day(2));
 
-    scenario.ok(B, Command::AcceptEnd, day(2));
+    // Ana wants the record kept as it stands: her work claimed, Ben's payment
+    // owed. Ben cannot turn that into a mutual release by "agreeing".
+    for party in [A, B] {
+        assert_eq!(
+            scenario.refused(party, Command::AcceptEnd, day(3)),
+            Refusal::NotAllowed
+        );
+    }
+    assert_eq!(scenario.status(2), Status::Pending);
+
+    // Ending by agreement still takes a proposal from one and consent from
+    // the other.
+    scenario.ok(B, Command::ProposeEnd, day(3));
+    scenario.ok(A, Command::AcceptEnd, day(4));
     assert_eq!(scenario.closed(), Some(Outcome::EndedByAgreement));
+}
+
+#[test]
+fn a_date_too_far_ahead_to_compute_never_comes_due() {
+    // Validation refuses such a date; this is the rule holding on its own if
+    // one ever reaches it, where it used to overflow.
+    for far in [time::macros::date!(9999 - 11 - 03), time::Date::MAX] {
+        let mut scenario = Scenario::active();
+        let in_force = scenario.exchange.in_force.as_mut().unwrap();
+        in_force.revision.contributions[0].due = Due::Date(far);
+
+        assert_eq!(
+            scenario.refused(Actor::System, Command::PromptInactivity, day(100_000)),
+            Refusal::NotAllowed,
+            "{far}"
+        );
+    }
 }
 
 #[test]

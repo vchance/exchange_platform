@@ -123,7 +123,10 @@ impl Exchange {
                 .contributions
                 .iter()
                 .filter_map(|c| match c.due {
-                    Due::Date(date) => date.next_day().map(|day| day.midnight().assume_utc()),
+                    // The last representable day has no next one; it stands for itself.
+                    Due::Date(date) => {
+                        Some(date.next_day().unwrap_or(date).midnight().assume_utc())
+                    }
                     _ => None,
                 })
         });
@@ -167,7 +170,7 @@ pub enum Command {
         action: contribution::Action,
     },
     ProposeEnd,
-    /// Agree to end, answering either an end proposal or a close request.
+    /// Agree to the other party's proposal to end.
     AcceptEnd,
     CancelEnd,
     RequestClose,
@@ -282,6 +285,13 @@ impl From<amendment::Refusal> for Refusal {
             amendment::Refusal::Invalid(invalid) => Refusal::InvalidRevision(vec![invalid]),
         }
     }
+}
+
+/// Whether `wait` has passed since `from`. A moment too far ahead to compute
+/// has not been reached, whatever the date: a timer must never be able to
+/// take the worker down.
+fn due(from: OffsetDateTime, wait: time::Duration, now: OffsetDateTime) -> bool {
+    from.checked_add(wait).is_some_and(|at| now >= at)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -411,7 +421,8 @@ impl Step<'_> {
             State::Closed(_) => return Err(Refusal::NotAllowed),
         }
 
-        revision::validate(&revision, self.rules).map_err(Refusal::InvalidRevision)?;
+        revision::validate(&revision, self.rules, self.now.date())
+            .map_err(Refusal::InvalidRevision)?;
         if let Some(in_force) = &self.exchange.in_force {
             amendment::effects(&in_force.revision, &self.exchange.statuses, &revision)?;
         }
@@ -630,10 +641,10 @@ impl Step<'_> {
 
     fn accept_end(&mut self, by: Slot) -> Result<(), Refusal> {
         let in_force = self.active()?;
-        let other = Some(by.other());
-        let invited = self.exchange.end_proposed_by == other
-            || self.exchange.close_request.map(|request| request.by) == other;
-        if !invited {
+        // Only an explicit proposal to end can be accepted. A request to
+        // close unresolved is not one: its author wants the record kept as it
+        // stands, not every outstanding obligation released.
+        if self.exchange.end_proposed_by != Some(by.other()) {
             return Err(Refusal::NotAllowed);
         }
 
@@ -700,7 +711,7 @@ impl Step<'_> {
 
     fn lapse_close_request(&mut self) -> Result<(), Refusal> {
         let request = self.exchange.close_request.ok_or(Refusal::NotAllowed)?;
-        if self.now < request.at + self.rules.close_response_window {
+        if !due(request.at, self.rules.close_response_window, self.now) {
             return Err(Refusal::NotAllowed);
         }
         self.close(Outcome::Unresolved(Unresolved::CloseRequest), Vec::new());
@@ -710,7 +721,11 @@ impl Step<'_> {
     fn prompt_inactivity(&mut self) -> Result<(), Refusal> {
         self.active()?;
         if self.exchange.inactivity_prompted_at.is_some()
-            || self.now < self.exchange.idle_since() + self.rules.inactivity_prompt_after
+            || !due(
+                self.exchange.idle_since(),
+                self.rules.inactivity_prompt_after,
+                self.now,
+            )
         {
             return Err(Refusal::NotAllowed);
         }
@@ -724,7 +739,7 @@ impl Step<'_> {
             .exchange
             .inactivity_prompted_at
             .ok_or(Refusal::NotAllowed)?;
-        if self.now < prompted_at + self.rules.inactivity_close_after {
+        if !due(prompted_at, self.rules.inactivity_close_after, self.now) {
             return Err(Refusal::NotAllowed);
         }
         self.close(Outcome::Unresolved(Unresolved::Inactive), Vec::new());
