@@ -368,8 +368,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * A link that downloads the caller's Apple pass for a few minutes, without
-         *     a session: opened in Safari, it adds the pass to Wallet. For the app and
+         * A link that downloads the caller's Apple pass once, for a few minutes,
+         *     without a session: opened in Safari, it adds the pass to Wallet. For the app and
          *     the web page, which hold the session themselves.
          */
         post: operations["apple_link"];

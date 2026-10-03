@@ -23,7 +23,7 @@
 use std::sync::Arc;
 
 use axum::body::Bytes;
-use axum::extract::{Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::header::{
     AUTHORIZATION, CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, IF_MODIFIED_SINCE,
     LAST_MODIFIED,
@@ -37,8 +37,8 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::AppState;
 use super::extract::Session;
+use super::{AppState, ClientAddress};
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::exchanges::dto::rfc3339;
 use crate::exchanges::service;
@@ -71,7 +71,10 @@ pub fn routes() -> Router<AppState> {
             &format!("{web_service}/v1/passes/{{pass_type}}/{{serial}}"),
             get(latest),
         )
-        .route(&format!("{web_service}/v1/log"), post(log))
+        .route(
+            &format!("{web_service}/v1/log"),
+            post(log).layer(DefaultBodyLimit::max(LOG_BODY_LIMIT)),
+        )
 }
 
 /// A signed Apple pass, a zip archive. Only describes the answer for the
@@ -128,28 +131,44 @@ async fn current(
     wallet: &Wallet,
     pass: &PassRow,
 ) -> Result<(PassModel, OffsetDateTime), ApiError> {
-    let (model, _) = store::face(&state.db, &state.settings.rules, wallet, pass).await?;
+    let model = store::face(
+        &state.db,
+        &state.settings.rules,
+        wallet,
+        pass,
+        OffsetDateTime::now_utc(),
+    )
+    .await?
+    .model;
     // Drawn just now: if it differs from the face last recorded, its time is
     // now, so that what a device is given and its Last-Modified agree.
     let changed_at = store::publish_face(&state.db, pass.id, &store::face_hash(&model)).await?;
     Ok((model, changed_at))
 }
 
-/// The signed pass for `model`.
+/// The signed pass for `model`, carrying `auth_token`.
 fn package(
-    wallet: &Wallet,
     issuer: &AppleIssuer,
     pass: &PassRow,
     model: &PassModel,
+    auth_token: &str,
 ) -> Result<Vec<u8>, ApiError> {
     issuer
-        .package(
-            model,
-            &pass.serial,
-            &wallet.apple_auth_token(pass.id),
-            OffsetDateTime::now_utc(),
-        )
+        .package(model, &pass.serial, auth_token, OffsetDateTime::now_utc())
         .map_err(internal)
+}
+
+/// A copy of the pass to hand out: the current face, with a new
+/// authentication token (`store::new_auth_token`).
+async fn hand_out(
+    state: &AppState,
+    wallet: &Wallet,
+    issuer: &AppleIssuer,
+    pass: &PassRow,
+) -> Result<Response, ApiError> {
+    let token = store::new_auth_token(&state.db, pass.id, wallet.rules.auth_tokens_kept).await?;
+    let (model, changed_at) = current(state, wallet, pass).await?;
+    Ok(pkpass(package(issuer, pass, &model, &token)?, changed_at))
 }
 
 fn pkpass(bytes: Vec<u8>, changed_at: OffsetDateTime) -> Response {
@@ -163,8 +182,9 @@ fn pkpass(bytes: Vec<u8>, changed_at: OffsetDateTime) -> Response {
     if let Ok(value) = HeaderValue::from_str(&http_date(changed_at)) {
         headers.insert(LAST_MODIFIED, value);
     }
-    // Only for the device that asked.
-    headers.insert(CACHE_CONTROL, HeaderValue::from_static("private, no-cache"));
+    // Only for the device that asked, and it carries an authentication
+    // token: nothing on the way keeps a copy.
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }
 
@@ -188,14 +208,13 @@ pub async fn apple_pass(
     session: Session,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let issuer = wallet.apple.as_ref().ok_or_else(unavailable)?;
+    let issuer = wallet.apple().ok_or_else(unavailable)?;
     let pass = issue(&state, &wallet, &session, &id, WalletPlatform::Apple).await?;
-    let (model, changed_at) = current(&state, &wallet, &pass).await?;
-    Ok(pkpass(package(&wallet, issuer, &pass, &model)?, changed_at))
+    hand_out(&state, &wallet, issuer, &pass).await
 }
 
-/// A link that downloads the caller's Apple pass for a few minutes, without
-/// a session: opened in Safari, it adds the pass to Wallet. For the app and
+/// A link that downloads the caller's Apple pass once, for a few minutes,
+/// without a session: opened in Safari, it adds the pass to Wallet. For the app and
 /// the web page, which hold the session themselves.
 #[utoipa::path(
     post,
@@ -215,12 +234,13 @@ pub async fn apple_link(
     session: Session,
     Path(id): Path<String>,
 ) -> Result<Json<WalletLink>, ApiError> {
-    wallet.apple.as_ref().ok_or_else(unavailable)?;
+    wallet.apple().ok_or_else(unavailable)?;
     let pass = issue(&state, &wallet, &session, &id, WalletPlatform::Apple).await?;
     let expires = OffsetDateTime::now_utc() + wallet.rules.download_link_ttl;
-    let token = wallet.apple_download_token(pass.id, expires);
+    let token = store::new_download_link(&state.db, pass.id, expires).await?;
     Ok(Json(WalletLink {
-        // In the query string, which the service never logs.
+        // In the query string, which the service never logs (and a proxy in
+        // front must not either: docs/operations.md).
         url: format!(
             "{}{}/pass?token={token}",
             wallet.web_origin,
@@ -251,15 +271,29 @@ pub async fn google_link(
     Path(id): Path<String>,
 ) -> Result<Json<WalletLink>, ApiError> {
     let issuer = wallet.google.as_ref().ok_or_else(unavailable)?;
+    let objects = wallet.google_objects.as_ref().ok_or_else(unavailable)?;
     let pass = issue(&state, &wallet, &session, &id, WalletPlatform::Google).await?;
-    let (model, _) = store::face(&state.db, &state.settings.rules, &wallet, &pass).await?;
+    let face = store::face(
+        &state.db,
+        &state.settings.rules,
+        &wallet,
+        &pass,
+        OffsetDateTime::now_utc(),
+    )
+    .await?;
+    // The object is made (or brought up to date) at Google now, and the link
+    // names it only: a link used late, or after the pass was voided, cannot
+    // create a face of its own.
+    objects
+        .upsert(&issuer.class(), &issuer.object(&face.model, &pass.serial))
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %format!("{error:#}"), "a Google Wallet object could not be created");
+            ApiError::from(ErrorCode::Internal)
+        })?;
+    store::record_delivered(&state.db, pass.id, &store::face_hash(&face.model)).await?;
     let url = issuer
-        .save_url(
-            &model,
-            &pass.serial,
-            &wallet.web_origin,
-            OffsetDateTime::now_utc(),
-        )
+        .save_url(&pass.serial, &wallet.web_origin, OffsetDateTime::now_utc())
         .map_err(internal)?;
     Ok(Json(WalletLink {
         url,
@@ -272,36 +306,37 @@ pub struct DownloadQuery {
     token: String,
 }
 
-/// The pass behind a download link from [`apple_link`].
+/// The pass behind a download link from [`apple_link`]. A link works once:
+/// a second use, like an expired or unknown link, is told it does not exist.
 async fn download(
     State(state): State<AppState>,
     Extension(wallet): Extension<Arc<Wallet>>,
     Query(query): Query<DownloadQuery>,
 ) -> Result<Response, ApiError> {
-    let issuer = wallet.apple.as_ref().ok_or_else(unavailable)?;
+    let issuer = wallet.apple().ok_or_else(unavailable)?;
     let not_found = || ApiError::from(ErrorCode::NotFound);
-    let id = wallet
-        .apple_download_pass(&query.token, OffsetDateTime::now_utc())
+    let id = store::redeem_download_link(&state.db, &query.token, OffsetDateTime::now_utc())
+        .await?
         .ok_or_else(not_found)?;
     let pass = store::pass_by_id(&state.db, id)
         .await?
-        .filter(|pass| pass.platform == WalletPlatform::Apple && !pass.voided)
+        .filter(|pass| pass.platform == WalletPlatform::Apple && !pass.voided && !pass.frozen)
         .ok_or_else(not_found)?;
-    let (model, changed_at) = current(&state, &wallet, &pass).await?;
-    Ok(pkpass(package(&wallet, issuer, &pass, &model)?, changed_at))
+    hand_out(&state, &wallet, issuer, &pass).await
 }
 
 // ---- Apple's pass web service ---------------------------------------------------
 
-/// The pass a device names, if the token it sent is that pass's. Anything
-/// else, a pass type that is not ours included, is 401, as Apple asks.
+/// The pass a device names, and the token it sent, if that is one of the
+/// pass's. Anything else, a pass type that is not ours included, is 401, as
+/// Apple asks.
 async fn authorized(
     state: &AppState,
     issuer: &AppleIssuer,
     headers: &HeaderMap,
     pass_type: &str,
     serial: &str,
-) -> Result<PassRow, StatusCode> {
+) -> Result<(PassRow, String), StatusCode> {
     let token = headers
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
@@ -311,10 +346,11 @@ async fn authorized(
     if pass_type != issuer.pass_type_id() {
         return Err(StatusCode::UNAUTHORIZED);
     }
-    store::apple_pass(&state.db, serial, token)
+    let pass = store::apple_pass(&state.db, serial, token)
         .await
         .map_err(|error| ApiError::from(error).status)?
-        .ok_or(StatusCode::UNAUTHORIZED)
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    Ok((pass, token.to_owned()))
 }
 
 fn device_id(device: &str) -> Result<(), StatusCode> {
@@ -332,7 +368,9 @@ struct Registration {
 }
 
 /// A device asks for a pass's updates. 201 when new, 200 when it already
-/// had, 401 without the pass's token.
+/// had, 401 without one of the pass's tokens, 429 past the new devices a
+/// pass takes in an hour. A pass on as many devices as it may be forgets the
+/// one heard from longest ago for the new one.
 async fn register(
     State(state): State<AppState>,
     Extension(wallet): Extension<Arc<Wallet>>,
@@ -340,11 +378,11 @@ async fn register(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<StatusCode, StatusCode> {
-    let issuer = wallet.apple.as_ref().ok_or(StatusCode::NOT_FOUND)?;
-    let pass = authorized(&state, issuer, &headers, &pass_type, &serial).await?;
+    let issuer = wallet.apple().ok_or(StatusCode::NOT_FOUND)?;
+    let (pass, _) = authorized(&state, issuer, &headers, &pass_type, &serial).await?;
     device_id(&device)?;
-    // A void pass takes no new devices.
-    if pass.voided {
+    // A void pass takes no new devices, nor does a frozen one.
+    if pass.voided || pass.frozen {
         return Err(StatusCode::UNAUTHORIZED);
     }
     let registration: Registration =
@@ -353,26 +391,32 @@ async fn register(
     if !(1..=256).contains(&token.len()) || !token.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(StatusCode::BAD_REQUEST);
     }
-    match store::register(&state.db, pass.id, &device, token)
-        .await
-        .map_err(|error| ApiError::from(error).status)?
+    match store::register(
+        &state.db,
+        pass.id,
+        &device,
+        token,
+        wallet.rules.registrations_per_hour,
+    )
+    .await
+    .map_err(|error| ApiError::from(error).status)?
     {
         Registered::New => Ok(StatusCode::CREATED),
         Registered::Already => Ok(StatusCode::OK),
-        Registered::TooMany => Err(StatusCode::FORBIDDEN),
+        Registered::TooOften => Err(StatusCode::TOO_MANY_REQUESTS),
     }
 }
 
 /// A device stops asking for a pass's updates, usually because the pass was
-/// removed from it.
+/// removed from it (a voided pass too: its registration goes then).
 async fn unregister(
     State(state): State<AppState>,
     Extension(wallet): Extension<Arc<Wallet>>,
     Path((device, pass_type, serial)): Path<(String, String, String)>,
     headers: HeaderMap,
 ) -> Result<StatusCode, StatusCode> {
-    let issuer = wallet.apple.as_ref().ok_or(StatusCode::NOT_FOUND)?;
-    let pass = authorized(&state, issuer, &headers, &pass_type, &serial).await?;
+    let issuer = wallet.apple().ok_or(StatusCode::NOT_FOUND)?;
+    let (pass, _) = authorized(&state, issuer, &headers, &pass_type, &serial).await?;
     store::unregister(&state.db, pass.id, &device)
         .await
         .map_err(|error| ApiError::from(error).status)?;
@@ -402,7 +446,7 @@ async fn changed(
     Path((device, pass_type)): Path<(String, String)>,
     Query(query): Query<ChangedQuery>,
 ) -> Result<Response, StatusCode> {
-    let issuer = wallet.apple.as_ref().ok_or(StatusCode::NOT_FOUND)?;
+    let issuer = wallet.apple().ok_or(StatusCode::NOT_FOUND)?;
     if pass_type != issuer.pass_type_id() {
         return Ok(StatusCode::NO_CONTENT.into_response());
     }
@@ -427,27 +471,35 @@ async fn changed(
     }
 }
 
-/// The latest version of a pass, or 304 when it has not changed since the
-/// device's copy.
+/// The latest version of a pass, carrying the token the device sent, or 304
+/// when it has not changed since the device's copy. A frozen pass (its
+/// account is suspended) is not updated: 304, or 401 to a device that names
+/// no copy of its own.
 async fn latest(
     State(state): State<AppState>,
     Extension(wallet): Extension<Arc<Wallet>>,
     Path((pass_type, serial)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
-    let issuer = wallet.apple.as_ref().ok_or(StatusCode::NOT_FOUND)?;
-    let pass = authorized(&state, issuer, &headers, &pass_type, &serial).await?;
-    let (model, changed_at) = current(&state, &wallet, &pass)
-        .await
-        .map_err(|error| error.status)?;
+    let issuer = wallet.apple().ok_or(StatusCode::NOT_FOUND)?;
+    let (pass, token) = authorized(&state, issuer, &headers, &pass_type, &serial).await?;
     let since = headers
         .get(IF_MODIFIED_SINCE)
         .and_then(|value| value.to_str().ok())
         .and_then(parse_http_date);
+    if pass.frozen && !pass.voided {
+        return Err(match since {
+            Some(_) => StatusCode::NOT_MODIFIED,
+            None => StatusCode::UNAUTHORIZED,
+        });
+    }
+    let (model, changed_at) = current(&state, &wallet, &pass)
+        .await
+        .map_err(|error| error.status)?;
     if since.is_some_and(|since| changed_at <= since) {
         return Ok(StatusCode::NOT_MODIFIED.into_response());
     }
-    let bytes = package(&wallet, issuer, &pass, &model).map_err(|error| error.status)?;
+    let bytes = package(issuer, &pass, &model, &token).map_err(|error| error.status)?;
     Ok(pkpass(bytes, changed_at))
 }
 
@@ -457,14 +509,28 @@ struct Logs {
     logs: Vec<String>,
 }
 
-/// What a device reports about errors with the web service. Written to the
-/// log, a few lines and a few hundred characters at most: anyone may send
-/// them.
-async fn log(body: Bytes) -> StatusCode {
+/// The most a device's log request may weigh, in bytes.
+const LOG_BODY_LIMIT: usize = 8 * 1024;
+/// The lines, and the characters of each, taken from one request.
+const LOG_LINES: usize = 5;
+const LOG_LINE_CHARS: usize = 300;
+
+/// What a device reports about errors with the web service. Anyone may send
+/// it, so it is written at debug level only, a few lines of a few hundred
+/// characters from a small body, and a few requests a minute per address
+/// (429 past that).
+async fn log(
+    Extension(wallet): Extension<Arc<Wallet>>,
+    ClientAddress(address): ClientAddress,
+    body: Bytes,
+) -> StatusCode {
+    if !wallet.device_log_allowed(address, std::time::Instant::now()) {
+        return StatusCode::TOO_MANY_REQUESTS;
+    }
     if let Ok(Logs { logs }) = serde_json::from_slice::<Logs>(&body) {
-        for line in logs.iter().take(5) {
-            let line: String = line.chars().take(300).collect();
-            tracing::warn!(line, "a Wallet device reported");
+        for line in logs.iter().take(LOG_LINES) {
+            let line: String = line.chars().take(LOG_LINE_CHARS).collect();
+            tracing::debug!(line, "a Wallet device reported");
         }
     }
     StatusCode::OK

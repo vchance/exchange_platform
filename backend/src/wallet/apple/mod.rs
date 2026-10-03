@@ -17,15 +17,11 @@
 use std::io::{Cursor, Write};
 
 use anyhow::Context;
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Value, json};
 use sha1::{Digest, Sha1};
 use time::OffsetDateTime;
-use uuid::Uuid;
 use zip::write::SimpleFileOptions;
 
-use super::Wallet;
 use super::pass::{Field, PassModel};
 
 pub mod push;
@@ -205,55 +201,6 @@ fn escape(text: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
-}
-
-// ---- Tokens -------------------------------------------------------------------
-
-impl Wallet {
-    /// The authentication token of the Apple pass `pass`: what its devices
-    /// send to the web service. Derived, so that handing the pass out again
-    /// gives the same token and the copies already on a person's devices keep
-    /// working; only its hash is stored. 256 bits, of which Apple asks for at
-    /// least 16 characters.
-    pub fn apple_auth_token(&self, pass: Uuid) -> String {
-        URL_SAFE_NO_PAD.encode(self.mac(b"apple pass authentication token", pass.as_bytes()))
-    }
-
-    /// A link that downloads the Apple pass `pass` without a session, until
-    /// `expires`: for opening the pass in Safari, which is what adds it to
-    /// Wallet, from an app or a page that holds the session itself.
-    pub fn apple_download_token(&self, pass: Uuid, expires: OffsetDateTime) -> String {
-        let mut token = Vec::with_capacity(16 + 8 + 16);
-        token.extend_from_slice(pass.as_bytes());
-        token.extend_from_slice(&expires.unix_timestamp().to_be_bytes());
-        let mac = self.mac(b"apple pass download", &token);
-        token.extend_from_slice(&mac[..16]);
-        URL_SAFE_NO_PAD.encode(token)
-    }
-
-    /// The pass a download token is for, if it is one this service made and
-    /// it has not expired at `now`.
-    pub fn apple_download_pass(&self, token: &str, now: OffsetDateTime) -> Option<Uuid> {
-        let bytes = URL_SAFE_NO_PAD.decode(token.trim()).ok()?;
-        if bytes.len() != 40 {
-            return None;
-        }
-        let (body, mac) = bytes.split_at(24);
-        let expected = self.mac(b"apple pass download", body);
-        // Compared in constant time: a difference anywhere takes as long.
-        if !constant_time_eq(&expected[..16], mac) {
-            return None;
-        }
-        let expires = i64::from_be_bytes(body[16..24].try_into().ok()?);
-        if now.unix_timestamp() >= expires {
-            return None;
-        }
-        Uuid::from_slice(&body[..16]).ok()
-    }
-}
-
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
 }
 
 #[cfg(test)]

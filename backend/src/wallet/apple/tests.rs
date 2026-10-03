@@ -30,12 +30,7 @@ fn lookup(pairs: Vec<(&'static str, String)>) -> impl Fn(&str) -> Option<String>
 
 pub(crate) fn wallet() -> Wallet {
     let config = WalletConfig::from_lookup(&lookup(testkit::settings())).unwrap();
-    Wallet::new(
-        &config,
-        "https://app.test/",
-        Some(b"test-secret-test-secret-test-secret"),
-    )
-    .unwrap()
+    Wallet::new(&config, "https://app.test/").unwrap()
 }
 
 fn model() -> PassModel {
@@ -148,9 +143,8 @@ fn verify(signature: &[u8], manifest: &[u8]) -> Result<Vec<Certificate>, String>
 #[test]
 fn a_pass_is_signed_and_every_file_matches_its_manifest() {
     let wallet = wallet();
-    let issuer = wallet.apple.as_ref().unwrap();
-    let pass = Uuid::new_v4();
-    let token = wallet.apple_auth_token(pass);
+    let issuer = wallet.apple().unwrap();
+    let token = crate::wallet::random_token();
     let bytes = issuer
         .package(
             &model(),
@@ -214,9 +208,8 @@ fn a_pass_is_signed_and_every_file_matches_its_manifest() {
 #[test]
 fn the_pass_names_its_type_team_web_service_and_token_and_never_alerts() {
     let wallet = wallet();
-    let issuer = wallet.apple.as_ref().unwrap();
-    let pass = Uuid::new_v4();
-    let token = wallet.apple_auth_token(pass);
+    let issuer = wallet.apple().unwrap();
+    let token = crate::wallet::random_token();
     let bytes = issuer
         .package(
             &model(),
@@ -260,32 +253,11 @@ fn the_pass_names_its_type_team_web_service_and_token_and_never_alerts() {
 }
 
 #[test]
-fn the_authentication_token_is_the_same_each_time_and_differs_per_pass() {
-    let wallet = wallet();
-    let (one, two) = (Uuid::new_v4(), Uuid::new_v4());
-    assert_eq!(wallet.apple_auth_token(one), wallet.apple_auth_token(one));
-    assert_ne!(wallet.apple_auth_token(one), wallet.apple_auth_token(two));
-}
-
-#[test]
-fn a_download_link_works_for_its_pass_until_it_expires_and_cannot_be_forged() {
-    let wallet = wallet();
-    let pass = Uuid::new_v4();
-    let now = datetime!(2026-10-03 12:00 UTC);
-    let token = wallet.apple_download_token(pass, now + time::Duration::minutes(10));
-    assert_eq!(wallet.apple_download_pass(&token, now), Some(pass));
-    assert_eq!(
-        wallet.apple_download_pass(&token, now + time::Duration::minutes(10)),
-        None
-    );
-    // Another pass's ID, or a later expiry, without the service's key.
-    let mut forged =
-        base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, &token).unwrap();
-    forged[0] ^= 1;
-    let forged = base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, forged);
-    assert_eq!(wallet.apple_download_pass(&forged, now), None);
-    assert_eq!(wallet.apple_download_pass("not a token", now), None);
-    assert_eq!(wallet.apple_download_pass("", now), None);
+fn tokens_are_random_and_long_enough_for_apple() {
+    let (one, two) = (crate::wallet::random_token(), crate::wallet::random_token());
+    assert_ne!(one, two);
+    // Apple asks for at least 16 characters; 256 bits in base64url are 43.
+    assert_eq!(one.len(), 43);
 }
 
 #[test]
@@ -366,4 +338,106 @@ fn settings_may_name_files_instead_of_holding_the_pem() {
     std::fs::remove_dir_all(&directory).unwrap();
     let config = config.unwrap();
     assert!(config.apple.is_some() && config.google.is_some());
+}
+
+fn with_settings(change: &[(&'static str, &str)]) -> anyhow::Result<WalletConfig> {
+    let mut settings = testkit::settings();
+    for (name, value) in change {
+        settings.retain(|(key, _)| key != name);
+        settings.push((name, (*value).to_owned()));
+    }
+    WalletConfig::from_lookup(&lookup(settings))
+}
+
+#[test]
+fn an_expired_pass_certificate_takes_apple_off_and_nothing_else() {
+    let config = with_settings(&[("APPLE_PASS_CERT", &CREDENTIALS.expired_pass_cert_pem)])
+        .expect("an expired certificate does not stop the start");
+    let wallet = Wallet::new(&config, "https://app.test").unwrap();
+    assert!(wallet.apple().is_none());
+    assert_eq!(wallet.platforms(), [WalletPlatform::Google]);
+    // Its expiry is still reported, as negative seconds.
+    let mut text = crate::metrics::Text::new();
+    wallet.render_metrics(&mut text);
+    let page = text.finish();
+    let seconds: f64 = page
+        .lines()
+        .find_map(|line| line.strip_prefix("yuppers_wallet_cert_expiry_seconds "))
+        .expect("the gauge")
+        .parse()
+        .unwrap();
+    assert!(seconds < 0.0, "{page}");
+}
+
+#[test]
+fn a_certificate_that_expires_while_running_takes_apple_off_then() {
+    let wallet = wallet();
+    let expires = wallet.apple_certificate_expires().unwrap();
+    assert!(
+        wallet
+            .apple_at(expires - time::Duration::seconds(1))
+            .is_some()
+    );
+    assert!(wallet.apple_at(expires).is_none());
+    assert!(wallet.apple().is_some());
+    let mut text = crate::metrics::Text::new();
+    wallet.render_metrics(&mut text);
+    let page = text.finish();
+    assert!(
+        page.contains("# TYPE yuppers_wallet_cert_expiry_seconds gauge"),
+        "{page}"
+    );
+    // Google only: no gauge.
+    let google = Wallet::new(
+        &WalletConfig::from_lookup(&lookup(
+            testkit::settings()
+                .into_iter()
+                .filter(|(name, _)| !name.starts_with("APPLE_"))
+                .collect(),
+        ))
+        .unwrap(),
+        "https://app.test",
+    )
+    .unwrap();
+    let mut text = crate::metrics::Text::new();
+    google.render_metrics(&mut text);
+    assert_eq!(text.finish(), "");
+}
+
+#[test]
+fn a_wwdr_certificate_that_did_not_issue_the_pass_certificate_or_expired_takes_apple_off() {
+    for wwdr in [
+        &CREDENTIALS.other_wwdr_pem,
+        &CREDENTIALS.expired_wwdr_pem,
+        &CREDENTIALS.renamed_wwdr_pem,
+    ] {
+        let config =
+            with_settings(&[("APPLE_WWDR_CERT", wwdr)]).expect("the process starts, without Apple");
+        assert!(config.apple.is_none());
+        assert!(config.google.is_some());
+    }
+    // The one that issued it, among others, is found.
+    let both = format!("{}{}", CREDENTIALS.other_wwdr_pem, CREDENTIALS.wwdr_pem);
+    assert!(
+        with_settings(&[("APPLE_WWDR_CERT", &both)])
+            .unwrap()
+            .apple
+            .is_some()
+    );
+}
+
+#[test]
+fn the_status_on_the_face_is_detailed_unless_set_neutral() {
+    use crate::wallet::StatusOnFace;
+    assert_eq!(
+        with_settings(&[]).unwrap().status_on_face,
+        StatusOnFace::Detailed
+    );
+    assert_eq!(
+        with_settings(&[("WALLET_STATUS_ON_FACE", "neutral")])
+            .unwrap()
+            .status_on_face,
+        StatusOnFace::Neutral
+    );
+    assert!(with_settings(&[("WALLET_STATUS_ON_FACE", "quiet")]).is_err());
 }

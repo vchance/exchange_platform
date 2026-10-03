@@ -4,7 +4,7 @@ use ring::signature::{RSA_PKCS1_2048_8192_SHA256, UnparsedPublicKey};
 use serde_json::Value;
 use time::macros::datetime;
 
-use super::objects::{patch_request, token_request};
+use super::objects::{describe_refusal, insert_request, patch_request, token_request};
 use crate::wallet::pass;
 use crate::wallet::testkit::{CLIENT_EMAIL, CREDENTIALS, ISSUER_ID};
 
@@ -26,13 +26,11 @@ pub(crate) fn verified(jwt: &str) -> (Value, Value) {
 }
 
 #[test]
-fn the_save_link_is_a_jwt_signed_by_the_service_account_carrying_the_class_and_object() {
+fn the_save_link_is_a_jwt_signed_by_the_service_account_naming_only_the_object() {
     let wallet = crate::wallet::apple::tests::wallet();
     let issuer = wallet.google.as_ref().unwrap();
-    let model = pass::void(wallet.wording.language("es"));
     let url = issuer
         .save_url(
-            &model,
             "0123abcd",
             "https://app.test",
             datetime!(2026-10-03 12:00 UTC),
@@ -47,11 +45,20 @@ fn the_save_link_is_a_jwt_signed_by_the_service_account_carrying_the_class_and_o
     assert_eq!(claims["aud"], "google");
     assert_eq!(claims["typ"], "savetowallet");
     assert_eq!(claims["origins"][0], "https://app.test");
-    let class = &claims["payload"]["genericClasses"][0];
-    assert_eq!(class["id"], format!("{ISSUER_ID}.yuppers_agreement"));
-    let object = &claims["payload"]["genericObjects"][0];
+    // Only the object's ID and class: no face, so no link can create one.
+    assert_eq!(
+        claims["payload"],
+        serde_json::json!({ "genericObjects": [{
+            "id": format!("{ISSUER_ID}.0123abcd"),
+            "classId": format!("{ISSUER_ID}.yuppers_agreement"),
+        }] })
+    );
+
+    // The object as created, here a void one.
+    let model = pass::void(wallet.wording.language("es"));
+    let object = issuer.object(&model, "0123abcd");
     assert_eq!(object["id"], format!("{ISSUER_ID}.0123abcd"));
-    assert_eq!(object["classId"], class["id"]);
+    assert_eq!(object["classId"], issuer.class()["id"]);
     assert_eq!(object["state"], "INACTIVE");
     assert_eq!(object["header"]["defaultValue"]["language"], "es");
     assert_eq!(
@@ -128,4 +135,53 @@ fn an_update_patches_the_one_object_by_its_id() {
     );
     assert_eq!(request.headers()["authorization"], "Bearer token");
     assert!(patch_request(super::objects::API_ORIGIN, "token", "../classes", &object).is_err());
+}
+
+#[test]
+fn creating_posts_the_class_or_object_by_kind() {
+    let object = serde_json::json!({ "id": format!("{ISSUER_ID}.0123abcd"), "state": "ACTIVE" });
+    let request = insert_request(
+        super::objects::API_ORIGIN,
+        "token",
+        "genericObject",
+        &object,
+    )
+    .unwrap();
+    assert_eq!(request.method(), hyper::Method::POST);
+    assert_eq!(
+        request.uri().to_string(),
+        "https://walletobjects.googleapis.com/walletobjects/v1/genericObject"
+    );
+    assert_eq!(request.headers()["authorization"], "Bearer token");
+    let class = serde_json::json!({ "id": format!("{ISSUER_ID}.yuppers_agreement") });
+    assert!(insert_request(super::objects::API_ORIGIN, "token", "genericClass", &class).is_ok());
+    assert!(insert_request(super::objects::API_ORIGIN, "token", "offerObject", &class).is_err());
+    let bad = serde_json::json!({ "id": "../x" });
+    assert!(insert_request(super::objects::API_ORIGIN, "token", "genericObject", &bad).is_err());
+}
+
+#[test]
+fn a_refusal_keeps_the_status_and_googles_codes_never_its_message() {
+    use hyper::StatusCode;
+    let api = br#"{"error": {"code": 400, "message": "Invalid header value Ben Ortiz owes 400.00",
+        "status": "INVALID_ARGUMENT", "errors": [{"reason": "invalidArgument",
+        "message": "Ben Ortiz owes 400.00", "domain": "global"}]}}"#;
+    let said = describe_refusal(StatusCode::BAD_REQUEST, api);
+    assert_eq!(said, "HTTP 400, error INVALID_ARGUMENT invalidArgument");
+    let token =
+        br#"{"error": "invalid_grant", "error_description": "Invalid JWT Signature for wallet@x"}"#;
+    assert_eq!(
+        describe_refusal(StatusCode::BAD_REQUEST, token),
+        "HTTP 400, error invalid_grant"
+    );
+    // Anything that is not a short code is left out.
+    let odd = br#"{"error": {"status": "has spaces, Ben Ortiz", "errors": [{"reason": "x"}]}}"#;
+    assert_eq!(
+        describe_refusal(StatusCode::FORBIDDEN, odd),
+        "HTTP 403, error x"
+    );
+    assert_eq!(
+        describe_refusal(StatusCode::BAD_GATEWAY, b"<html>Ben Ortiz</html>"),
+        "HTTP 502"
+    );
 }

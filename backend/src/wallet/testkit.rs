@@ -49,13 +49,46 @@ pub struct TestCredentials {
     pub google_public_der: Vec<u8>,
     /// A key that belongs to nothing above.
     pub stranger_key_pem: String,
+    /// The pass type certificate's twin, issued by the stand-in, that
+    /// expired yesterday.
+    pub expired_pass_cert_pem: String,
+    /// A WWDR stand-in with the right name and another key: it did not
+    /// issue the pass type certificate.
+    pub other_wwdr_pem: String,
+    /// The stand-in with its key and name, expired.
+    pub expired_wwdr_pem: String,
+    /// The stand-in's key under another name.
+    pub renamed_wwdr_pem: String,
 }
 
 fn key() -> RsaPrivateKey {
     RsaPrivateKey::new(&mut OsRng, 2048).expect("an RSA key")
 }
 
+/// Valid from now for a day.
+fn current() -> Validity {
+    Validity::from_now(Duration::from_secs(24 * 3600)).expect("validity")
+}
+
+/// Valid for a day that ended an hour ago.
+fn past() -> Validity {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("after 1970");
+    let at = |ago: u64| {
+        x509_cert::time::Time::UtcTime(
+            x509_cert::der::asn1::UtcTime::from_unix_duration(now - Duration::from_secs(ago))
+                .expect("a time"),
+        )
+    };
+    Validity {
+        not_before: at(25 * 3600),
+        not_after: at(3600),
+    }
+}
+
 fn certificate(
+    validity: Validity,
     profile: Profile,
     serial: u32,
     subject: &str,
@@ -67,7 +100,7 @@ fn certificate(
     CertificateBuilder::new(
         profile,
         SerialNumber::from(serial),
-        Validity::from_now(Duration::from_secs(24 * 3600)).expect("validity"),
+        validity,
         Name::from_str(subject).expect("a name"),
         spki,
         &signer,
@@ -84,18 +117,26 @@ pub static CREDENTIALS: LazyLock<TestCredentials> = LazyLock::new(|| {
     let stranger = key();
 
     let wwdr_name = "CN=Test Wallet Intermediate,OU=G4,O=Yuppers Tests,C=US";
-    let wwdr = certificate(Profile::Root, 1, wwdr_name, &wwdr_key, &wwdr_key);
-    let pass = certificate(
-        Profile::Leaf {
-            issuer: Name::from_str(wwdr_name).expect("a name"),
-            enable_key_agreement: false,
-            enable_key_encipherment: false,
-        },
-        2,
-        &format!(
-            "UID={PASS_TYPE_ID},CN=Pass Type ID: {PASS_TYPE_ID},OU={TEAM_ID},O=Yuppers Tests,C=US"
-        ),
-        &pass_key,
+    let wwdr = certificate(current(), Profile::Root, 1, wwdr_name, &wwdr_key, &wwdr_key);
+    let pass_name = format!(
+        "UID={PASS_TYPE_ID},CN=Pass Type ID: {PASS_TYPE_ID},OU={TEAM_ID},O=Yuppers Tests,C=US"
+    );
+    let leaf = || Profile::Leaf {
+        issuer: Name::from_str(wwdr_name).expect("a name"),
+        enable_key_agreement: false,
+        enable_key_encipherment: false,
+    };
+    let pass = certificate(current(), leaf(), 2, &pass_name, &pass_key, &wwdr_key);
+    let expired_pass = certificate(past(), leaf(), 3, &pass_name, &pass_key, &wwdr_key);
+    let other_wwdr = certificate(current(), Profile::Root, 4, wwdr_name, &stranger, &stranger);
+    let expired_wwdr = certificate(past(), Profile::Root, 5, wwdr_name, &wwdr_key, &wwdr_key);
+    let renamed_name = "CN=Another Intermediate,O=Yuppers Tests,C=US";
+    let renamed_wwdr = certificate(
+        current(),
+        Profile::Root,
+        6,
+        renamed_name,
+        &wwdr_key,
         &wwdr_key,
     );
 
@@ -135,6 +176,10 @@ pub static CREDENTIALS: LazyLock<TestCredentials> = LazyLock::new(|| {
             .as_bytes()
             .to_vec(),
         stranger_key_pem: pem(&stranger),
+        expired_pass_cert_pem: expired_pass.to_pem(LineEnding::LF).expect("PEM"),
+        other_wwdr_pem: other_wwdr.to_pem(LineEnding::LF).expect("PEM"),
+        expired_wwdr_pem: expired_wwdr.to_pem(LineEnding::LF).expect("PEM"),
+        renamed_wwdr_pem: renamed_wwdr.to_pem(LineEnding::LF).expect("PEM"),
     }
 });
 

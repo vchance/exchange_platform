@@ -58,11 +58,15 @@ async fn main() -> anyhow::Result<()> {
     if let Some(addr) = config.metrics_addr {
         let (jobs, db) = (metrics.clone(), db.clone());
         let max_attempts = delivery.rules.max_attempts;
+        let passes = wallet.as_ref().map(|wallet| wallet.wallet.clone());
         metrics::serve(addr, move || {
-            let (jobs, db) = (jobs.clone(), db.clone());
+            let (jobs, db, passes) = (jobs.clone(), db.clone(), passes.clone());
             async move {
                 let mut text = Text::new();
                 jobs.render(&mut text);
+                if let Some(passes) = &passes {
+                    passes.render_metrics(&mut text);
+                }
                 metrics::render_pool(&mut text, &db);
                 metrics::render_outbox(&mut text, &db, max_attempts).await;
                 text.finish()

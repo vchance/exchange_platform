@@ -35,10 +35,8 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
-    let wallet = Arc::new(
-        Wallet::new(&config.wallet, &config.web_origin, Some(&config.app_secret))
-            .context("Wallet passes")?,
-    );
+    let wallet =
+        Arc::new(Wallet::new(&config.wallet, &config.web_origin).context("Wallet passes")?);
     if !wallet.platforms().is_empty() {
         tracing::info!(platforms = ?wallet.platforms(), "issuing Wallet passes");
     }
@@ -79,14 +77,16 @@ async fn main() -> anyhow::Result<()> {
     // On a listener of its own, and only when asked for (docs/operations.md).
     if let Some(addr) = config.metrics_addr {
         let (requests, db) = (state.metrics.clone(), state.db.clone());
+        let wallet = wallet.clone();
         let max_attempts = DeliveryRules::default().max_attempts;
         // Text messages are counted only while they are sent.
         let sms_cap = sms.then_some(sms_cap);
         metrics::serve(addr, move || {
-            let (requests, db) = (requests.clone(), db.clone());
+            let (requests, db, wallet) = (requests.clone(), db.clone(), wallet.clone());
             async move {
                 let mut text = Text::new();
                 requests.render(&mut text);
+                wallet.render_metrics(&mut text);
                 metrics::render_pool(&mut text, &db);
                 metrics::render_outbox(&mut text, &db, max_attempts).await;
                 if let Some(cap) = sms_cap {

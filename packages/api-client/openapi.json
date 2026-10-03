@@ -1196,7 +1196,7 @@
         "tags": [
           "wallet"
         ],
-        "summary": "A link that downloads the caller's Apple pass for a few minutes, without\na session: opened in Safari, it adds the pass to Wallet. For the app and\nthe web page, which hold the session themselves.",
+        "summary": "A link that downloads the caller's Apple pass once, for a few minutes,\nwithout a session: opened in Safari, it adds the pass to Wallet. For the app and\nthe web page, which hold the session themselves.",
         "operationId": "apple_link",
         "parameters": [
           {
