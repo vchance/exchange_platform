@@ -64,14 +64,14 @@ beforeEach(async () => {
 
 test('on a device the token store is the secure storage, and only that', async () => {
   await tokenStore.write('s3cret');
-  expect(secure.setItemAsync).toHaveBeenCalledWith('exchange.session', 's3cret', deviceOnly);
+  expect(secure.setItemAsync).toHaveBeenCalledWith('yuppers.session', 's3cret', deviceOnly);
 
   secure.getItemAsync.mockResolvedValueOnce('s3cret');
   expect(await tokenStore.read()).toBe('s3cret');
-  expect(secure.getItemAsync).toHaveBeenCalledWith('exchange.session', deviceOnly);
+  expect(secure.getItemAsync).toHaveBeenCalledWith('yuppers.session', deviceOnly);
 
   await tokenStore.clear();
-  expect(secure.deleteItemAsync).toHaveBeenCalledWith('exchange.session', deviceOnly);
+  expect(secure.deleteItemAsync).toHaveBeenCalledWith('yuppers.session', deviceOnly);
 });
 
 test('the browser stand-in refuses to load on a device', () => {
@@ -93,7 +93,7 @@ test('signing in asks for a token, and the token kept goes out as a bearer token
   });
 
   await keepSession(created.token ?? '');
-  expect(secure.setItemAsync).toHaveBeenCalledWith('exchange.session', 'issued-token', deviceOnly);
+  expect(secure.setItemAsync).toHaveBeenCalledWith('yuppers.session', 'issued-token', deviceOnly);
 
   sent = serviceAnswering([]);
   await api.listExchanges();
@@ -122,7 +122,7 @@ test('with nothing stored, or storage that cannot be read, nobody is signed in',
 test('signing out forgets the token here and in secure storage', async () => {
   await keepSession('issued-token');
   await dropSession();
-  expect(secure.deleteItemAsync).toHaveBeenCalledWith('exchange.session', deviceOnly);
+  expect(secure.deleteItemAsync).toHaveBeenCalledWith('yuppers.session', deviceOnly);
   const sent = serviceAnswering({});
   expect(await api.me()).toBeNull();
   expect(sent).toEqual([]);

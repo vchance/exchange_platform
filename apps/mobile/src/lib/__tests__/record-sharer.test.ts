@@ -31,7 +31,7 @@ const record = {
   exchange: { display_code: 'PVVS-5Q2K' },
   parties: { A: 'Ana Ruiz', B: 'Ben Ortiz' },
 } as unknown as RecordDocument;
-const file = recordFile(record, 'exchange-record-PVVS-5Q2K');
+const file = recordFile(record, 'agreement-record-PVVS-5Q2K');
 
 /** What the file held at the moment the share sheet was given it. */
 let handed: { uri: string; text: string }[] = [];
@@ -46,17 +46,17 @@ beforeEach(() => {
 });
 
 test('the share sheet is given one JSON file, named for the exchange, holding the record', async () => {
-  await expect(recordSharer.share(file, 'Record of exchange PVVS-5Q2K')).resolves.toBe('handed');
+  await expect(recordSharer.share(file, 'Record PVVS-5Q2K')).resolves.toBe('handed');
 
   expect(sharing.shareAsync).toHaveBeenCalledTimes(1);
   const [uri, options] = sharing.shareAsync.mock.calls[0];
   // A file in the app's own cache, which no other app can read until it is shared.
-  expect(uri).toBe(`${Paths.cache.uri}record-copies/exchange-record-PVVS-5Q2K.json`);
+  expect(uri).toBe(`${Paths.cache.uri}record-copies/agreement-record-PVVS-5Q2K.json`);
   expect(uri.startsWith('file://')).toBe(true);
   expect(options).toEqual({
     mimeType: 'application/json',
     UTI: 'public.json',
-    dialogTitle: 'Record of exchange PVVS-5Q2K',
+    dialogTitle: 'Record PVVS-5Q2K',
   });
   // Exactly the document the service wrote, as the web's download is.
   expect(handed[0].text).toBe(file.text);
@@ -80,11 +80,11 @@ test('the copy does not stay on the device longer than it has to', async () => {
 
 test('there is never more than one copy', async () => {
   await recordSharer.share(file, 'title');
-  const other = recordFile(record, 'exchange-record-AB12-CD34');
+  const other = recordFile(record, 'agreement-record-AB12-CD34');
   await recordSharer.share(other, 'title');
   expect(handed.map((given) => given.uri.split('/').at(-1))).toEqual([
-    'exchange-record-PVVS-5Q2K.json',
-    'exchange-record-AB12-CD34.json',
+    'agreement-record-PVVS-5Q2K.json',
+    'agreement-record-AB12-CD34.json',
   ]);
   if (Platform.OS !== 'ios') {
     expect(new File(handed[0].uri).exists).toBe(false);
@@ -131,15 +131,15 @@ describe('the record as a PDF', () => {
 
   test('the page is printed and the share sheet is given the PDF, under the record’s name', async () => {
     await expect(
-      recordSharer.sharePdf('<p>the record</p>', 'exchange-record-PVVS-5Q2K', 'Record of exchange PVVS-5Q2K'),
+      recordSharer.sharePdf('<p>the record</p>', 'agreement-record-PVVS-5Q2K', 'Record PVVS-5Q2K'),
     ).resolves.toBe('handed');
     expect(print.printToFileAsync).toHaveBeenCalledWith({ html: '<p>the record</p>' });
     const [uri, options] = sharing.shareAsync.mock.calls[0];
-    expect(uri).toBe(`${Paths.cache.uri}record-copies/exchange-record-PVVS-5Q2K.pdf`);
+    expect(uri).toBe(`${Paths.cache.uri}record-copies/agreement-record-PVVS-5Q2K.pdf`);
     expect(options).toEqual({
       mimeType: 'application/pdf',
       UTI: 'com.adobe.pdf',
-      dialogTitle: 'Record of exchange PVVS-5Q2K',
+      dialogTitle: 'Record PVVS-5Q2K',
     });
     expect(handed[0].text).toBe('PDF of <p>the record</p>');
     // Nothing is left where the system printed it.
@@ -147,7 +147,7 @@ describe('the record as a PDF', () => {
   });
 
   test('it is cleared like the other copy', async () => {
-    await recordSharer.sharePdf('<p>x</p>', 'exchange-record-PVVS-5Q2K', 'title');
+    await recordSharer.sharePdf('<p>x</p>', 'agreement-record-PVVS-5Q2K', 'title');
     if (Platform.OS === 'ios') expect(copies().exists).toBe(false);
     recordSharer.forget();
     expect(copies().exists).toBe(false);

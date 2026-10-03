@@ -92,7 +92,7 @@ async function open(initialUrl: string, prepare: (service: FakeService) => void 
   mockKeychain.clear();
   deletedNotice.dismiss();
   service = fakeService();
-  mockKeychain.set('exchange.session', TOKEN);
+  mockKeychain.set('yuppers.session', TOKEN);
   service.account = ana;
   preview = { drafts: 0, open_proposals: 0, agreements_in_force: 0 };
   prepare(service);
@@ -145,7 +145,7 @@ test('deleting the account says what it does, takes a code and a last confirmati
   await fireEvent.press(screen.getByText(d.continue));
   await screen.findByText(d.confirmBody);
   expect(deletionCalls()).toEqual(['GET /v1/me/deletion', 'POST /v1/me/deletion/codes']);
-  expect(mockKeychain.get('exchange.session')).toBe(TOKEN);
+  expect(mockKeychain.get('yuppers.session')).toBe(TOKEN);
 
   await fireEvent.press(screen.getByText(d.confirm));
 
@@ -160,7 +160,7 @@ test('deleting the account says what it does, takes a code and a last confirmati
   });
   // Nothing of the session is left in the device's secure storage, and
   // nothing more was sent in its name.
-  await waitFor(() => expect(mockKeychain.has('exchange.session')).toBe(false));
+  await waitFor(() => expect(mockKeychain.has('yuppers.session')).toBe(false));
   expect(screen.queryByText(w.nav.signOut)).toBeNull();
 
   await fireEvent.press(screen.getByText(d.dismiss));
@@ -199,7 +199,7 @@ test('a code that is wrong goes back to asking for it, and the account and its s
     path: '/v1/me/deletion',
     body: { channel: 'PHONE', code: '000000' },
   });
-  expect(mockKeychain.get('exchange.session')).toBe(TOKEN);
+  expect(mockKeychain.get('yuppers.session')).toBe(TOKEN);
   expect(deletedNotice.shown()).toBe(false);
 
   // A new code can be asked for, and cancelling leaves everything as it was.
@@ -227,12 +227,12 @@ test('an account that never finished setting up can still be deleted', async () 
 
   await screen.findByText(d.deleted);
   await screen.findByText(w.signIn.intro);
-  await waitFor(() => expect(mockKeychain.has('exchange.session')).toBe(false));
+  await waitFor(() => expect(mockKeychain.has('yuppers.session')).toBe(false));
 });
 
 test('someone in an open exchange is told when the other party has deleted their account', async () => {
   await open(`/exchanges/${EXCHANGE}`);
-  await screen.findByText('Exchange with Ben Ortiz');
+  await screen.findByText('Yup with Ben Ortiz');
   expect(screen.queryByText(fmt(d.otherPartyLeftActive, { name: 'Ben Ortiz' }))).toBeNull();
 
   await open(`/exchanges/${EXCHANGE}`, (service) => {

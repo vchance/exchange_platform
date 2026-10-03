@@ -13,7 +13,7 @@ import type { TokenStore } from './token-store.types';
  * Android build.
  */
 
-const KEY = 'exchange.session';
+const KEY = 'yuppers.session';
 
 const options: SecureStore.SecureStoreOptions = {
   // Readable only while the device is unlocked, and never carried to another

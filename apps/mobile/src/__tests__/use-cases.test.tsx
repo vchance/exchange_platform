@@ -67,7 +67,7 @@ async function open(
   mockKeychain.clear();
   service = fakeService();
   if (signedIn) {
-    mockKeychain.set('exchange.session', TOKEN);
+    mockKeychain.set('yuppers.session', TOKEN);
     service.account = ana;
   }
   before?.(service);
@@ -120,7 +120,7 @@ describe('the record: a plain summary first, and a PDF of it all', () => {
     await fireEvent.press(screen.getByRole('button', { name: w.mobile.record.savePdf }));
     await waitFor(() => expect(sharing.shareAsync).toHaveBeenCalled());
     const [uri, options] = sharing.shareAsync.mock.calls.at(-1)!;
-    expect(uri).toBe(`${Paths.cache.uri}record-copies/exchange-record-PVVS-5Q2K.pdf`);
+    expect(uri).toBe(`${Paths.cache.uri}record-copies/agreement-record-PVVS-5Q2K.pdf`);
     expect(options).toMatchObject({ mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
     // The summary comes before the full record.
     expect(handed.indexOf(w.record.summary.heading)).toBeGreaterThan(0);
@@ -139,7 +139,7 @@ describe('the record: a plain summary first, and a PDF of it all', () => {
 describe('“Something isn’t working”', () => {
   test('asks what the situation is, then offers the ways that fit, each opening its own panel', async () => {
     await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
-    await screen.findByText('Exchange with Ben Ortiz');
+    await screen.findByText('Yup with Ben Ortiz');
     const t = w.trouble;
 
     await fireEvent.press(screen.getByRole('button', { name: t.open }));
@@ -160,7 +160,7 @@ describe('“Something isn’t working”', () => {
 
   test('an item’s action says which item it acts on, and opens that item’s panel', async () => {
     await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
-    await screen.findByText('Exchange with Ben Ortiz');
+    await screen.findByText('Yup with Ben Ortiz');
     await fireEvent.press(screen.getByRole('button', { name: w.trouble.open }));
     await fireEvent.press(screen.getByRole('button', { name: 'Ben Ortiz hasn’t done their part' }));
     const waive = screen
@@ -172,7 +172,7 @@ describe('“Something isn’t working”', () => {
 
   test('back to the question, and cancelled', async () => {
     await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
-    await screen.findByText('Exchange with Ben Ortiz');
+    await screen.findByText('Yup with Ben Ortiz');
     await fireEvent.press(screen.getByRole('button', { name: w.trouble.open }));
     await fireEvent.press(screen.getByRole('button', { name: w.trouble.situations.BOTH_STOP }));
     screen.getByText(w.trouble.explain.BOTH_STOP);
@@ -217,7 +217,7 @@ describe('a dispute is recorded, not decided', () => {
         };
       },
     });
-    await screen.findByText('Exchange with Ben Ortiz');
+    await screen.findByText('Yup with Ben Ortiz');
     await fireEvent.press(screen.getByRole('button', { name: w.exchange.moneyMoves.DISPUTE }));
     await screen.findByText(w.dispute.weRecord);
     screen.getByText(w.dispute.pointer);

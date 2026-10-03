@@ -16,7 +16,7 @@ if (Platform.OS !== 'web') {
   throw new Error('The harness token store was loaded outside the web target');
 }
 
-const KEY = 'exchange.harness.session';
+const KEY = 'yuppers.harness.session';
 
 // Kept per browser tab, so two tabs can be two people.
 export const tokenStore: TokenStore = {

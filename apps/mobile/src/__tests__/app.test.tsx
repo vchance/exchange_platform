@@ -70,7 +70,7 @@ async function open(initialUrl: string, { signedIn }: { signedIn: boolean }) {
   mockKeychain.clear();
   service = fakeService();
   if (signedIn) {
-    mockKeychain.set('exchange.session', TOKEN);
+    mockKeychain.set('yuppers.session', TOKEN);
     service.account = ana;
   }
   // The router's own answers hang off what `renderRouter` returns, so that is
@@ -117,7 +117,7 @@ test('signing in keeps the token in secure storage and nowhere else, then asks f
     delivery: 'TOKEN',
     language: 'en',
   });
-  expect(mockKeychain.get('exchange.session')).toBe(TOKEN);
+  expect(mockKeychain.get('yuppers.session')).toBe(TOKEN);
 
   // Neither is assumed: leaving them out is refused here.
   await fireEvent.press(screen.getByText(w.profile.continue));
@@ -158,17 +158,17 @@ test('a token the service no longer honors is dropped, and the app asks to sign 
 
   mockKeychain.clear();
   service = fakeService();
-  mockKeychain.set('exchange.session', 'an-old-token');
+  mockKeychain.set('yuppers.session', 'an-old-token');
   await renderRouter('src/app', { initialUrl: '/' });
   await screen.findByText(w.signIn.intro);
-  await waitFor(() => expect(mockKeychain.has('exchange.session')).toBe(false));
+  await waitFor(() => expect(mockKeychain.has('yuppers.session')).toBe(false));
 });
 
 test('an action on an exchange names its version and carries its own key', async () => {
   await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
 
   // The agreement in force, in full, with dates and money in the reader's language.
-  await screen.findByText('Exchange with Ben Ortiz');
+  await screen.findByText('Yup with Ben Ortiz');
   screen.getByText('Due October 30, 2026');
   screen.getByText('Amount: $450.00');
   screen.getByText('2 required items are still to be confirmed.');
@@ -201,7 +201,7 @@ test('an action on an exchange names its version and carries its own key', async
 
 test('when the exchange changed underneath, it is reloaded and the person is told', async () => {
   await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
-  await screen.findByText('Exchange with Ben Ortiz');
+  await screen.findByText('Yup with Ben Ortiz');
 
   service.conflictNext = true;
   await fireEvent.press(screen.getByText(w.exchange.moves.CLAIM));
@@ -209,7 +209,7 @@ test('when the exchange changed underneath, it is reloaded and the person is tol
 
   // The refusal says what happened, and the screen shows what the exchange is now.
   await screen.findByText(w.errors.VERSION_CONFLICT);
-  await screen.findByText('Ben Ortiz proposed ending this exchange.');
+  await screen.findByText('Ben Ortiz proposed ending this agreement.');
   // The repair is spoken of as a delivery and the payment as money.
   expect(screen.getAllByText(w.contributionStatus.PENDING)).toHaveLength(1);
   expect(screen.getAllByText(w.moneyStatus.PENDING)).toHaveLength(1);
@@ -263,7 +263,7 @@ test('a second invitation link arriving while one is open shows the new proposal
   // with the app already open on an invitation.
   const other = 'b4'.repeat(32);
   await act(async () => {
-    router.navigate(redirectSystemPath({ path: `exchange://es/i#${other}`, initial: false }));
+    router.navigate(redirectSystemPath({ path: `yuppers://es/i#${other}`, initial: false }));
   });
   await waitFor(() =>
     expect(service.sent.at(-1)).toMatchObject({

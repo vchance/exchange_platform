@@ -64,7 +64,7 @@ async function open(
   mockKeychain.clear();
   service = fakeService();
   if (signedIn) {
-    mockKeychain.set('exchange.session', TOKEN);
+    mockKeychain.set('yuppers.session', TOKEN);
     service.account = ana;
   }
   before?.(service);
@@ -95,7 +95,7 @@ describe('history', () => {
 
     // What the reader did is said to them; what the other party did names them.
     await screen.findByText('You sent version 1 and, by sending it, signed it.');
-    screen.getByText('Ben Ortiz opened the invitation and joined the exchange.');
+    screen.getByText('Ben Ortiz opened the invitation and joined as the invited party.');
     screen.getByText('Ben Ortiz signed version 1.');
     // The message sent with the terms is labelled, and shown as it was written.
     screen.getByText(record.noteLabels.message);
@@ -104,7 +104,7 @@ describe('history', () => {
     const read = textsOf(screen.toJSON() as Rendered);
     const order = [
       'You sent version 1 and, by sending it, signed it.',
-      'Ben Ortiz opened the invitation and joined the exchange.',
+      'Ben Ortiz opened the invitation and joined as the invited party.',
       'You confirmed that the person who joined is the one you invited.',
       'Ben Ortiz signed version 1.',
       'Version 1, now signed by both parties, became the agreement.',
@@ -165,7 +165,7 @@ describe('history', () => {
       },
     });
     await screen.findByText(w.errors.SERVICE_UNAVAILABLE);
-    screen.getByText('Exchange with Ben Ortiz');
+    screen.getByText('Yup with Ben Ortiz');
     screen.getByText(record.open);
     screen.getByText(w.mobile.record.openHint);
   });
@@ -175,7 +175,7 @@ describe('the record', () => {
   async function openRecord() {
     const { app } = await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
     await fireEvent.press(await screen.findByText(record.open));
-    await screen.findByText('Record of exchange PVVS-5Q2K');
+    await screen.findByText('Record PVVS-5Q2K');
     return { app };
   }
 
@@ -188,7 +188,7 @@ describe('the record', () => {
 
     // Its sections come in the order they are read in.
     const read = textsOf(screen.toJSON() as Rendered);
-    const from = read.indexOf('Record of exchange PVVS-5Q2K');
+    const from = read.indexOf('Record PVVS-5Q2K');
     const sections = [
       record.summaryHeading,
       record.aboutHeading,
@@ -290,11 +290,11 @@ describe('the record', () => {
     await waitFor(() => expect(sharing.shareAsync).toHaveBeenCalledTimes(1));
 
     const [uri, options] = sharing.shareAsync.mock.calls[0];
-    expect(uri.endsWith('/record-copies/exchange-record-PVVS-5Q2K.json')).toBe(true);
+    expect(uri.endsWith('/record-copies/agreement-record-PVVS-5Q2K.json')).toBe(true);
     expect(options).toEqual({
       mimeType: 'application/json',
       UTI: 'public.json',
-      dialogTitle: 'Record of exchange PVVS-5Q2K',
+      dialogTitle: 'Record PVVS-5Q2K',
     });
     // The document as the service wrote it, with nothing of the app's added.
     expect(JSON.parse(handed)).toEqual(recordOf(service));
@@ -546,7 +546,7 @@ describe('the people blocked, on the account screen', () => {
       },
     });
     await fireEvent.press(await screen.findByRole('link', { name: PARTIES.B }));
-    await screen.findByText('Exchange with Ben Ortiz');
+    await screen.findByText('Yup with Ben Ortiz');
     expect(app.getPathname()).toBe(`/exchanges/${EXCHANGE}`);
   });
 });

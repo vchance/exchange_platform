@@ -22,7 +22,7 @@ test('the summary comes first, then the record in full', () => {
   const html = recordHtml(record(), en);
   const w = en.wording.record;
   const order = [
-    'Record of exchange PVVS-5Q2K',
+    'Record PVVS-5Q2K',
     w.summary.heading,
     'Between Ana Ruiz and Ben Ortiz.',
     w.summaryHeading,

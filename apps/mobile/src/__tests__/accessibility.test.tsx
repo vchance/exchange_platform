@@ -66,7 +66,7 @@ async function open(
   mockKeychain.clear();
   service = fakeService();
   if (signedIn) {
-    mockKeychain.set('exchange.session', TOKEN);
+    mockKeychain.set('yuppers.session', TOKEN);
     service.account = ana;
   }
   prepare?.(service);
@@ -289,7 +289,7 @@ describe('the composer', () => {
 describe('the exchange', () => {
   test('a panel takes the screen reader to it, and gives the focus back on cancel', async () => {
     await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
-    await screen.findByText('Exchange with Ben Ortiz');
+    await screen.findByText('Yup with Ben Ortiz');
     expect(audit()).toEqual([]);
 
     const opener = screen.getByRole('button', { name: w.exchange.moves.CLAIM });
@@ -319,12 +319,12 @@ describe('the exchange', () => {
         };
       },
     });
-    expect(await screen.findByRole('header', { name: 'Exchange with Ben Ortiz' })).toBeTruthy();
+    expect(await screen.findByRole('header', { name: 'Yup with Ben Ortiz' })).toBeTruthy();
   });
 
   test('what an action did is said', async () => {
     await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
-    await screen.findByText('Exchange with Ben Ortiz');
+    await screen.findByText('Yup with Ben Ortiz');
     await fireEvent.press(screen.getByRole('button', { name: w.exchange.moves.CLAIM }));
     await fireEvent.press(screen.getAllByRole('button', { name: w.exchange.moves.CLAIM }).at(-1)!);
     await screen.findByText(w.exchange.updated);
@@ -346,7 +346,7 @@ describe('the record', () => {
 describe('when something isn’t working', () => {
   test('the guide: its question, then the ways forward, each a named button', async () => {
     await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
-    await screen.findByText('Exchange with Ben Ortiz');
+    await screen.findByText('Yup with Ben Ortiz');
     const opener = screen.getByRole('button', { name: w.trouble.open });
     await fireEvent.press(opener);
     expect(screen.getByRole('button', { name: w.trouble.open, expanded: true })).toBeTruthy();

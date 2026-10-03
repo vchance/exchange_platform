@@ -48,7 +48,7 @@ export const INVITATION_ROUTE = '/invitation';
 
 /**
  * Decides where a link the system handed to the app should go. An invitation
- * link, whether the web address or the app's own `exchange://{language}/i#…`,
+ * link, whether the web address or the app's own `yuppers://{language}/i#…`,
  * gives up its token here and goes to the invitation screen; anything else
  * is left as it came.
  */
