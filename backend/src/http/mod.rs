@@ -192,7 +192,7 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
 
 #[derive(OpenApi)]
 #[openapi(
-    info(title = "Exchange API"),
+    info(title = "Yuppers API"),
     paths(
         health::live,
         health::ready,

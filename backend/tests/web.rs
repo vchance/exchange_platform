@@ -20,7 +20,7 @@ use yuppers_backend::auth::{AuthRules, LogSender};
 use yuppers_backend::db;
 use yuppers_backend::http::{self, AppState, Settings, TrustedProxies, WebApp};
 
-const HOME: &str = "<!doctype html><html lang=\"en\"><title>Exchange</title>home</html>";
+const HOME: &str = "<!doctype html><html lang=\"en\"><title>Yuppers</title>home</html>";
 const EN: &str = "<!doctype html><html lang=\"en\"><title>Invitation</title>en</html>";
 const ES: &str = "<!doctype html><html lang=\"es\"><title>Invitación</title>es</html>";
 const SCRIPT: &str = "console.log('hashed')";

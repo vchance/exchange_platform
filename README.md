@@ -44,7 +44,7 @@ PG=/opt/homebrew/opt/postgresql@17/bin
 $PG/psql -h 127.0.0.1 -d postgres \
   -c "CREATE ROLE exchange LOGIN CREATEDB PASSWORD 'exchange'" \
   -c "CREATE ROLE exchange_app LOGIN PASSWORD 'exchange_app'" \
-  -c "CREATE DATABASE exchange OWNER exchange"
+  -c "CREATE DATABASE yuppers OWNER exchange"
 ```
 
 `exchange` owns the schema and runs migrations; it may create databases because the API tests each build a throwaway one. `exchange_app` is what the API and worker connect as; it can add to the agreement history but not change or delete it.
@@ -73,7 +73,7 @@ The app in `apps/mobile` takes an exchange from a draft to completion the way th
 | `EXPO_PUBLIC_WEB_URL` | Where the web app is served from. Invitation links point there, `{web origin}/{language}/i#{token}`, so they work for someone without the app. Defaults to `http://localhost:5173`. |
 
 - **Session.** The app signs in for a token, keeps it in the device's secure storage through `expo-secure-store` and nowhere else, and sends it as a bearer token (`src/lib/session.ts`, `src/lib/token-store.ts`).
-- **Invitation links.** Until the web domain can open the app by itself, an invitation reaches the app in two ways: its own scheme, `exchange://{language}/i#{token}`, and pasting the link into the app ("Open an invitation" on the first screen, signed in or not; signed out, it leads to reading the proposal without an account, as the link does). Either way the token is taken out of the link before the router sees it and is held in memory only (`src/lib/invitation.ts`, `src/app/+native-intent.ts`).
+- **Invitation links.** Until the web domain can open the app by itself, an invitation reaches the app in two ways: its own scheme, `yuppers://{language}/i#{token}`, and pasting the link into the app ("Open an invitation" on the first screen, signed in or not; signed out, it leads to reading the proposal without an account, as the link does). Either way the token is taken out of the link before the router sees it and is held in memory only (`src/lib/invitation.ts`, `src/app/+native-intent.ts`).
 - **Languages.** The device's language before sign-in and the account's after. Hermes, the engine the app runs on, has a narrower `Intl` than a browser: the shared formatting avoids what it lacks, and `src/lib/plural-rules.ts` supplies plural rules for every language from the Unicode data, so adding a language needs nothing in the app.
 - **History and the record.** The exchange screen ends with its history, and `/exchanges/{id}/record` lays the whole record out to be read from top to bottom, by eye or with a screen reader, under the same plain summary as the web's (`src/screens/History.tsx`, `src/screens/RecordScreen.tsx`). A party takes their copy away through the system's share sheet, as a PDF or as the JSON document. For the PDF the record is laid out as one HTML page, summary first, with everything escaped and no script allowed (`src/lib/record-html.ts`), and `expo-print` prints it to a file. The share sheet takes a file, so either copy is written to the app's own cache first (`src/lib/record-sharer.ts`, with `expo-file-system`, `expo-print` and `expo-sharing`). There is never more than one such copy, and it goes when the next is made, when the account signs out, and on iOS as soon as the sheet closes.
 - **Report and block.** On the exchange screen once someone has joined, on the invitation screen before signing in (report only), and as a list of the people blocked on the account screen (`src/screens/ExchangeSafety.tsx`, `InvitationReport.tsx`, `BlockedPeople.tsx`). What is sent, and what the person is then told, is decided in `packages/shared` and is the same as on the web.
@@ -210,7 +210,7 @@ cargo build --release --manifest-path backend/Cargo.toml --bins
 SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR=1000000 ./backend/target/release/api > api.log 2>&1 &
 ./backend/target/release/worker > worker.log 2>&1 &
 node scripts/load-check.mjs --pairs 200 --concurrency 25 --base-url http://127.0.0.1:8080 \
-  --api-log api.log --database-url postgres://exchange:exchange@127.0.0.1:5432/exchange_load
+  --api-log api.log --database-url postgres://exchange:exchange@127.0.0.1:5432/yuppers_load
 ```
 
 `--database-url` is only read from, for the connection and outbox figures; give the schema owner's, which sees every connection's state, and set `PSQL` if `psql` is not on the path. `--json` prints the report as JSON. The API's process is found by its port, or given with `--api-pid`.

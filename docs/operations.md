@@ -19,7 +19,7 @@ All three come from the same image: the `api` is its default command, the other 
    ```sql
    CREATE ROLE exchange LOGIN PASSWORD '...';
    CREATE ROLE exchange_app LOGIN PASSWORD '...';
-   CREATE DATABASE exchange OWNER exchange;
+   CREATE DATABASE yuppers OWNER exchange;
    ```
 
    On a managed service the owner may be the role the service gives you; what matters is that the API and worker never connect as it. `exchange_app` must exist before the first migration, which grants to it. Require TLS to the database if the service offers it (`?sslmode=require` on both connection strings).
@@ -55,7 +55,7 @@ All three come from the same image: the `api` is its default command, the other 
 | `GET /healthz` | 204 while the process runs | liveness: restart the copy if it fails |
 | `GET /readyz` | 204 when the database answers, 503 when not | readiness: send traffic only when it passes |
 
-The api starts without a database and answers `/readyz` with 503 until it can reach one, so a database outage takes copies out of rotation rather than restarting them in a loop. The worker has no health path; with `METRICS_ADDR` set, its `/metrics` answers while it runs, and `exchange_worker_last_pass_timestamp_seconds` says when it last went round its jobs (every 5 seconds).
+The api starts without a database and answers `/readyz` with 503 until it can reach one, so a database outage takes copies out of rotation rather than restarting them in a loop. The worker has no health path; with `METRICS_ADDR` set, its `/metrics` answers while it runs, and `yuppers_worker_last_pass_timestamp_seconds` says when it last went round its jobs (every 5 seconds).
 
 ## Logs
 
@@ -86,38 +86,38 @@ From the api:
 
 | Metric | Type | Labels |
 |---|---|---|
-| `exchange_http_requests_total` | counter | `route` (the route's template, such as `/v1/exchanges/{id}`, or `unmatched` for the web app's pages and unknown paths), `method`, `status` (`2xx`, `4xx`, ...) |
-| `exchange_http_request_duration_seconds` | histogram, buckets from 1 ms to 10 s | the same |
+| `yuppers_http_requests_total` | counter | `route` (the route's template, such as `/v1/exchanges/{id}`, or `unmatched` for the web app's pages and unknown paths), `method`, `status` (`2xx`, `4xx`, ...) |
+| `yuppers_http_request_duration_seconds` | histogram, buckets from 1 ms to 10 s | the same |
 
 From the worker:
 
 | Metric | Type | Labels |
 |---|---|---|
-| `exchange_outbox_deliveries_total` | counter | `result`: `sent`, `failed` (every failed try), `given_up` (the last try failed), `dropped` (closed unsent: recipient gone, or a reminder no longer true) |
-| `exchange_worker_runs_total` | counter | `job`: `timers`, `reminders`; `result`: `ok`, `error` |
-| `exchange_worker_timer_changes_total` | counter | expiries, lapsed close requests, inactivity prompts and closures |
-| `exchange_worker_reminders_queued_total` | counter | |
-| `exchange_worker_last_pass_timestamp_seconds` | gauge | when the last pass over all jobs ended |
+| `yuppers_outbox_deliveries_total` | counter | `result`: `sent`, `failed` (every failed try), `given_up` (the last try failed), `dropped` (closed unsent: recipient gone, or a reminder no longer true) |
+| `yuppers_worker_runs_total` | counter | `job`: `timers`, `reminders`; `result`: `ok`, `error` |
+| `yuppers_worker_timer_changes_total` | counter | expiries, lapsed close requests, inactivity prompts and closures |
+| `yuppers_worker_reminders_queued_total` | counter | |
+| `yuppers_worker_last_pass_timestamp_seconds` | gauge | when the last pass over all jobs ended |
 
 From both, read from the database at each scrape (so they are right however many processes send, and the api still shows them while the worker is down):
 
 | Metric | Type | |
 |---|---|---|
-| `exchange_outbox_messages` | gauge | `state`: `pending` (waiting, or between retries), `given_up` |
-| `exchange_outbox_oldest_pending_age_seconds` | gauge | how long the oldest pending message has waited since it was queued; 0 when none |
-| `exchange_database_up` | gauge | 0 when that read failed |
-| `exchange_db_pool_max`, `exchange_db_pool_size`, `exchange_db_pool_in_use` | gauge | this process's connection pool: its limit, connections open, connections busy |
+| `yuppers_outbox_messages` | gauge | `state`: `pending` (waiting, or between retries), `given_up` |
+| `yuppers_outbox_oldest_pending_age_seconds` | gauge | how long the oldest pending message has waited since it was queued; 0 when none |
+| `yuppers_database_up` | gauge | 0 when that read failed |
+| `yuppers_db_pool_max`, `yuppers_db_pool_size`, `yuppers_db_pool_in_use` | gauge | this process's connection pool: its limit, connections open, connections busy |
 
 ## What to watch
 
 Starting points; tune them once there is real traffic.
 
-- **Outbox age.** `exchange_outbox_oldest_pending_age_seconds` above 10 minutes. A message normally goes within one 5-second pass; a failure waits 1, 2, 4 ... minutes, up to an hour, so a single retrying message can legitimately be older, but a rising age with a growing `pending` count means mail is not going out. Check the worker is running, then its `notification not sent` lines for the SMTP reply code.
-- **Given up.** `exchange_outbox_messages{state="given_up"}` above 0. After 8 failed tries a message is left for someone to look at (below).
-- **Error rate.** `5xx` responses above 1% of `exchange_http_requests_total` over 5 minutes, or any sustained run of them; then the api's `database error` lines.
-- **Latency.** The 95th percentile of `exchange_http_request_duration_seconds` above 500 ms for a route. The load check (README) measured under 20 ms on a laptop.
-- **Pool.** `exchange_db_pool_in_use` at `exchange_db_pool_max` for minutes: requests are queuing for connections.
-- **Worker alive.** `time() - exchange_worker_last_pass_timestamp_seconds` above 60, or its scrape failing.
+- **Outbox age.** `yuppers_outbox_oldest_pending_age_seconds` above 10 minutes. A message normally goes within one 5-second pass; a failure waits 1, 2, 4 ... minutes, up to an hour, so a single retrying message can legitimately be older, but a rising age with a growing `pending` count means mail is not going out. Check the worker is running, then its `notification not sent` lines for the SMTP reply code.
+- **Given up.** `yuppers_outbox_messages{state="given_up"}` above 0. After 8 failed tries a message is left for someone to look at (below).
+- **Error rate.** `5xx` responses above 1% of `yuppers_http_requests_total` over 5 minutes, or any sustained run of them; then the api's `database error` lines.
+- **Latency.** The 95th percentile of `yuppers_http_request_duration_seconds` above 500 ms for a route. The load check (README) measured under 20 ms on a laptop.
+- **Pool.** `yuppers_db_pool_in_use` at `yuppers_db_pool_max` for minutes: requests are queuing for connections.
+- **Worker alive.** `time() - yuppers_worker_last_pass_timestamp_seconds` above 60, or its scrape failing.
 - **Readiness** failing on every copy: the database is unreachable.
 - **Refusals** are not errors: `429` is a limit working (too many codes asked for, too many wrong guesses), and `4xx` in general is a person or a client being told no. Watch them for sudden jumps, not as failures.
 
@@ -154,7 +154,7 @@ To recover:
 `scripts/backup.sh` writes the whole database to one file in `pg_dump`'s custom format: schema, data, and the grants to `exchange_app`. It runs against the live database without stopping anything; the file is one consistent snapshot.
 
 ```sh
-MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/exchange \
+MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/yuppers \
   scripts/backup.sh /backups/exchange-$(date -u +%Y%m%d).dump
 ```
 
@@ -172,9 +172,9 @@ MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/exchange \
 # As the owner, on the server to restore to. The application role must exist
 # there first, with a password of its own; roles are not in a backup.
 psql "$ADMIN_URL" -c "CREATE ROLE exchange_app LOGIN PASSWORD '...'"   # if it does not exist
-psql "$ADMIN_URL" -c "CREATE DATABASE exchange_restored OWNER exchange"
+psql "$ADMIN_URL" -c "CREATE DATABASE yuppers_restored OWNER exchange"
 
-scripts/restore.sh -d postgres://exchange:...@db.internal:5432/exchange_restored exchange.dump
+scripts/restore.sh -d postgres://exchange:...@db.internal:5432/yuppers_restored yuppers.dump
 ```
 
 - It refuses a database that already holds tables. `--overwrite` replaces every object the backup holds instead, but leaves alone anything it does not, so a new, empty database is the safe target; point `DATABASE_URL` and `MIGRATION_DATABASE_URL` at it when it is ready.

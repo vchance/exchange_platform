@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn a_language_is_picked_up_from_its_file_alone() {
-        let english = file("Exchange", &Notice::ALL);
+        let english = file("Yuppers", &Notice::ALL);
         let french = file("Échange", &Notice::ALL);
         let wording =
             Wording::from_files(&THREE, "en", &[("en", &english), ("fr", &french)]).unwrap();
@@ -392,13 +392,13 @@ mod tests {
             wording
                 .email("de", Notice::EndProposed, CODE, LINKS)
                 .subject,
-            format!("Exchange END_PROPOSED {CODE}")
+            format!("Yuppers END_PROPOSED {CODE}")
         );
     }
 
     #[test]
     fn a_message_one_language_lacks_is_sent_whole_in_the_default_language() {
-        let english = file("Exchange", &Notice::ALL);
+        let english = file("Yuppers", &Notice::ALL);
         let french = file("Échange", &[Notice::EndProposed]);
         let wording =
             Wording::from_files(&THREE, "en", &[("en", &english), ("fr", &french)]).unwrap();
@@ -407,14 +407,14 @@ mod tests {
             wording
                 .email("fr", Notice::CloseRequested, CODE, LINKS)
                 .subject,
-            format!("Exchange CLOSE_REQUESTED {CODE}"),
+            format!("Yuppers CLOSE_REQUESTED {CODE}"),
             "the product name is the default language's too, not a mixture"
         );
     }
 
     #[test]
     fn an_incomplete_default_language_is_refused() {
-        let english = file("Exchange", &[Notice::EndProposed]);
+        let english = file("Yuppers", &[Notice::EndProposed]);
         assert_eq!(
             Wording::from_files(&THREE, "en", &[("en", &english)]).err(),
             Some(WordingError::Missing {
@@ -427,7 +427,7 @@ mod tests {
             Some(WordingError::NoDefault("en".to_owned()))
         );
 
-        let no_link = file("Exchange", &Notice::ALL).replace("{link}", "");
+        let no_link = file("Yuppers", &Notice::ALL).replace("{link}", "");
         assert_eq!(
             Wording::from_files(&THREE, "en", &[("en", &no_link)]).err(),
             Some(WordingError::Layout("en".to_owned()))
