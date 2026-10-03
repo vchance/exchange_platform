@@ -492,12 +492,15 @@ async fn failed_guesses_are_capped_per_identifier_until_the_day_ends() {
         StatusCode::OK
     );
 
-    // When the day ends, the code still live works. Every count of failed
-    // guesses by identifier is moved back a day, which changes nothing for
-    // the other tests: none of them comes near the limit.
+    // When the day ends, the code still live works. Today's counts of failed
+    // guesses by identifier that reached the limit are moved back a day: the
+    // count is stored only as a keyed hash, and no other test comes near the
+    // limit, so this is the count for this test's identifier.
     sqlx::query(
         "UPDATE sign_in_limit SET window_start = window_start - interval '1 day'
-         WHERE scope = 'failed-guesses-by-identifier'",
+         WHERE scope = 'failed-guesses-by-identifier'
+           AND window_start = date_trunc('day', now(), 'UTC')
+           AND count >= 20",
     )
     .execute(&app.owner)
     .await
