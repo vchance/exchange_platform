@@ -450,6 +450,7 @@ async fn prepare(
         to,
         subject: rendered.subject,
         body: rendered.body,
+        html: Some(rendered.html),
         reference: row.id,
     }))
 }

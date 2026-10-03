@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use common::{App, Deal, User};
-use mail_parser::MessageParser;
+use mail_parser::{MessageParser, MimeHeaders};
 use time::OffsetDateTime;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
@@ -23,7 +23,7 @@ use yuppers_backend::domain::identity::Identifier;
 use yuppers_backend::domain::notification::Notice;
 use yuppers_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_due};
 use yuppers_backend::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
-use yuppers_backend::notifications::wording::{Links, Wording};
+use yuppers_backend::notifications::wording::{Links, Rendered, Wording};
 use yuppers_backend::notifications::{Email, EmailSender};
 use yuppers_backend::telemetry::{self, LogFormat};
 
@@ -218,6 +218,7 @@ fn email(to: &str, reference: i64) -> Email {
         to: to.to_owned(),
         subject: "A test".to_owned(),
         body: "Nothing to see.".to_owned(),
+        html: None,
         reference,
     }
 }
@@ -254,8 +255,8 @@ async fn outbox(app: &App) -> Vec<(i32, Option<String>)> {
         .unwrap()
 }
 
-/// The subject a notice has for an exchange, in a language.
-fn subject(language: &str, notice: Notice, deal: &Deal, code: &str) -> String {
+/// The email a notice makes for an exchange, in a language.
+fn rendered(language: &str, notice: Notice, deal: &Deal, code: &str) -> Rendered {
     let link = format!("{WEB_ORIGIN}/exchanges/{}", deal.exchange);
     let links = Links {
         exchange: &link,
@@ -264,7 +265,36 @@ fn subject(language: &str, notice: Notice, deal: &Deal, code: &str) -> String {
     Wording::embedded()
         .unwrap()
         .email(language, notice, code, links)
-        .subject
+}
+
+/// The subject a notice has for an exchange, in a language.
+fn subject(language: &str, notice: Notice, deal: &Deal, code: &str) -> String {
+    rendered(language, notice, deal, code).subject
+}
+
+/// Checks that a message is `multipart/alternative` with a UTF-8 plain text
+/// part and then a UTF-8 HTML part, and returns the two.
+fn alternatives(message: &Received) -> (String, String) {
+    let parsed = message.parsed();
+    let ctype = parsed.content_type().expect("a content type");
+    assert_eq!(
+        (ctype.ctype(), ctype.subtype()),
+        ("multipart", Some("alternative"))
+    );
+    // The root, then the two alternatives, text first.
+    assert_eq!(parsed.parts.len(), 3);
+    for (index, subtype) in [(1, "plain"), (2, "html")] {
+        let part = parsed.part(index).unwrap();
+        let ctype = part.content_type().expect("a part's content type");
+        assert_eq!((ctype.ctype(), ctype.subtype()), ("text", Some(subtype)));
+        assert_eq!(
+            ctype.attribute("charset").map(str::to_ascii_lowercase),
+            Some("utf-8".to_owned())
+        );
+    }
+    let text = parsed.body_text(0).unwrap().replace("\r\n", "\n");
+    let html = parsed.body_html(0).unwrap().replace("\r\n", "\n");
+    (text.trim_end().to_owned(), html)
 }
 
 // ---- Tests ------------------------------------------------------------------
@@ -362,6 +392,27 @@ async fn a_notification_arrives_as_a_message_in_the_recipients_language() {
         "{}",
         in_force.body()
     );
+
+    // Each message carries the text exactly as the wording has it, and the
+    // same message as HTML beside it.
+    let sent = [
+        ("es", Notice::InvitationClaimedUnconfirmed),
+        ("es", Notice::AgreementInForce),
+        ("en", Notice::CounterpartyConfirmed),
+        ("en", Notice::AgreementInForce),
+    ];
+    for message in &received {
+        let (text, html) = alternatives(message);
+        let want = sent
+            .iter()
+            .map(|(language, notice)| rendered(language, *notice, &deal, &code))
+            .find(|want| want.subject == message.subject())
+            .expect("a message that was meant to be sent");
+        assert_eq!(text, want.body);
+        assert_eq!(html.trim_end(), want.html.trim_end());
+    }
+    let (_, html) = alternatives(in_force);
+    assert!(html.contains("<html lang=\"es\""), "{html}");
 }
 
 #[tokio::test]
@@ -513,6 +564,17 @@ async fn a_one_time_code_goes_by_email_in_the_language_asked_for_and_not_by_sms(
             .subject
     );
     assert!(received[1].body().contains("654321"));
+    // Both as text and as HTML, the text unchanged.
+    for (message, language, purpose, code) in [
+        (&received[0], "es", Purpose::SignIn, "123456"),
+        (&received[1], "en", Purpose::DeleteAccount, "654321"),
+    ] {
+        let want = wording.code_email(language, purpose, code);
+        let (text, html) = alternatives(message);
+        assert_eq!(text, want.body);
+        assert_eq!(html.trim_end(), want.html.trim_end());
+        assert!(html.contains(&format!(">{code}</span>")), "{html}");
+    }
 
     // A phone number cannot be reached this way, and the code is not sent
     // anywhere else either.

@@ -58,6 +58,14 @@ A database created before the product was named Yuppers is called `exchange`. Ei
 
 In development, one-time codes are not sent anywhere: with `CODE_DELIVERY=log` the API writes each code to its own log, which is where you read it to sign in. Notifications work the same way: with `NOTIFICATION_DELIVERY=log` the worker writes each email to its log instead of sending it.
 
+Every email goes as `multipart/alternative`: the plain text, then the same message as HTML (`backend/src/notifications/html.rs`), both made from the same wording in `packages/shared/wording`. The log shows the text and only the size of the HTML. To see the HTML, write every email in every language to a directory and open its `index.html` in a browser:
+
+```sh
+cd backend && cargo run --example email_preview -- /tmp/yuppers-emails
+```
+
+Each email is there as `<language>/<kind>.html`, with its text beside it as `.txt`. The values in them are made up, and nothing is sent. The HTML is a table layout with inline styles, no images, web fonts or scripts, and nothing fetched when it is opened; the mark is the blue `Y` tile drawn in text and colour. A browser shows roughly what a modern client does, not what every mail client does.
+
 The API starts without a database: `/healthz` and `/v1/meta` respond, and `/readyz` returns 503 until PostgreSQL is reachable. The web dev server proxies API paths to the service, so the browser talks to one origin.
 
 The web app signs in with a cookie, which the API honors only for requests from `WEB_ORIGIN`. If the dev server runs anywhere but `http://localhost:5173`, set `WEB_ORIGIN` in `.env` to match, or signing in will be refused. If the API listens anywhere but `127.0.0.1:8080`, tell the dev server where:
