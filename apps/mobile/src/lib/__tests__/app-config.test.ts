@@ -1,6 +1,6 @@
 import type { ExpoConfig } from 'expo/config';
 
-import appConfig, { appLinkDomain, withAppLinks } from '../../../app.config';
+import appConfig, { appLinkDomain, checkReleaseSettings, withAppLinks } from '../../../app.config';
 import appJson from '../../../app.json';
 
 const base = appJson.expo as ExpoConfig;
@@ -24,6 +24,63 @@ describe('the domain the app claims links on', () => {
       'https://[::1]',
     ]) {
       expect(appLinkDomain(url)).toBeNull();
+    }
+  });
+});
+
+describe('the settings a release build needs', () => {
+  const service = {
+    EXPO_PUBLIC_API_URL: 'https://api.yuppers.example',
+    EXPO_PUBLIC_WEB_URL: 'https://yuppers.example',
+  };
+
+  it('are not needed outside preview and production builds', () => {
+    for (const EAS_BUILD_PROFILE of [undefined, '', 'development', 'development-simulator']) {
+      expect(() => checkReleaseSettings({ EAS_BUILD_PROFILE })).not.toThrow();
+      expect(() =>
+        checkReleaseSettings({
+          EAS_BUILD_PROFILE,
+          EXPO_PUBLIC_API_URL: 'http://localhost:8080',
+          EXPO_PUBLIC_WEB_URL: 'http://localhost:5173',
+        }),
+      ).not.toThrow();
+    }
+  });
+
+  it('pass with both set to HTTPS', () => {
+    for (const EAS_BUILD_PROFILE of ['preview', 'production']) {
+      expect(() => checkReleaseSettings({ EAS_BUILD_PROFILE, ...service })).not.toThrow();
+    }
+  });
+
+  it('stop a preview or production build when either is unset or not HTTPS', () => {
+    for (const EAS_BUILD_PROFILE of ['preview', 'production']) {
+      for (const name of ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_WEB_URL'] as const) {
+        for (const value of [undefined, '', '  ', 'http://api.yuppers.example', 'not a url', 'api.yuppers.example']) {
+          const env = { EAS_BUILD_PROFILE, ...service, [name]: value };
+          expect(() => checkReleaseSettings(env)).toThrow(new RegExp(`${EAS_BUILD_PROFILE} build needs ${name} `));
+        }
+      }
+      expect(() => checkReleaseSettings({ EAS_BUILD_PROFILE })).toThrow(
+        'needs EXPO_PUBLIC_API_URL and EXPO_PUBLIC_WEB_URL set to https:// URLs',
+      );
+    }
+  });
+
+  it('are checked when the config is read', () => {
+    const before = { ...process.env };
+    try {
+      process.env.EAS_BUILD_PROFILE = 'production';
+      delete process.env.EXPO_PUBLIC_API_URL;
+      process.env.EXPO_PUBLIC_WEB_URL = 'https://yuppers.example';
+      expect(() =>
+        appConfig({ config: base, projectRoot: '.', staticConfigPath: null, packageJsonPath: null }),
+      ).toThrow('EXPO_PUBLIC_API_URL');
+    } finally {
+      for (const name of ['EAS_BUILD_PROFILE', 'EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_WEB_URL']) {
+        if (before[name] === undefined) delete process.env[name];
+        else process.env[name] = before[name];
+      }
     }
   });
 });

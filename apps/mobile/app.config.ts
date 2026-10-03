@@ -75,7 +75,45 @@ export function withAppLinks(config: ExpoConfig, domain: string | null): ExpoCon
   };
 }
 
+/** The EAS build profiles that make an app for someone other than its developer. */
+const RELEASE_PROFILES = ['preview', 'production'];
+
+/** The settings `src/lib/config.ts` reads, each of which falls back to localhost when unset. */
+const SERVICE_SETTINGS = ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_WEB_URL'] as const;
+
+/**
+ * Refuses a preview or production build whose service settings are missing
+ * or not HTTPS. The app falls back to `http://localhost:8080` and
+ * `http://localhost:5173` when they are unset, which is right for a
+ * simulator on the development machine and wrong for any device anyone
+ * else holds: such a build would install and then reach nothing. Every
+ * other build (development, the tests, the browser harness, a local
+ * `expo export`) runs without `EAS_BUILD_PROFILE` or with `development`,
+ * and keeps the defaults.
+ */
+export function checkReleaseSettings(env: Record<string, string | undefined>): void {
+  const profile = env.EAS_BUILD_PROFILE;
+  if (!profile || !RELEASE_PROFILES.includes(profile)) return;
+  const wrong = SERVICE_SETTINGS.filter((name) => {
+    const value = env[name]?.trim();
+    if (!value) return true;
+    try {
+      return new URL(value).protocol !== 'https:';
+    } catch {
+      return true;
+    }
+  });
+  if (wrong.length > 0) {
+    throw new Error(
+      `The ${profile} build needs ${wrong.join(' and ')} set to ${wrong.length > 1 ? 'https:// URLs' : 'an https:// URL'} ` +
+        `in its EAS environment ` +
+        `(docs/mobile-release.md); without them the app would talk to localhost.`,
+    );
+  }
+}
+
 export default function appConfig({ config }: ConfigContext): ExpoConfig {
+  checkReleaseSettings(process.env);
   // `config` is app.json's `expo` object; it always has a name and a slug.
   return withAppLinks(config as ExpoConfig, appLinkDomain(process.env.EXPO_PUBLIC_WEB_URL));
 }
