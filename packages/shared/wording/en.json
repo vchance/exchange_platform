@@ -1,9 +1,9 @@
 {
-  "productName": "Exchange",
-  "tagline": "Agree on a deal, then track what each of you has delivered.",
+  "productName": "Yuppers",
+  "tagline": "Send a yup, agree on a deal, then track what each of you has delivered.",
   "linkPreview": {
-    "title": "Exchange",
-    "description": "You’ve been invited to review an exchange."
+    "title": "You’ve got a yup",
+    "description": "Someone sent you a yup to review. Nothing binds you until you sign."
   },
   "service": {
     "checking": "Checking the service…",
@@ -14,15 +14,15 @@
   },
   "notifications": {
     "email": {
-      "layout": "{body}\n\nOpen the exchange: {link}\n\nYou’re getting this email because you’re a party to exchange {code} on {productName}. These emails never include the terms; sign in to see them.",
+      "layout": "{body}\n\nOpen the yup: {link}\n\nYou’re getting this email because you’re part of yup {code} on {productName}. These emails never include the terms; sign in to see them.",
       "messages": {
         "INVITATION_CLAIMED": {
           "subject": "The person you invited has joined ({code})",
-          "body": "The person you invited has opened your invitation and joined the exchange. They can now review the terms you sent."
+          "body": "The person you invited has opened your invitation and joined the yup. They can now review the terms you sent."
         },
         "INVITATION_CLAIMED_UNCONFIRMED": {
-          "subject": "Confirm who joined your exchange ({code})",
-          "body": "Someone has used your invitation link to join the exchange. Check that it is the person you meant to invite, then confirm them. Nothing can be agreed until you do."
+          "subject": "Confirm who joined your yup ({code})",
+          "body": "Someone has used your invitation link to join the yup. Check that it is the person you meant to invite, then confirm them. Nothing can be agreed until you do."
         },
         "COUNTERPARTY_CONFIRMED": {
           "subject": "You’ve been confirmed ({code})",
@@ -30,7 +30,7 @@
         },
         "CLAIMANT_LEFT": {
           "subject": "The person who opened your invitation has left ({code})",
-          "body": "The person who used your invitation link has left the exchange before you confirmed them. Nothing they signed has any effect. Your proposal is still open: create a new invitation link for the person you meant to invite."
+          "body": "The person who used your invitation link has left the yup before you confirmed them. Nothing they signed has any effect. Your proposal is still open: create a new invitation link for the person you meant to invite."
         },
         "REVISION_SENT": {
           "subject": "New terms to review ({code})",
@@ -78,79 +78,79 @@
         },
         "DISPUTE_OPENED": {
           "subject": "A delivery was disputed ({code})",
-          "body": "The other party has disputed a contribution you marked as delivered. Read their reason in the exchange and respond."
+          "body": "The other party has disputed a contribution you marked as delivered. Read their reason in the agreement and respond."
         },
         "CONTRIBUTION_WAIVED": {
           "subject": "A contribution was waived ({code})",
           "body": "The other party has waived one of your contributions. You are no longer expected to deliver it."
         },
         "END_PROPOSED": {
-          "subject": "A proposal to end your exchange ({code})",
-          "body": "The other party has proposed ending the exchange by agreement. If you accept, everything still outstanding is released."
+          "subject": "A proposal to end your agreement ({code})",
+          "body": "The other party has proposed that the two of you end the agreement together. If you accept, everything still outstanding is released."
         },
         "END_PROPOSAL_CANCELLED": {
-          "subject": "The proposal to end your exchange was cancelled ({code})",
-          "body": "The proposal to end the exchange by agreement has been cancelled. The exchange carries on as before."
+          "subject": "The proposal to end your agreement was cancelled ({code})",
+          "body": "The proposal to end the agreement together has been cancelled. The agreement carries on as before."
         },
         "CLOSE_REQUESTED": {
-          "subject": "The other party has asked to close your exchange ({code})",
-          "body": "The other party has asked to close the exchange with matters still unresolved. You have a limited time to respond: you can add a statement, resolve what is outstanding or agree to end it. After that, the exchange closes as unresolved."
+          "subject": "The other party has asked to close your agreement ({code})",
+          "body": "The other party has asked to close the agreement with matters still unresolved. You have a limited time to respond: you can add a statement, resolve what is outstanding or agree to end it. After that, the agreement closes as unresolved."
         },
         "CLOSE_REQUEST_RETRACTED": {
-          "subject": "The request to close your exchange was withdrawn ({code})",
-          "body": "The other party has withdrawn their request to close the exchange. It stays open."
+          "subject": "The request to close your agreement was withdrawn ({code})",
+          "body": "The other party has withdrawn their request to close the agreement. It stays open."
         },
         "STATEMENT_ADDED": {
-          "subject": "A statement was added to your exchange ({code})",
-          "body": "The other party has added a statement about the request to close the exchange. You can read it in the exchange."
+          "subject": "A statement was added to your agreement ({code})",
+          "body": "The other party has added a statement about the request to close the agreement. You can read it in the agreement."
         },
         "INACTIVITY_PROMPTED": {
-          "subject": "Is your exchange still under way? ({code})",
-          "body": "Nothing has happened in this exchange for some time. If neither of you does anything in it, it will be closed as unresolved."
+          "subject": "Is your agreement still under way? ({code})",
+          "body": "Nothing has happened in this agreement for some time. If neither of you does anything in it, it will be closed as unresolved."
         },
         "DUE_SOON": {
           "subject": "Something you owe is due soon ({code})",
-          "body": "At least one of your contributions is due soon and has not been marked as delivered. Open the exchange to see which and when. Once you have delivered it, mark it as delivered there."
+          "body": "At least one of your contributions is due soon and has not been marked as delivered. Open the agreement to see which and when. Once you have delivered it, mark it as delivered there."
         },
         "OVERDUE_TO_DELIVER": {
           "subject": "Something you owe is overdue ({code})",
-          "body": "At least one of your contributions is past its due date and has not been marked as delivered. Open the exchange to see which. If you have delivered it, mark it as delivered there; if the date no longer works, you can propose a change to the agreement. The other party has been told as well."
+          "body": "At least one of your contributions is past its due date and has not been marked as delivered. Open the agreement to see which. If you have delivered it, mark it as delivered there; if the date no longer works, you can propose a change to the agreement. The other party has been told as well."
         },
         "OVERDUE_TO_RECEIVE": {
           "subject": "Something owed to you is overdue ({code})",
-          "body": "At least one of the other party’s contributions is past its due date and has not been marked as delivered. Open the exchange to see which. If you have already received it, you can confirm it there. The other party has been reminded as well."
+          "body": "At least one of the other party’s contributions is past its due date and has not been marked as delivered. Open the agreement to see which. If you have already received it, you can confirm it there. The other party has been reminded as well."
         },
         "CLOSED_WITHDRAWN": {
           "subject": "The offer was withdrawn ({code})",
-          "body": "The other party has withdrawn their offer, so the exchange is closed. Nothing was agreed."
+          "body": "The other party has withdrawn their offer, so the proposal is closed. Nothing was agreed."
         },
         "CLOSED_DECLINED": {
           "subject": "Your offer was declined ({code})",
-          "body": "The other party has declined your offer, so the exchange is closed. Nothing was agreed."
+          "body": "The other party has declined your offer, so the proposal is closed. Nothing was agreed."
         },
         "CLOSED_EXPIRED": {
           "subject": "The offer expired ({code})",
-          "body": "The offer expired before it was accepted, so the exchange is closed. Nothing was agreed."
+          "body": "The offer expired before it was accepted, so the proposal is closed. Nothing was agreed."
         },
         "CLOSED_COMPLETED": {
-          "subject": "Your exchange is complete ({code})",
-          "body": "Every required contribution has been accepted or waived. The exchange is complete and closed."
+          "subject": "Your agreement is complete ({code})",
+          "body": "Every required contribution has been accepted or waived. The agreement is complete and closed."
         },
         "CLOSED_ENDED_BY_AGREEMENT": {
-          "subject": "Your exchange was ended by agreement ({code})",
-          "body": "The other party has agreed to end the exchange. It is closed, and everything still outstanding has been released."
+          "subject": "You both agreed to end your agreement ({code})",
+          "body": "The other party has agreed to end the agreement. It is closed, and everything still outstanding has been released."
         },
         "CLOSED_UNRESOLVED": {
-          "subject": "Your exchange was closed unresolved ({code})",
-          "body": "The time to respond to the request to close has passed. The exchange is closed as unresolved, and each contribution keeps the status it had."
+          "subject": "Your agreement was closed unresolved ({code})",
+          "body": "The time to respond to the request to close has passed. The agreement is closed as unresolved, and each contribution keeps the status it had."
         },
         "CLOSED_INACTIVE": {
-          "subject": "Your exchange was closed for inactivity ({code})",
-          "body": "Nothing happened in this exchange for a long time, so it has been closed as unresolved. Each contribution keeps the status it had."
+          "subject": "Your agreement was closed for inactivity ({code})",
+          "body": "Nothing happened in this agreement for a long time, so it has been closed as unresolved. Each contribution keeps the status it had."
         },
         "REVISION_SENT_UNCONFIRMED": {
           "subject": "The terms you were sent have changed ({code})",
-          "body": "The other party has changed the terms they sent you. Review them, then accept them if you agree. Until they confirm that you are the person they invited, you can’t decline them or send your own; you can leave the exchange instead."
+          "body": "The other party has changed the terms they sent you. Review them, then accept them if you agree. Until they confirm that you are the person they invited, you can’t decline them or send your own; you can leave the yup instead."
         }
       }
     },
@@ -172,11 +172,11 @@
     "skipToContent": "Skip to content",
     "notFoundTitle": "Page not found",
     "notFoundBody": "There’s nothing at this address.",
-    "goHome": "Go to your exchanges"
+    "goHome": "Go to your yups"
   },
   "nav": {
     "label": "Main",
-    "exchanges": "Your exchanges",
+    "exchanges": "Your yups",
     "account": "Account",
     "signOut": "Sign out",
     "language": "Language"
@@ -200,12 +200,12 @@
     "firstIntro": "We need this before you can sign anything.",
     "title": "Account",
     "nameLabel": "Your name",
-    "nameHint": "Shown to the people you make exchanges with.",
+    "nameHint": "Shown to the people you make yups with.",
     "nameRequired": "Enter your name.",
     "languageLabel": "Language",
     "adultLabel": "I am 18 or over",
     "adultConfirmed": "You have confirmed that you are 18 or over.",
-    "adultRequired": "You have to be 18 or over to use Exchange.",
+    "adultRequired": "You have to be 18 or over to use our service.",
     "continue": "Continue",
     "save": "Save",
     "saved": "Saved.",
@@ -216,21 +216,21 @@
     "heading": "Delete your account",
     "open": "Delete my account",
     "intro": "Deleting your account can’t be undone. Here is what it does.",
-    "loadFailed": "We couldn’t check your exchanges, so we can’t tell you yet what deleting would do to them.",
+    "loadFailed": "We couldn’t check your agreements and proposals, so we can’t tell you yet what deleting would do to them.",
     "deletedHeading": "What is deleted",
     "deletedAccount": "Your account. You’re signed out on every device, and your email address and phone number are removed from it.",
     "deletedData": "Your name and language, drafts you haven’t sent, and your list of people you’ve blocked.",
-    "signUpAgain": "You can sign up again later with the same email address or phone number. That will be a new account, with none of your exchanges.",
-    "exchangesHeading": "What happens to your exchanges",
-    "nothingOpen": "You have no drafts and no exchanges that are still open.",
+    "signUpAgain": "You can sign up again later with the same email address or phone number. That will be a new account, with none of your agreements or proposals.",
+    "exchangesHeading": "What happens to your agreements and proposals",
+    "nothingOpen": "You have no drafts, proposals or agreements that are still open.",
     "drafts": "{count, plural, one {# draft you haven’t sent is discarded.} other {# drafts you haven’t sent are discarded.}}",
-    "openProposals": "{count, plural, one {# exchange that is waiting to be signed ends with nothing agreed. A proposal you sent is withdrawn; one sent to you is declined.} other {# exchanges that are waiting to be signed end with nothing agreed. A proposal you sent is withdrawn; one sent to you is declined.}}",
+    "openProposals": "{count, plural, one {# proposal that is waiting to be signed ends with nothing agreed. A proposal you sent is withdrawn; one sent to you is declined.} other {# proposals that are waiting to be signed end with nothing agreed. A proposal you sent is withdrawn; one sent to you is declined.}}",
     "agreementsInForce": "{count, plural, one {# agreement in progress gets a request to close, made in your name. The other party is told and has time to respond. After that it closes as unresolved, and each item keeps the status it has.} other {# agreements in progress each get a request to close, made in your name. The other party is told and has time to respond. After that each closes as unresolved, and each item keeps the status it has.}}",
-    "agreementsStand": "Deleting your account doesn’t cancel or complete an agreement, and nothing is marked as delivered, received or waived for you. If something is still outstanding, consider settling it or ending the exchange by agreement first.",
-    "otherPartyTold": "While an exchange is still open, the other party is shown that you’ve deleted your account.",
+    "agreementsStand": "Deleting your account doesn’t cancel or complete an agreement, and nothing is marked as delivered, received or waived for you. If something is still outstanding, consider settling it or agreeing with the other party to end the agreement first.",
+    "otherPartyTold": "While an agreement or proposal is still open, the other party is shown that you’ve deleted your account.",
     "keptHeading": "What is not deleted",
-    "keptAgreements": "Agreements you signed stay in the other party’s record: the terms, your name as the agreement gives it, your signature and the history of the exchange. They keep their copy.",
-    "keptReports": "Reports about an exchange stay with the people who review them.",
+    "keptAgreements": "Agreements you signed stay in the other party’s record: the terms, your name as the agreement gives it, your signature and the history of the agreement. They keep their copy.",
+    "keptReports": "Reports about an agreement or a proposal stay with the people who review them.",
     "codeIntro": "To confirm it’s you, we’ll send a one-time code to {identifier}.",
     "codeChoice": "To confirm it’s you, we’ll send a one-time code.",
     "sendTo": "Send the code to",
@@ -244,23 +244,23 @@
     "back": "Go back",
     "deleted": "Your account has been deleted, and you’ve been signed out on every device.",
     "dismiss": "OK",
-    "otherPartyLeftActive": "{name} has deleted their account and can no longer act in this exchange. The agreement and your record of it stay as they are.",
+    "otherPartyLeftActive": "{name} has deleted their account and can no longer act in this agreement. The agreement and your record of it stay as they are.",
     "otherPartyLeftNegotiating": "{name} has deleted their account, so nothing can be agreed here any more. Whoever sent the proposal can withdraw it; otherwise it expires."
   },
   "home": {
-    "title": "Your exchanges",
-    "start": "Start an exchange",
-    "empty": "You have no exchanges yet. Start one, or open an invitation link someone sent you.",
+    "title": "Your yups",
+    "start": "New yup",
+    "empty": "You have no yups yet. Start one, or open an invitation link someone sent you.",
     "withParty": "With {name}",
     "noParty": "No one named yet",
     "reference": "Reference {code}",
     "updated": "Updated {date}",
-    "tooManyToday": "You’ve started as many exchanges as one day allows. Try again tomorrow.",
+    "tooManyToday": "You’ve started as many yups as one day allows. Try again tomorrow.",
     "groupOpen": "In progress",
     "groupDrafts": "Drafts, not sent",
     "groupClosed": "Closed",
-    "showClosed": "Show closed exchanges ({count})",
-    "hideClosed": "Hide closed exchanges"
+    "showClosed": "Show closed yups ({count})",
+    "hideClosed": "Hide closed yups"
   },
   "states": {
     "DRAFT": "Draft, not sent",
@@ -311,7 +311,7 @@
     "REMOVED": "Removed"
   },
   "terms": {
-    "ownWords": "The names, terms and descriptions here are the parties’ own words. Exchange never translates or changes them.",
+    "ownWords": "The names, terms and descriptions here are the parties’ own words. We never translate or change them.",
     "partiesHeading": "Between",
     "termsHeading": "Terms",
     "youProvide": "What you provide",
@@ -329,10 +329,10 @@
     "overdue": "Overdue",
     "timezone": "Dates are in the {timezone} time zone.",
     "fingerprint": "Fingerprint of these terms: {hash}",
-    "moneyOutside": "Paid outside Exchange, however the two of you arrange it. Exchange moves no money; it only records what each of you says about this payment."
+    "moneyOutside": "Paid outside our service, however the two of you arrange it. We move no money; we only record what each of you says about this payment."
   },
   "composer": {
-    "titleFirst": "New exchange",
+    "titleFirst": "New yup",
     "titleCounter": "Propose changes",
     "titleAmend": "Propose a change to the agreement",
     "introFirst": "Write down what each of you will do. Nothing is sent until you sign it.",
@@ -365,7 +365,7 @@
     "itemOption": "Item {number}: {description}",
     "itemOptionBlank": "Item {number}",
     "criteriaLabel": "How you’ll both know it’s done (optional)",
-    "requiredLabel": "The exchange isn’t complete without this",
+    "requiredLabel": "The agreement isn’t complete without this",
     "locked": "This has been confirmed, so it can’t be changed or removed.",
     "noteLabel": "Message to the other party (optional)",
     "noteHint": "Sent with the terms, but not part of what you sign.",
@@ -377,7 +377,7 @@
     "problems": {
       "PARTY_NAME_MISSING": "Enter a name.",
       "NO_CONTRIBUTIONS": "Add at least one item.",
-      "NO_REQUIRED_CONTRIBUTION": "At least one item has to be required. Otherwise the exchange would be complete the moment it was agreed.",
+      "NO_REQUIRED_CONTRIBUTION": "At least one item has to be required. Otherwise the agreement would be complete the moment it was signed.",
       "NOTE_TOO_LONG": "Keep the message to {max} characters.",
       "DESCRIPTION_MISSING": "Describe it.",
       "QUANTITY_INVALID": "Enter the quantity as a number, such as {example}, or leave quantity and unit empty.",
@@ -392,12 +392,12 @@
     "yourNote": "Your message",
     "backToEdit": "Back to editing",
     "signAndSend": "Sign and send",
-    "conflict": "This exchange changed while you were writing. Your unsent changes are kept. Check them against the latest terms before you sign.",
+    "conflict": "This yup changed while you were writing. Your unsent changes are kept. Check them against the latest terms before you sign.",
     "staleDraft": "You have unsent changes that you started before the terms last changed.",
     "staleDraftKeep": "Keep my changes",
     "staleDraftDiscard": "Start again from the current terms",
-    "notAvailable": "There is nothing to change on this exchange right now.",
-    "moneyOutside": "Money is paid outside Exchange, however you two arrange it. Exchange doesn’t move or hold it; it only records that one of you says it was paid and the other says it was received.",
+    "notAvailable": "There is nothing to change on this yup right now.",
+    "moneyOutside": "Money is paid outside our service, however you two arrange it. We don’t move or hold it; we only record that one of you says it was paid and the other says it was received.",
     "discard": "Discard this draft",
     "discardText": "Nothing has been sent, so nobody else has seen this. The draft closes and leaves your list. It can’t be reopened.",
     "confirmDiscard": "Yes, discard it",
@@ -419,19 +419,19 @@
     "pendingReview": "Placeholder wording, pending legal review. Not to be used for a real agreement.",
     "binding": "By signing, you agree to these exact terms. Your signature is electronic and is meant to bind you in the same way a handwritten one would.",
     "electronic": "You agree to sign electronically, and to receive this agreement and its records electronically.",
-    "noJudge": "Exchange records what you both agreed and what each of you reports. It does not hold money, decide disputes or guarantee that anyone delivers.",
+    "noJudge": "We record what you both agreed and what each of you reports. We don’t hold money, decide disputes or guarantee that anyone delivers.",
     "agree": "I have read these terms and I sign them."
   },
   "invitationLink": {
     "heading": "Invitation link",
-    "intro": "Send this link to the other party yourself, however you usually reach them. Exchange does not send it for you.",
+    "intro": "Send this link to the other party yourself, however you usually reach them. We don’t send it for you.",
     "shownOnce": "This link is shown only this once. If you lose it you can create a new one, and the old one stops working.",
     "linkLabel": "Link",
     "copy": "Copy link",
     "copied": "Copied.",
     "copyFailed": "It couldn’t be copied. Select the link and copy it yourself.",
     "share": "Share",
-    "shareText": "I’ve sent you an exchange to review.",
+    "shareText": "I’ve sent you a yup to review.",
     "unclaimed": "No one has joined through your invitation link yet. The proposal may have been read; joining means signing in.",
     "reissueIntro": "Lost the link, or sent it to the wrong person? Create a new one. The old link stops working.",
     "forLabel": "Who the invitation is for (optional)",
@@ -439,45 +439,45 @@
     "reissue": "Create a new link"
   },
   "invitation": {
-    "title": "You’ve been invited to an exchange",
+    "title": "You’ve got a yup to review",
     "intro": "{name} wants to agree this with you. Read it, then sign in to accept it, decline it or propose changes.",
     "introSignedIn": "{name} wants to agree this with you. Read it, then respond to accept it, decline it or propose changes.",
-    "notBinding": "Nothing binds you until you sign.",
+    "notBinding": "Nothing binds you until you sign. Once you have both signed, this yup is a binding agreement.",
     "expires": "This proposal is open until {date}.",
     "bound": "This invitation is for one particular person. Sign in with the email address or phone number it was sent to.",
     "noteHeading": "Message from {name}",
     "respond": "Sign in to respond",
     "respondAs": "Respond as {name}",
-    "opening": "Opening the exchange…",
+    "opening": "Opening the yup…",
     "missingTitle": "This link is incomplete",
     "missing": "The invitation link has lost its last part. Open it again from the message it came in, or ask the sender for a new one.",
     "ownInvitation": "This is your own invitation link. Send it to the other party; you can’t use it yourself.",
-    "alreadyResponded": "If you have already responded to it, it is among your exchanges."
+    "alreadyResponded": "If you have already responded to it, it is among your yups."
   },
   "claimant": {
     "reject": "Not who I invited",
     "rejectTitle": "Not who you invited?",
-    "rejectRemoves": "{name} is removed from this exchange and can no longer see it.",
+    "rejectRemoves": "{name} is removed from this yup and can no longer see it.",
     "rejectVoids": "Anything they signed here is void and can never take effect.",
     "rejectKeeps": "Your proposal stays open. The link you sent can’t be used again, so you’ll create a new one for the person you meant to invite.",
-    "rejectQuiet": "They aren’t sent a message about it. For them, the exchange is simply no longer there.",
+    "rejectQuiet": "They aren’t sent a message about it. For them, the yup is simply no longer there.",
     "confirmReject": "Yes, remove them",
     "rejected": "They’ve been removed, and nothing they signed has any effect. Create a new link for the person you meant to invite.",
-    "linkUsed": "The link you sent has been used and can’t be used again. Nobody is in this exchange with you now.",
-    "limits": "Until they confirm you, you can’t decline these terms or propose changes. You can leave this exchange instead.",
-    "leave": "Leave this exchange",
-    "leaveText": "You’ll no longer see this exchange, and the link you opened won’t work again. {name} is told that you left, and can invite someone else.",
+    "linkUsed": "The link you sent has been used and can’t be used again. Nobody is in this yup with you now.",
+    "limits": "Until they confirm you, you can’t decline these terms or propose changes. You can leave this yup instead.",
+    "leave": "Leave this yup",
+    "leaveText": "You’ll no longer see this yup, and the link you opened won’t work again. {name} is told that you left, and can invite someone else.",
     "leaveVoids": "Anything you signed here is void and can never take effect.",
     "confirmLeave": "Yes, leave",
     "invitationIntro": "{name} wants to agree this with you. Read it, then sign in to respond. You can sign it straight away. Before you can decline it or propose changes, {name} has to confirm that you are the person they invited.",
     "invitationIntroSignedIn": "{name} wants to agree this with you. Read it, then respond. You can sign it straight away. Before you can decline it or propose changes, {name} has to confirm that you are the person they invited.",
-    "blockLeaves": "You leave this exchange and can no longer see it. Anything you signed in it is void.",
-    "blockedAfterLeaving": "You are no longer in this exchange.",
+    "blockLeaves": "You leave this yup and can no longer see it. Anything you signed in it is void.",
+    "blockedAfterLeaving": "You are no longer in this yup.",
     "voidSignature": "Signed on {date} by someone who had opened the invitation and was removed, or left, on {since}, before being confirmed. This signature is void: it never took effect and never can."
   },
   "safety": {
     "heading": "Report or block",
-    "report": "Report this exchange",
+    "report": "Report this yup",
     "reportProposal": "Report this proposal",
     "reportIntro": "Tell us what is wrong. We review every report. {name} isn’t told that you reported it.",
     "reportProposalIntro": "Tell us what is wrong with this proposal. We review every report. The person who sent it isn’t told that you reported it.",
@@ -500,16 +500,16 @@
     "reportSent": "We’ve received your report and will review it.",
     "tooManyReports": "That’s as many reports as can be sent in one day. Try again tomorrow.",
     "block": "Block {name}",
-    "blockStops": "{name} won’t be able to join an exchange you start, and you won’t be able to join one they start.",
+    "blockStops": "{name} won’t be able to join a yup you start, and you won’t be able to join one they start.",
     "blockEnds": "Any proposal still waiting to be signed between the two of you is withdrawn or declined.",
     "blockKeeps": "An agreement you’ve both signed stays in force. Either of you can still complete it or close it.",
     "blockQuiet": "{name} isn’t told that you blocked them.",
     "confirmBlock": "Yes, block {name}",
     "blocked": "You’ve blocked {name}.",
     "unblock": "Unblock {name}",
-    "unblocked": "You’ve unblocked {name}. The two of you can start exchanges with each other again. Anything that ended when you blocked them stays ended.",
+    "unblocked": "You’ve unblocked {name}. The two of you can start yups with each other again. Anything that ended when you blocked them stays ended.",
     "blockedHeading": "People you’ve blocked",
-    "blockedIntro": "Someone you’ve blocked can’t join an exchange you start, and you can’t join one they start. They aren’t told.",
+    "blockedIntro": "Someone you’ve blocked can’t join a yup you start, and you can’t join one they start. They aren’t told.",
     "blockedEmpty": "You haven’t blocked anyone.",
     "blockedSince": "Blocked {date}"
   },
@@ -525,7 +525,7 @@
       "invalid": "That isn’t an invitation link. Copy the whole link from the message it came in and paste it here."
     },
     "record": {
-      "openHint": "Everything that was sent, signed and recorded in this exchange, to read here and to share or save as a file.",
+      "openHint": "Everything that was sent, signed and recorded, to read here and to share or save as a file.",
       "share": "Share or save a copy (JSON)",
       "shareHint": "The copy is a file holding everything on this screen, including the terms and both names. Anyone you send it to can read all of it.",
       "shareUnavailable": "This device can’t share or save a file from here. You can download a copy on the web instead.",
@@ -539,22 +539,22 @@
       "change": "Due {date}. Change the date."
     },
     "invited": {
-      "heading": "Invited to an exchange?",
+      "heading": "Got a yup?",
       "intro": "You can read a proposal before you sign in. Open the link you were sent, or paste it here."
     }
   },
   "exchange": {
-    "title": "Exchange with {name}",
-    "titleNoName": "Exchange",
+    "title": "Yup with {name}",
+    "titleNoName": "Yup",
     "refresh": "Check for updates",
-    "updated": "This exchange was updated.",
-    "newer": "This exchange has changed since you opened it.",
+    "updated": "This yup was updated.",
+    "newer": "This yup has changed since you opened it.",
     "showLatest": "Show the latest",
     "claimedHeading": "Confirm who opened your link",
     "claimedBody": "Someone signed in and opened your invitation: {name}, {identifier}. Is this the person you meant to invite?",
     "claimedSigned": "They have already signed. Their signature takes effect when you confirm.",
     "confirmCounterparty": "Yes, this is who I invited",
-    "notThem": "If it isn’t, say so. They are removed from the exchange, and you can send a new link to the person you meant to invite.",
+    "notThem": "If it isn’t, say so. They are removed from the yup, and you can send a new link to the person you meant to invite.",
     "waitingConfirmation": "{name} has not yet confirmed that you are the person they invited. You can sign now; your signature takes effect once they confirm.",
     "waitingConfirmationSigned": "You have signed. Your signature takes effect once {name} confirms that you are the person they invited.",
     "proposalHeading": "Proposal waiting to be signed",
@@ -575,9 +575,9 @@
     "withdraw": "Withdraw",
     "change": "Change your proposal",
     "acceptBlocked": "Confirm who the other party is before you sign.",
-    "declineEnds": "Declining ends this exchange. It can’t be reopened.",
+    "declineEnds": "Declining ends this yup. It can’t be reopened.",
     "declineKeeps": "Declining leaves the agreement as it is.",
-    "withdrawEnds": "Withdrawing ends this exchange. It can’t be reopened.",
+    "withdrawEnds": "Withdrawing ends this yup. It can’t be reopened.",
     "withdrawKeeps": "Withdrawing leaves the agreement as it is.",
     "confirmDecline": "Yes, decline",
     "confirmWithdraw": "Yes, withdraw",
@@ -606,26 +606,26 @@
     "noteLabel": "Note (optional)",
     "reasonLabel": "What is wrong",
     "remedyLabel": "What you did about it",
-    "noteRecord": "Kept in the record of this exchange.",
+    "noteRecord": "Kept in the record of this agreement.",
     "noteRequired": "Write a few words first.",
-    "endingHeading": "Ending the exchange",
+    "endingHeading": "Ending the agreement",
     "proposeEnd": "Propose ending by agreement",
-    "proposeEndText": "If {name} agrees, the exchange ends and everything still outstanding is waived.",
+    "proposeEndText": "If {name} agrees, the agreement ends and everything still outstanding is waived.",
     "sendEndProposal": "Propose ending",
-    "endProposedByYou": "You proposed ending this exchange. {name} has not answered yet.",
-    "endProposedByOther": "{name} proposed ending this exchange.",
+    "endProposedByYou": "You proposed ending this agreement. {name} has not answered yet.",
+    "endProposedByOther": "{name} proposed ending this agreement.",
     "cancelEnd": "Take back the proposal",
     "declineEnd": "Don’t end it",
     "agreeEnd": "Agree to end",
-    "agreeEndText": "Agreeing ends the exchange now and waives everything still outstanding. It can’t be undone.",
-    "confirmAgreeEnd": "Yes, end the exchange",
+    "agreeEndText": "Agreeing ends the agreement now and waives everything still outstanding. It can’t be undone.",
+    "confirmAgreeEnd": "Yes, end the agreement",
     "requestClose": "Close without agreement",
-    "requestCloseText": "For when you can’t resolve things together. {name} gets time to respond. After that the exchange closes as unresolved and each item keeps the status it has. Until then you can take the request back.",
+    "requestCloseText": "For when you can’t resolve things together. {name} gets time to respond. After that the agreement closes as unresolved and each item keeps the status it has. Until then you can take the request back.",
     "statementLabel": "Your statement (optional)",
     "statementRequiredLabel": "Your statement",
     "sendCloseRequest": "Ask to close",
-    "closeRequestedByYou": "You asked on {date} to close this exchange. It closes as unresolved when the time to respond runs out, unless you take the request back or the two of you resolve what is outstanding.",
-    "closeRequestedByOther": "{name} asked on {date} to close this exchange. It closes as unresolved when the time to respond runs out. You can add a statement, resolve what is outstanding, or propose ending by agreement.",
+    "closeRequestedByYou": "You asked on {date} to close this agreement. It closes as unresolved when the time to respond runs out, unless you take the request back or the two of you resolve what is outstanding.",
+    "closeRequestedByOther": "{name} asked on {date} to close this agreement. It closes as unresolved when the time to respond runs out. You can add a statement, resolve what is outstanding, or propose ending by agreement.",
     "retractClose": "Take back the request",
     "addStatement": "Add a statement",
     "sendStatement": "Add to the record",
@@ -639,15 +639,15 @@
       "WAIVE": "Waive"
     },
     "moneyMoveText": {
-      "CLAIM": "This records that you paid {name} outside Exchange. Exchange moves and holds no money. Only {name} can confirm they received it.",
+      "CLAIM": "This records that you paid {name} outside our service. We move and hold no money. Only {name} can confirm they received it.",
       "RECLAIM": "Say what you did about the dispute. {name} will be asked again to confirm they received it.",
       "RETRACT_CLAIM": "This puts it back to not paid yet.",
       "CONFIRM": "This records that you received the money. Confirming is final. It can’t be undone.",
       "DISPUTE": "Say what is wrong. {name} can put it right and record the payment again.",
       "WAIVE": "Waiving releases {name} from paying this. It can’t be undone."
     },
-    "waitingLong": "{name} has not confirmed this since you marked it delivered on {date}. If they never do, it stays this way. You can ask to close the exchange without agreement; the record then shows this as delivered but not confirmed.",
-    "waitingLongMoney": "{name} has not confirmed receiving this since you recorded paying on {date}. If they never do, it stays this way. You can ask to close the exchange without agreement; the record then shows this as paid but not confirmed.",
+    "waitingLong": "{name} has not confirmed this since you marked it delivered on {date}. If they never do, it stays this way. You can ask to close it without agreement; the record then shows this as delivered but not confirmed.",
+    "waitingLongMoney": "{name} has not confirmed receiving this since you recorded paying on {date}. If they never do, it stays this way. You can ask to close it without agreement; the record then shows this as paid but not confirmed.",
     "closeRequestLapses": "If nothing changes, it closes on {date}."
   },
   "record": {
@@ -655,12 +655,12 @@
     "historyEmpty": "Nothing has happened yet.",
     "historyEarlier": "Show earlier entries",
     "open": "Open the full record",
-    "openHint": "Everything that was sent, signed and recorded in this exchange, to read, print or download.",
-    "title": "Record of exchange {code}",
-    "back": "Back to the exchange",
+    "openHint": "Everything that was sent, signed and recorded, to read, print or download.",
+    "title": "Record {code}",
+    "back": "Back to the yup",
     "print": "Print or save as PDF",
     "download": "Download a copy (JSON)",
-    "fileName": "exchange-record-{code}",
+    "fileName": "agreement-record-{code}",
     "madeFor": "This copy was made for {name} on {date}.",
     "timesIn": "Times are shown in the {timezone} time zone.",
     "summaryHeading": "Summary",
@@ -669,8 +669,8 @@
     "agreementIs": "The agreement is version {number}.",
     "agreementNone": "No version has been signed by both parties.",
     "waiting": "Version {number} is waiting to be signed.",
-    "endProposed": "{name} has proposed ending the exchange by agreement.",
-    "closeRequested": "{name} asked on {date} to close the exchange without agreement.",
+    "endProposed": "{name} has proposed ending it by agreement.",
+    "closeRequested": "{name} asked on {date} to close it without agreement.",
     "closedReasons": {
       "WITHDRAWN": "The proposal was withdrawn by the party who sent it.",
       "DECLINED": "The proposal was declined.",
@@ -696,7 +696,7 @@
       "IN_FORCE": "Signed by both parties. This is the agreement.",
       "REPLACED": "Signed by both parties. It was the agreement until a later version replaced it.",
       "SUPERSEDED": "Replaced by a later version before both parties had signed it.",
-      "VOIDED": "Still not signed by both parties when the exchange closed.",
+      "VOIDED": "Still not signed by both parties when it closed.",
       "DECLINED": "Declined.",
       "WITHDRAWN": "Withdrawn by the party who sent it.",
       "EXPIRED": "Expired before both parties had signed it."
@@ -712,7 +712,7 @@
     },
     "events": {
       "you": {
-        "COUNTERPARTY_CLAIMED": "You opened the invitation and joined the exchange.",
+        "COUNTERPARTY_CLAIMED": "You opened the invitation and joined as the invited party.",
         "COUNTERPARTY_CONFIRMED": "You confirmed that the person who joined is the one you invited.",
         "COUNTERPARTY_REJECTED": "You said the person who had opened the invitation was not who you invited. They were removed, and anything they signed is void.",
         "REVISION_SENT": "You sent version {number} and, by sending it, signed it.",
@@ -724,14 +724,14 @@
         "CONTRIBUTION_CONFIRMED": "You confirmed receiving this:",
         "CONTRIBUTION_DISPUTED": "You disputed this:",
         "CONTRIBUTION_WAIVED": "You waived this:",
-        "END_PROPOSED": "You proposed ending the exchange by agreement.",
-        "END_PROPOSAL_CANCELLED": "You set aside the proposal to end the exchange by agreement.",
-        "CLOSE_REQUESTED": "You asked to close the exchange without agreement.",
-        "CLOSE_REQUEST_RETRACTED": "You took back the request to close the exchange.",
+        "END_PROPOSED": "You proposed ending it by agreement.",
+        "END_PROPOSAL_CANCELLED": "You set aside the proposal to end it by agreement.",
+        "CLOSE_REQUESTED": "You asked to close it without agreement.",
+        "CLOSE_REQUEST_RETRACTED": "You took back the request to close it.",
         "STATEMENT_ADDED": "You added a statement."
       },
       "named": {
-        "COUNTERPARTY_CLAIMED": "{name} opened the invitation and joined the exchange.",
+        "COUNTERPARTY_CLAIMED": "{name} opened the invitation and joined as the invited party.",
         "COUNTERPARTY_CONFIRMED": "{name} confirmed that the person who joined is the one they invited.",
         "COUNTERPARTY_REJECTED": "{name} said the person who had opened the invitation was not who they invited. That person was removed, and anything they signed is void.",
         "REVISION_SENT": "{name} sent version {number} and, by sending it, signed it.",
@@ -743,29 +743,29 @@
         "CONTRIBUTION_CONFIRMED": "{name} confirmed receiving this:",
         "CONTRIBUTION_DISPUTED": "{name} disputed this:",
         "CONTRIBUTION_WAIVED": "{name} waived this:",
-        "END_PROPOSED": "{name} proposed ending the exchange by agreement.",
-        "END_PROPOSAL_CANCELLED": "{name} set aside the proposal to end the exchange by agreement.",
-        "CLOSE_REQUESTED": "{name} asked to close the exchange without agreement.",
-        "CLOSE_REQUEST_RETRACTED": "{name} took back the request to close the exchange.",
+        "END_PROPOSED": "{name} proposed ending it by agreement.",
+        "END_PROPOSAL_CANCELLED": "{name} set aside the proposal to end it by agreement.",
+        "CLOSE_REQUESTED": "{name} asked to close it without agreement.",
+        "CLOSE_REQUEST_RETRACTED": "{name} took back the request to close it.",
         "STATEMENT_ADDED": "{name} added a statement."
       },
       "formerClaimant": {
-        "COUNTERPARTY_CLAIMED": "Someone opened the invitation and joined the exchange. They were later removed from it, or left, before being confirmed.",
-        "REVISION_SENT": "The person who had opened the invitation sent version {number}. They are no longer part of the exchange.",
-        "REVISION_ACCEPTED": "The person who had opened the invitation signed version {number}. They are no longer part of the exchange, and that signature is void."
+        "COUNTERPARTY_CLAIMED": "Someone opened the invitation and joined as the invited party. They were later removed, or left, before being confirmed.",
+        "REVISION_SENT": "The person who had opened the invitation sent version {number}. They are no longer involved.",
+        "REVISION_ACCEPTED": "The person who had opened the invitation signed version {number}. They are no longer involved, and that signature is void."
       },
       "neutral": {
-        "COUNTERPARTY_RELEASED": "The person who had opened the invitation left the exchange before being confirmed. Anything they signed is void.",
+        "COUNTERPARTY_RELEASED": "The person who had opened the invitation left before being confirmed. Anything they signed is void.",
         "REVISION_SUPERSEDED": "Version {number} was set aside before both parties had signed it.",
         "REVISION_EXPIRED": "Version {number} expired before both parties had signed it.",
         "AGREEMENT_IN_FORCE": "Version {number}, now signed by both parties, became the agreement.",
-        "INACTIVITY_PROMPTED": "After a long time with no activity, both parties were asked whether the exchange was still under way."
+        "INACTIVITY_PROMPTED": "After a long time with no activity, both parties were asked whether the agreement was still under way."
       },
       "closed": {
-        "NOT_AGREED": "The exchange closed without agreement.",
-        "COMPLETED": "The exchange was completed: every required item had been confirmed or waived.",
-        "ENDED_BY_AGREEMENT": "The exchange was ended by agreement. Everything still outstanding was waived.",
-        "UNRESOLVED": "The exchange closed unresolved. Each item kept the status it had."
+        "NOT_AGREED": "It closed without an agreement.",
+        "COMPLETED": "The agreement was completed: every required item had been confirmed or waived.",
+        "ENDED_BY_AGREEMENT": "Both parties agreed to end the agreement. Everything still outstanding was waived.",
+        "UNRESOLVED": "The agreement closed unresolved. Each item kept the status it had."
       },
       "moneyYou": {
         "CONTRIBUTION_CLAIMED": "You recorded paying this:",
@@ -783,7 +783,7 @@
       }
     },
     "export": {
-      "about": "This is a copy of the record of one exchange, as the service held it when the copy was made. What the parties wrote appears exactly as they wrote it.",
+      "about": "This is a copy of the record of one agreement or proposal, as the service held it when the copy was made. What the parties wrote appears exactly as they wrote it.",
       "signatures": "Each signature was made by a person signed in to an account. The only check of who that person is was a single one-time code, sent to an email address or a phone number, which they entered when they signed in. That can be some time before they signed. No other proof of identity was asked for.",
       "statements": "Marking something as delivered, confirming it, disputing it or waiving it, and every note, reason and statement, are what the parties themselves recorded. The service kept them as they were made and did not check whether any of them is true.",
       "contentHash": "The fingerprint of a version is the SHA-256 digest, written in hexadecimal, of its signed terms as canonical JSON (RFC 8785) in UTF-8. In a downloaded copy the signed terms are the “signed” part of each revision and the fingerprint is its “content_hash”, so anyone can compute it again and compare. The message sent with a version, and the date it stays open until, are not part of what is signed.",
@@ -817,20 +817,20 @@
       "outcome": {
         "CONFIRMED": "Delivered, and {name} confirmed receiving it.",
         "WAIVED": "{name} waived it, releasing {provider} from it.",
-        "WAIVED_BY_ENDING": "Waived when the exchange ended by agreement.",
+        "WAIVED_BY_ENDING": "Waived when the two of them agreed to end it.",
         "DISPUTED": "{name} disputed it. What each of them said is in the history below.",
         "CLAIMED": "{name} marked it delivered. {other} has not confirmed it.",
         "OUTSTANDING": "Not delivered yet.",
-        "OUTSTANDING_CLOSED": "Never marked delivered before the exchange closed."
+        "OUTSTANDING_CLOSED": "Never marked delivered before it closed."
       },
       "moneyOutcome": {
         "CONFIRMED": "Paid, and {name} confirmed receiving it.",
         "WAIVED": "{name} waived it, releasing {provider} from paying it.",
-        "WAIVED_BY_ENDING": "Waived when the exchange ended by agreement.",
+        "WAIVED_BY_ENDING": "Waived when the two of them agreed to end it.",
         "DISPUTED": "{name} disputed it. What each of them said is in the history below.",
         "CLAIMED": "{name} recorded paying it. {other} has not confirmed receiving it.",
         "OUTSTANDING": "Not paid yet.",
-        "OUTSTANDING_CLOSED": "Never recorded as paid before the exchange closed."
+        "OUTSTANDING_CLOSED": "Never recorded as paid before it closed."
       },
       "savePdf": "Save as PDF",
       "savePdfHint": "This opens your browser’s print window. Choose “Save as PDF” as the printer to keep this page, summary and full record, as a file."
@@ -843,7 +843,7 @@
     "CONTRIBUTION_LOCKED": "This item has been accepted and can’t be changed.",
     "REVISION_EXPIRED": "This offer has expired. Ask for a new one or send your own.",
     "COUNTERPARTY_NOT_CONFIRMED": "Confirm who the other party is before accepting.",
-    "AWAITING_CONFIRMATION": "You can do this once the person who invited you has confirmed you. Until then you can sign the terms or leave the exchange.",
+    "AWAITING_CONFIRMATION": "You can do this once the person who invited you has confirmed you. Until then you can sign the terms or leave.",
     "INVALID_REVISION": "Some of the terms need fixing before this can be sent.",
     "INVALID_REQUEST": "Something in that request wasn’t right. Check it and try again.",
     "INVALID_IDENTIFIER": "Enter a valid email address, or a phone number with its country code.",
@@ -853,7 +853,7 @@
     "UNAUTHENTICATED": "Sign in to continue.",
     "ACCOUNT_SUSPENDED": "This account has been suspended.",
     "IDENTIFIER_IN_USE": "That email address or phone number belongs to another account.",
-    "VERSION_CONFLICT": "This exchange changed while you were looking. Review it and try again.",
+    "VERSION_CONFLICT": "This changed while you were looking. Review it and try again.",
     "PROFILE_INCOMPLETE": "Add your name and confirm you are 18 or over before signing.",
     "CONSENT_OUTDATED": "The signing terms have been updated. Review them before signing.",
     "INVITATION_UNAVAILABLE": "This invitation link is no longer valid. Ask the sender for a new one.",
@@ -865,7 +865,7 @@
     "INTERNAL": "Something went wrong on our side. Try again."
   },
   "a11y": {
-    "openExchange": "Opens this exchange.",
+    "openExchange": "Opens this yup.",
     "required": "Required.",
     "signNeedsAgreement": "Available once you confirm, above, that you have read these terms and sign them.",
     "earlierAdded": "{count, plural, one {# earlier entry added to the history.} other {# earlier entries added to the history.}}"
@@ -891,15 +891,15 @@
       "DISPUTE": "Disputing records that you don’t accept it as done. Nobody is released: {name} can put it right and mark it delivered again.",
       "WAIVE": "Waiving releases {name} from that one item, for good. Everything else stays as agreed.",
       "RECLAIM": "Marking it delivered again, with what you did about it, asks {name} to confirm. Nobody is released.",
-      "PROPOSE_END": "If {name} agrees, the exchange ends and both of you are released from everything still outstanding.",
-      "AGREE_END": "{name} has proposed ending. Agreeing ends the exchange now and releases both of you from everything still outstanding.",
-      "REQUEST_CLOSE": "Nobody is released. {name} gets time to respond; then the exchange closes as unresolved and the record keeps each item as it stands.",
+      "PROPOSE_END": "If {name} agrees, the agreement ends and both of you are released from everything still outstanding.",
+      "AGREE_END": "{name} has proposed ending. Agreeing ends the agreement now and releases both of you from everything still outstanding.",
+      "REQUEST_CLOSE": "Nobody is released. {name} gets time to respond; then the agreement closes as unresolved and the record keeps each item as it stands.",
       "AMEND": "A change takes effect only once {name} signs it too. Until then the agreement stays as it is."
     },
     "nothingTheyOwe": "{name} has nothing outstanding that you could dispute or waive.",
     "nothingInDoubt": "Nothing is marked delivered or disputed right now.",
     "endPending": "You have already proposed ending. {name} hasn’t answered yet.",
-    "closePending": "A request to close without agreement is already open. You’ll find it under “Ending the exchange”.",
+    "closePending": "A request to close without agreement is already open. You’ll find it under “Ending the agreement”.",
     "amendPending": "A proposed change is already waiting to be signed, above."
   },
   "dispute": {

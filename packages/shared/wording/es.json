@@ -1,9 +1,9 @@
 {
-  "productName": "Exchange",
-  "tagline": "Acuerda un trato y lleva el registro de lo que cada parte ha entregado.",
+  "productName": "Yuppers",
+  "tagline": "Envía un yup, acuerda un trato y lleva el registro de lo que cada parte ha entregado.",
   "linkPreview": {
-    "title": "Exchange",
-    "description": "Te invitaron a revisar un intercambio."
+    "title": "Tienes un yup",
+    "description": "Alguien te envió un yup para revisar. Nada te obliga hasta que firmes."
   },
   "service": {
     "checking": "Comprobando el servicio…",
@@ -14,23 +14,23 @@
   },
   "notifications": {
     "email": {
-      "layout": "{body}\n\nAbre el intercambio: {link}\n\nRecibes este correo porque eres parte del intercambio {code} en {productName}. Estos correos nunca incluyen los términos; inicia sesión para verlos.",
+      "layout": "{body}\n\nAbre el yup: {link}\n\nRecibes este correo porque eres parte del yup {code} en {productName}. Estos correos nunca incluyen los términos; inicia sesión para verlos.",
       "messages": {
         "INVITATION_CLAIMED": {
           "subject": "La persona que invitaste se unió ({code})",
-          "body": "La persona que invitaste abrió tu invitación y se unió al intercambio. Ya puede revisar los términos que enviaste."
+          "body": "La persona que invitaste abrió tu invitación y se unió al yup. Ya puede revisar los términos que enviaste."
         },
         "INVITATION_CLAIMED_UNCONFIRMED": {
-          "subject": "Confirma quién se unió a tu intercambio ({code})",
-          "body": "Alguien usó tu enlace de invitación para unirse al intercambio. Comprueba que sea la persona a la que querías invitar y confírmala. No se puede acordar nada hasta que lo hagas."
+          "subject": "Confirma quién se unió a tu yup ({code})",
+          "body": "Alguien usó tu enlace de invitación para unirse al yup. Comprueba que sea la persona a la que querías invitar y confírmala. No se puede acordar nada hasta que lo hagas."
         },
         "COUNTERPARTY_CONFIRMED": {
           "subject": "Te confirmaron ({code})",
           "body": "La otra parte confirmó que eres la persona a la que invitó. Ya pueden llegar a un acuerdo."
         },
         "CLAIMANT_LEFT": {
-          "subject": "La persona que abrió tu invitación salió del intercambio ({code})",
-          "body": "La persona que usó tu enlace de invitación salió del intercambio antes de que la confirmaras. Nada de lo que firmó tiene efecto. Tu propuesta sigue abierta: crea un enlace de invitación nuevo para la persona a la que querías invitar."
+          "subject": "La persona que abrió tu invitación salió del yup ({code})",
+          "body": "La persona que usó tu enlace de invitación salió del yup antes de que la confirmaras. Nada de lo que firmó tiene efecto. Tu propuesta sigue abierta: crea un enlace de invitación nuevo para la persona a la que querías invitar."
         },
         "REVISION_SENT": {
           "subject": "Hay nuevos términos para revisar ({code})",
@@ -78,79 +78,79 @@
         },
         "DISPUTE_OPENED": {
           "subject": "Se disputó una entrega ({code})",
-          "body": "La otra parte disputó una contribución que marcaste como entregada. Lee su motivo en el intercambio y responde."
+          "body": "La otra parte disputó una contribución que marcaste como entregada. Lee su motivo en el acuerdo y responde."
         },
         "CONTRIBUTION_WAIVED": {
           "subject": "Se renunció a una contribución ({code})",
           "body": "La otra parte renunció a una de tus contribuciones. Ya no se espera que la entregues."
         },
         "END_PROPOSED": {
-          "subject": "Una propuesta para terminar tu intercambio ({code})",
-          "body": "La otra parte propuso terminar el intercambio de común acuerdo. Si aceptas, todo lo que siga pendiente queda liberado."
+          "subject": "Una propuesta para terminar tu acuerdo ({code})",
+          "body": "La otra parte propuso que terminen el acuerdo entre los dos. Si aceptas, todo lo que siga pendiente queda liberado."
         },
         "END_PROPOSAL_CANCELLED": {
-          "subject": "Se canceló la propuesta para terminar tu intercambio ({code})",
-          "body": "Se canceló la propuesta de terminar el intercambio de común acuerdo. El intercambio continúa como antes."
+          "subject": "Se canceló la propuesta para terminar tu acuerdo ({code})",
+          "body": "Se canceló la propuesta de terminar el acuerdo entre los dos. El acuerdo continúa como antes."
         },
         "CLOSE_REQUESTED": {
-          "subject": "La otra parte pidió cerrar tu intercambio ({code})",
-          "body": "La otra parte pidió cerrar el intercambio con asuntos sin resolver. Tienes un tiempo limitado para responder: puedes agregar una declaración, resolver lo pendiente o aceptar terminarlo. Después, el intercambio se cierra como no resuelto."
+          "subject": "La otra parte pidió cerrar tu acuerdo ({code})",
+          "body": "La otra parte pidió cerrar el acuerdo con asuntos sin resolver. Tienes un tiempo limitado para responder: puedes agregar una declaración, resolver lo pendiente o aceptar terminarlo. Después, el acuerdo se cierra como no resuelto."
         },
         "CLOSE_REQUEST_RETRACTED": {
-          "subject": "Se retiró la solicitud de cerrar tu intercambio ({code})",
-          "body": "La otra parte retiró su solicitud de cerrar el intercambio. Sigue abierto."
+          "subject": "Se retiró la solicitud de cerrar tu acuerdo ({code})",
+          "body": "La otra parte retiró su solicitud de cerrar el acuerdo. Sigue abierto."
         },
         "STATEMENT_ADDED": {
-          "subject": "Se agregó una declaración a tu intercambio ({code})",
-          "body": "La otra parte agregó una declaración sobre la solicitud de cerrar el intercambio. Puedes leerla en el intercambio."
+          "subject": "Se agregó una declaración a tu acuerdo ({code})",
+          "body": "La otra parte agregó una declaración sobre la solicitud de cerrar el acuerdo. Puedes leerla en el acuerdo."
         },
         "INACTIVITY_PROMPTED": {
-          "subject": "¿Tu intercambio sigue en marcha? ({code})",
-          "body": "Hace tiempo que no pasa nada en este intercambio. Si ninguna de las partes hace algo en él, se cerrará como no resuelto."
+          "subject": "¿Tu acuerdo sigue en marcha? ({code})",
+          "body": "Hace tiempo que no pasa nada en este acuerdo. Si ninguna de las partes hace algo en él, se cerrará como no resuelto."
         },
         "DUE_SOON": {
           "subject": "Algo que debes entregar vence pronto ({code})",
-          "body": "Al menos una de tus contribuciones vence pronto y todavía no está marcada como entregada. Abre el intercambio para ver cuál y cuándo. Cuando la hayas entregado, márcala allí como entregada."
+          "body": "Al menos una de tus contribuciones vence pronto y todavía no está marcada como entregada. Abre el acuerdo para ver cuál y cuándo. Cuando la hayas entregado, márcala allí como entregada."
         },
         "OVERDUE_TO_DELIVER": {
           "subject": "Algo que debes entregar está atrasado ({code})",
-          "body": "Al menos una de tus contribuciones ya pasó su fecha de vencimiento y no está marcada como entregada. Abre el intercambio para ver cuál. Si ya la entregaste, márcala allí como entregada; si la fecha ya no sirve, puedes proponer un cambio en el acuerdo. La otra parte también recibió un aviso."
+          "body": "Al menos una de tus contribuciones ya pasó su fecha de vencimiento y no está marcada como entregada. Abre el acuerdo para ver cuál. Si ya la entregaste, márcala allí como entregada; si la fecha ya no sirve, puedes proponer un cambio en el acuerdo. La otra parte también recibió un aviso."
         },
         "OVERDUE_TO_RECEIVE": {
           "subject": "Algo que te deben está atrasado ({code})",
-          "body": "Al menos una de las contribuciones de la otra parte ya pasó su fecha de vencimiento y no está marcada como entregada. Abre el intercambio para ver cuál. Si ya la recibiste, puedes confirmarla allí. La otra parte también recibió un recordatorio."
+          "body": "Al menos una de las contribuciones de la otra parte ya pasó su fecha de vencimiento y no está marcada como entregada. Abre el acuerdo para ver cuál. Si ya la recibiste, puedes confirmarla allí. La otra parte también recibió un recordatorio."
         },
         "CLOSED_WITHDRAWN": {
           "subject": "Se retiró la oferta ({code})",
-          "body": "La otra parte retiró su oferta, así que el intercambio está cerrado. No se acordó nada."
+          "body": "La otra parte retiró su oferta, así que la propuesta está cerrada. No se acordó nada."
         },
         "CLOSED_DECLINED": {
           "subject": "Tu oferta fue rechazada ({code})",
-          "body": "La otra parte rechazó tu oferta, así que el intercambio está cerrado. No se acordó nada."
+          "body": "La otra parte rechazó tu oferta, así que la propuesta está cerrada. No se acordó nada."
         },
         "CLOSED_EXPIRED": {
           "subject": "La oferta venció ({code})",
-          "body": "La oferta venció antes de ser aceptada, así que el intercambio está cerrado. No se acordó nada."
+          "body": "La oferta venció antes de ser aceptada, así que la propuesta está cerrada. No se acordó nada."
         },
         "CLOSED_COMPLETED": {
-          "subject": "Tu intercambio está completo ({code})",
-          "body": "Todas las contribuciones obligatorias fueron aceptadas o se renunció a ellas. El intercambio está completo y cerrado."
+          "subject": "Tu acuerdo está completo ({code})",
+          "body": "Todas las contribuciones obligatorias fueron aceptadas o se renunció a ellas. El acuerdo está completo y cerrado."
         },
         "CLOSED_ENDED_BY_AGREEMENT": {
-          "subject": "Tu intercambio terminó de común acuerdo ({code})",
-          "body": "La otra parte aceptó terminar el intercambio. Está cerrado, y todo lo que seguía pendiente quedó liberado."
+          "subject": "Ambos aceptaron terminar su acuerdo ({code})",
+          "body": "La otra parte aceptó terminar el acuerdo. Está cerrado, y todo lo que seguía pendiente quedó liberado."
         },
         "CLOSED_UNRESOLVED": {
-          "subject": "Tu intercambio se cerró sin resolver ({code})",
-          "body": "Pasó el plazo para responder a la solicitud de cierre. El intercambio se cerró como no resuelto, y cada contribución conserva el estado que tenía."
+          "subject": "Tu acuerdo se cerró sin resolver ({code})",
+          "body": "Pasó el plazo para responder a la solicitud de cierre. El acuerdo se cerró como no resuelto, y cada contribución conserva el estado que tenía."
         },
         "CLOSED_INACTIVE": {
-          "subject": "Tu intercambio se cerró por inactividad ({code})",
-          "body": "No pasó nada en este intercambio durante mucho tiempo, así que se cerró como no resuelto. Cada contribución conserva el estado que tenía."
+          "subject": "Tu acuerdo se cerró por inactividad ({code})",
+          "body": "No pasó nada en este acuerdo durante mucho tiempo, así que se cerró como no resuelto. Cada contribución conserva el estado que tenía."
         },
         "REVISION_SENT_UNCONFIRMED": {
           "subject": "Cambiaron los términos que te enviaron ({code})",
-          "body": "La otra parte cambió los términos que te envió. Revísalos y luego acéptalos si estás de acuerdo. Hasta que confirme que eres la persona a la que invitó, no puedes rechazarlos ni enviar los tuyos; en cambio, puedes salir del intercambio."
+          "body": "La otra parte cambió los términos que te envió. Revísalos y luego acéptalos si estás de acuerdo. Hasta que confirme que eres la persona a la que invitó, no puedes rechazarlos ni enviar los tuyos; en cambio, puedes salir del yup."
         }
       }
     },
@@ -172,11 +172,11 @@
     "skipToContent": "Ir al contenido",
     "notFoundTitle": "Página no encontrada",
     "notFoundBody": "No hay nada en esta dirección.",
-    "goHome": "Ir a tus intercambios"
+    "goHome": "Ir a tus yups"
   },
   "nav": {
     "label": "Principal",
-    "exchanges": "Tus intercambios",
+    "exchanges": "Tus yups",
     "account": "Cuenta",
     "signOut": "Cerrar sesión",
     "language": "Idioma"
@@ -200,12 +200,12 @@
     "firstIntro": "Lo necesitamos antes de que puedas firmar algo.",
     "title": "Cuenta",
     "nameLabel": "Tu nombre",
-    "nameHint": "Lo ven las personas con las que haces intercambios.",
+    "nameHint": "Lo ven las personas con las que haces yups.",
     "nameRequired": "Escribe tu nombre.",
     "languageLabel": "Idioma",
     "adultLabel": "Tengo 18 años o más",
     "adultConfirmed": "Confirmaste que tienes 18 años o más.",
-    "adultRequired": "Tienes que tener 18 años o más para usar Exchange.",
+    "adultRequired": "Tienes que tener 18 años o más para usar nuestro servicio.",
     "continue": "Continuar",
     "save": "Guardar",
     "saved": "Guardado.",
@@ -216,21 +216,21 @@
     "heading": "Eliminar tu cuenta",
     "open": "Eliminar mi cuenta",
     "intro": "Eliminar tu cuenta no se puede deshacer. Esto es lo que hace.",
-    "loadFailed": "No pudimos revisar tus intercambios, así que todavía no podemos decirte qué les pasaría si eliminas la cuenta.",
+    "loadFailed": "No pudimos revisar tus acuerdos y propuestas, así que todavía no podemos decirte qué les pasaría si eliminas la cuenta.",
     "deletedHeading": "Qué se elimina",
     "deletedAccount": "Tu cuenta. Se cierra tu sesión en todos los dispositivos, y tu correo electrónico y tu número de teléfono se quitan de ella.",
     "deletedData": "Tu nombre y tu idioma, los borradores que no has enviado y tu lista de personas bloqueadas.",
-    "signUpAgain": "Más adelante puedes registrarte de nuevo con el mismo correo electrónico o número de teléfono. Será una cuenta nueva, sin ninguno de tus intercambios.",
-    "exchangesHeading": "Qué pasa con tus intercambios",
-    "nothingOpen": "No tienes borradores ni intercambios que sigan abiertos.",
+    "signUpAgain": "Más adelante puedes registrarte de nuevo con el mismo correo electrónico o número de teléfono. Será una cuenta nueva, sin ninguno de tus acuerdos ni de tus propuestas.",
+    "exchangesHeading": "Qué pasa con tus acuerdos y propuestas",
+    "nothingOpen": "No tienes borradores, propuestas ni acuerdos que sigan abiertos.",
     "drafts": "{count, plural, one {# borrador que no has enviado se descarta.} other {# borradores que no has enviado se descartan.}}",
-    "openProposals": "{count, plural, one {# intercambio pendiente de firma termina sin acuerdo. Una propuesta que enviaste se retira; una que te enviaron se rechaza.} other {# intercambios pendientes de firma terminan sin acuerdo. Una propuesta que enviaste se retira; una que te enviaron se rechaza.}}",
+    "openProposals": "{count, plural, one {# propuesta pendiente de firma termina sin acuerdo. Una propuesta que enviaste se retira; una que te enviaron se rechaza.} other {# propuestas pendientes de firma terminan sin acuerdo. Una propuesta que enviaste se retira; una que te enviaron se rechaza.}}",
     "agreementsInForce": "{count, plural, one {# acuerdo en curso recibe una solicitud de cierre, hecha en tu nombre. Se le avisa a la otra parte, que tiene un plazo para responder. Después se cierra sin resolver, y cada elemento conserva el estado que tenga.} other {# acuerdos en curso reciben cada uno una solicitud de cierre, hecha en tu nombre. Se le avisa a la otra parte, que tiene un plazo para responder. Después cada uno se cierra sin resolver, y cada elemento conserva el estado que tenga.}}",
-    "agreementsStand": "Eliminar tu cuenta no cancela ni completa un acuerdo, y nada se marca como entregado, recibido o dispensado por ti. Si algo sigue pendiente, considera resolverlo o terminar el intercambio de común acuerdo antes.",
-    "otherPartyTold": "Mientras un intercambio siga abierto, a la otra parte se le muestra que eliminaste tu cuenta.",
+    "agreementsStand": "Eliminar tu cuenta no cancela ni completa un acuerdo, y nada se marca como entregado, recibido o dispensado por ti. Si algo sigue pendiente, considera resolverlo o acordar con la otra parte terminar el acuerdo antes.",
+    "otherPartyTold": "Mientras haya un acuerdo o una propuesta abiertos, a la otra parte se le muestra que eliminaste tu cuenta.",
     "keptHeading": "Qué no se elimina",
-    "keptAgreements": "Los acuerdos que firmaste siguen en el registro de la otra parte: los términos, tu nombre como aparece en el acuerdo, tu firma y el historial del intercambio. Esa persona conserva su copia.",
-    "keptReports": "Las denuncias sobre un intercambio siguen con las personas que las revisan.",
+    "keptAgreements": "Los acuerdos que firmaste siguen en el registro de la otra parte: los términos, tu nombre como aparece en el acuerdo, tu firma y el historial del acuerdo. Esa persona conserva su copia.",
+    "keptReports": "Las denuncias sobre un acuerdo o una propuesta siguen con las personas que las revisan.",
     "codeIntro": "Para confirmar que eres tú, enviaremos un código de un solo uso a {identifier}.",
     "codeChoice": "Para confirmar que eres tú, enviaremos un código de un solo uso.",
     "sendTo": "Enviar el código a",
@@ -244,23 +244,23 @@
     "back": "Volver",
     "deleted": "Tu cuenta fue eliminada, y se cerró tu sesión en todos los dispositivos.",
     "dismiss": "Entendido",
-    "otherPartyLeftActive": "{name} eliminó su cuenta y ya no puede actuar en este intercambio. El acuerdo y tu registro de él siguen como están.",
+    "otherPartyLeftActive": "{name} eliminó su cuenta y ya no puede actuar en este acuerdo. El acuerdo y tu registro de él siguen como están.",
     "otherPartyLeftNegotiating": "{name} eliminó su cuenta, así que aquí ya no se puede acordar nada. Quien envió la propuesta puede retirarla; si no, caduca."
   },
   "home": {
-    "title": "Tus intercambios",
-    "start": "Iniciar un intercambio",
-    "empty": "Todavía no tienes intercambios. Inicia uno o abre un enlace de invitación que te hayan enviado.",
+    "title": "Tus yups",
+    "start": "Nuevo yup",
+    "empty": "Todavía no tienes yups. Inicia uno o abre un enlace de invitación que te hayan enviado.",
     "withParty": "Con {name}",
     "noParty": "Aún sin nombre de la otra parte",
     "reference": "Referencia {code}",
     "updated": "Actualizado el {date}",
-    "tooManyToday": "Ya iniciaste todos los intercambios que se permiten en un día. Inténtalo mañana.",
+    "tooManyToday": "Ya iniciaste todos los yups que se permiten en un día. Inténtalo mañana.",
     "groupOpen": "En curso",
     "groupDrafts": "Borradores, sin enviar",
     "groupClosed": "Cerrados",
-    "showClosed": "Mostrar los intercambios cerrados ({count})",
-    "hideClosed": "Ocultar los intercambios cerrados"
+    "showClosed": "Mostrar los yups cerrados ({count})",
+    "hideClosed": "Ocultar los yups cerrados"
   },
   "states": {
     "DRAFT": "Borrador, sin enviar",
@@ -311,7 +311,7 @@
     "REMOVED": "Eliminado"
   },
   "terms": {
-    "ownWords": "Los nombres, términos y descripciones que aparecen aquí son palabras de las propias partes. Exchange nunca las traduce ni las cambia.",
+    "ownWords": "Los nombres, términos y descripciones que aparecen aquí son palabras de las propias partes. Nunca las traducimos ni las cambiamos.",
     "partiesHeading": "Entre",
     "termsHeading": "Términos",
     "youProvide": "Lo que tú aportas",
@@ -329,10 +329,10 @@
     "overdue": "Atrasado",
     "timezone": "Las fechas están en la zona horaria {timezone}.",
     "fingerprint": "Huella de estos términos: {hash}",
-    "moneyOutside": "Se paga fuera de Exchange, como lo acuerden entre ustedes. Exchange no mueve dinero; solo registra lo que cada parte dice sobre este pago."
+    "moneyOutside": "Se paga fuera de nuestro servicio, como lo acuerden entre ustedes. No movemos dinero; solo registramos lo que cada parte dice sobre este pago."
   },
   "composer": {
-    "titleFirst": "Nuevo intercambio",
+    "titleFirst": "Nuevo yup",
     "titleCounter": "Proponer cambios",
     "titleAmend": "Proponer un cambio al acuerdo",
     "introFirst": "Escribe lo que hará cada parte. No se envía nada hasta que lo firmes.",
@@ -365,7 +365,7 @@
     "itemOption": "Elemento {number}: {description}",
     "itemOptionBlank": "Elemento {number}",
     "criteriaLabel": "Cómo sabrán ambas partes que está hecho (opcional)",
-    "requiredLabel": "El intercambio no está completo sin esto",
+    "requiredLabel": "El acuerdo no está completo sin esto",
     "locked": "Esto ya fue confirmado, así que no se puede cambiar ni quitar.",
     "noteLabel": "Mensaje para la otra parte (opcional)",
     "noteHint": "Se envía con los términos, pero no forma parte de lo que firmas.",
@@ -377,7 +377,7 @@
     "problems": {
       "PARTY_NAME_MISSING": "Escribe un nombre.",
       "NO_CONTRIBUTIONS": "Agrega al menos un elemento.",
-      "NO_REQUIRED_CONTRIBUTION": "Al menos un elemento tiene que ser obligatorio. Si no, el intercambio quedaría completo en el momento de acordarlo.",
+      "NO_REQUIRED_CONTRIBUTION": "Al menos un elemento tiene que ser obligatorio. Si no, el acuerdo quedaría completo en el momento de firmarlo.",
       "NOTE_TOO_LONG": "El mensaje no puede pasar de {max} caracteres.",
       "DESCRIPTION_MISSING": "Descríbelo.",
       "QUANTITY_INVALID": "Escribe la cantidad como un número, por ejemplo {example}, o deja vacías la cantidad y la unidad.",
@@ -392,12 +392,12 @@
     "yourNote": "Tu mensaje",
     "backToEdit": "Volver a editar",
     "signAndSend": "Firmar y enviar",
-    "conflict": "Este intercambio cambió mientras escribías. Tus cambios sin enviar se conservan. Compáralos con los términos más recientes antes de firmar.",
+    "conflict": "Este yup cambió mientras escribías. Tus cambios sin enviar se conservan. Compáralos con los términos más recientes antes de firmar.",
     "staleDraft": "Tienes cambios sin enviar que empezaste antes del último cambio en los términos.",
     "staleDraftKeep": "Conservar mis cambios",
     "staleDraftDiscard": "Empezar de nuevo desde los términos actuales",
-    "notAvailable": "Por ahora no hay nada que cambiar en este intercambio.",
-    "moneyOutside": "El dinero se paga fuera de Exchange, como lo acuerden entre ustedes. Exchange no lo mueve ni lo retiene; solo registra que una parte dice que lo pagó y la otra dice que lo recibió.",
+    "notAvailable": "Por ahora no hay nada que cambiar en este yup.",
+    "moneyOutside": "El dinero se paga fuera de nuestro servicio, como lo acuerden entre ustedes. No lo movemos ni lo retenemos; solo registramos que una parte dice que lo pagó y la otra dice que lo recibió.",
     "discard": "Descartar este borrador",
     "discardText": "No se ha enviado nada, así que nadie más lo ha visto. El borrador se cierra y sale de tu lista. No se puede reabrir.",
     "confirmDiscard": "Sí, descartarlo",
@@ -419,19 +419,19 @@
     "pendingReview": "Texto provisional, pendiente de revisión legal. No debe usarse para un acuerdo real.",
     "binding": "Al firmar, aceptas exactamente estos términos. Tu firma es electrónica y tiene la intención de obligarte igual que una firma a mano.",
     "electronic": "Aceptas firmar electrónicamente y recibir este acuerdo y sus registros en formato electrónico.",
-    "noJudge": "Exchange registra lo que ambas partes acordaron y lo que cada una informa. No guarda dinero, no decide disputas ni garantiza que alguien cumpla.",
+    "noJudge": "Registramos lo que ambas partes acordaron y lo que cada una informa. No guardamos dinero, no decidimos disputas ni garantizamos que alguien cumpla.",
     "agree": "Leí estos términos y los firmo."
   },
   "invitationLink": {
     "heading": "Enlace de invitación",
-    "intro": "Envíale este enlace a la otra parte tú mismo, por el medio que uses normalmente. Exchange no lo envía por ti.",
+    "intro": "Envíale este enlace a la otra parte tú mismo, por el medio que uses normalmente. Nosotros no lo enviamos por ti.",
     "shownOnce": "Este enlace se muestra solo esta vez. Si lo pierdes, puedes crear uno nuevo, y el anterior deja de funcionar.",
     "linkLabel": "Enlace",
     "copy": "Copiar enlace",
     "copied": "Copiado.",
     "copyFailed": "No se pudo copiar. Selecciona el enlace y cópialo tú mismo.",
     "share": "Compartir",
-    "shareText": "Te envié un intercambio para que lo revises.",
+    "shareText": "Te envié un yup para que lo revises.",
     "unclaimed": "Nadie se ha unido todavía a través de tu enlace de invitación. Puede que alguien haya leído la propuesta; unirse implica iniciar sesión.",
     "reissueIntro": "¿Perdiste el enlace o se lo enviaste a la persona equivocada? Crea uno nuevo. El enlace anterior deja de funcionar.",
     "forLabel": "Para quién es la invitación (opcional)",
@@ -439,45 +439,45 @@
     "reissue": "Crear un enlace nuevo"
   },
   "invitation": {
-    "title": "Te invitaron a un intercambio",
+    "title": "Tienes un yup para revisar",
     "intro": "{name} quiere acordar esto contigo. Léelo y luego inicia sesión para aceptarlo, rechazarlo o proponer cambios.",
     "introSignedIn": "{name} quiere acordar esto contigo. Léelo y luego responde para aceptarlo, rechazarlo o proponer cambios.",
-    "notBinding": "Nada te obliga hasta que firmes.",
+    "notBinding": "Nada te obliga hasta que firmes. Cuando ambos lo hayan firmado, este yup es un acuerdo vinculante.",
     "expires": "Esta propuesta está abierta hasta el {date}.",
     "bound": "Esta invitación es para una persona en particular. Inicia sesión con el correo electrónico o número de teléfono al que se envió.",
     "noteHeading": "Mensaje de {name}",
     "respond": "Iniciar sesión para responder",
     "respondAs": "Responder como {name}",
-    "opening": "Abriendo el intercambio…",
+    "opening": "Abriendo el yup…",
     "missingTitle": "Este enlace está incompleto",
     "missing": "El enlace de invitación perdió su última parte. Ábrelo de nuevo desde el mensaje en el que llegó, o pide uno nuevo a quien te lo envió.",
     "ownInvitation": "Este es tu propio enlace de invitación. Envíaselo a la otra parte; tú no puedes usarlo.",
-    "alreadyResponded": "Si ya respondiste a esta invitación, está entre tus intercambios."
+    "alreadyResponded": "Si ya respondiste a esta invitación, está entre tus yups."
   },
   "claimant": {
     "reject": "No es a quien invité",
     "rejectTitle": "¿No es a quien invitaste?",
-    "rejectRemoves": "{name} sale de este intercambio y ya no podrá verlo.",
+    "rejectRemoves": "{name} sale de este yup y ya no podrá verlo.",
     "rejectVoids": "Todo lo que haya firmado aquí queda sin efecto y nunca podrá tenerlo.",
     "rejectKeeps": "Tu propuesta sigue abierta. El enlace que enviaste no se puede volver a usar, así que crearás uno nuevo para la persona a la que querías invitar.",
-    "rejectQuiet": "No se le envía ningún mensaje al respecto. Para esa persona, el intercambio simplemente deja de estar ahí.",
+    "rejectQuiet": "No se le envía ningún mensaje al respecto. Para esa persona, el yup simplemente deja de estar ahí.",
     "confirmReject": "Sí, retirar a esa persona",
-    "rejected": "Esa persona ya no está en el intercambio, y nada de lo que firmó tiene efecto. Crea un enlace nuevo para la persona a la que querías invitar.",
-    "linkUsed": "El enlace que enviaste ya se usó y no se puede volver a usar. Ahora no hay nadie contigo en este intercambio.",
-    "limits": "Hasta que te confirme, no puedes rechazar estos términos ni proponer cambios. En cambio, puedes salir de este intercambio.",
-    "leave": "Salir de este intercambio",
-    "leaveText": "Dejarás de ver este intercambio, y el enlace que abriste no volverá a funcionar. A {name} se le avisa que saliste, y puede invitar a otra persona.",
+    "rejected": "Esa persona ya no está en el yup, y nada de lo que firmó tiene efecto. Crea un enlace nuevo para la persona a la que querías invitar.",
+    "linkUsed": "El enlace que enviaste ya se usó y no se puede volver a usar. Ahora no hay nadie contigo en este yup.",
+    "limits": "Hasta que te confirme, no puedes rechazar estos términos ni proponer cambios. En cambio, puedes salir de este yup.",
+    "leave": "Salir de este yup",
+    "leaveText": "Dejarás de ver este yup, y el enlace que abriste no volverá a funcionar. A {name} se le avisa que saliste, y puede invitar a otra persona.",
     "leaveVoids": "Todo lo que hayas firmado aquí queda sin efecto y nunca podrá tenerlo.",
     "confirmLeave": "Sí, salir",
     "invitationIntro": "{name} quiere acordar esto contigo. Léelo y luego inicia sesión para responder. Puedes firmarlo de inmediato. Para poder rechazarlo o proponer cambios, {name} tiene que confirmar antes que eres la persona a la que invitó.",
     "invitationIntroSignedIn": "{name} quiere acordar esto contigo. Léelo y luego responde. Puedes firmarlo de inmediato. Para poder rechazarlo o proponer cambios, {name} tiene que confirmar antes que eres la persona a la que invitó.",
-    "blockLeaves": "Sales de este intercambio y ya no podrás verlo. Todo lo que hayas firmado en él queda sin efecto.",
-    "blockedAfterLeaving": "Ya no estás en este intercambio.",
-    "voidSignature": "Firmada el {date} por alguien que había abierto la invitación y que fue retirado del intercambio, o salió de él, el {since}, antes de ser confirmado. Esta firma no tiene efecto: nunca lo tuvo y nunca podrá tenerlo."
+    "blockLeaves": "Sales de este yup y ya no podrás verlo. Todo lo que hayas firmado en él queda sin efecto.",
+    "blockedAfterLeaving": "Ya no estás en este yup.",
+    "voidSignature": "Firmada el {date} por alguien que había abierto la invitación y que fue retirado del yup, o salió de él, el {since}, antes de ser confirmado. Esta firma no tiene efecto: nunca lo tuvo y nunca podrá tenerlo."
   },
   "safety": {
     "heading": "Denunciar o bloquear",
-    "report": "Denunciar este intercambio",
+    "report": "Denunciar este yup",
     "reportProposal": "Denunciar esta propuesta",
     "reportIntro": "Cuéntanos qué está mal. Revisamos todas las denuncias. A {name} no se le avisa de que lo denunciaste.",
     "reportProposalIntro": "Cuéntanos qué está mal en esta propuesta. Revisamos todas las denuncias. A quien la envió no se le avisa de que la denunciaste.",
@@ -500,16 +500,16 @@
     "reportSent": "Recibimos tu denuncia y la vamos a revisar.",
     "tooManyReports": "Ya se enviaron todas las denuncias que se permiten en un día. Inténtalo mañana.",
     "block": "Bloquear a {name}",
-    "blockStops": "{name} no podrá unirse a un intercambio que tú inicies, y tú no podrás unirte a uno que inicie esa persona.",
+    "blockStops": "{name} no podrá unirse a un yup que tú inicies, y tú no podrás unirte a uno que inicie esa persona.",
     "blockEnds": "Toda propuesta que siga pendiente de firma entre ustedes se retira o se rechaza.",
     "blockKeeps": "Un acuerdo que ya firmaron ambas partes sigue vigente. Cualquiera de ustedes puede todavía completarlo o cerrarlo.",
     "blockQuiet": "A {name} no se le avisa del bloqueo.",
     "confirmBlock": "Sí, bloquear a {name}",
     "blocked": "Bloqueaste a {name}.",
     "unblock": "Desbloquear a {name}",
-    "unblocked": "Desbloqueaste a {name}. Pueden volver a iniciar intercambios entre ustedes. Lo que terminó con el bloqueo sigue terminado.",
+    "unblocked": "Desbloqueaste a {name}. Pueden volver a iniciar yups entre ustedes. Lo que terminó con el bloqueo sigue terminado.",
     "blockedHeading": "Personas que bloqueaste",
-    "blockedIntro": "Una persona bloqueada no puede unirse a un intercambio que tú inicies, y tú no puedes unirte a uno que inicie ella. No se le avisa.",
+    "blockedIntro": "Una persona bloqueada no puede unirse a un yup que tú inicies, y tú no puedes unirte a uno que inicie ella. No se le avisa.",
     "blockedEmpty": "No has bloqueado a nadie.",
     "blockedSince": "Bloqueo del {date}"
   },
@@ -525,7 +525,7 @@
       "invalid": "Eso no es un enlace de invitación. Copia el enlace completo del mensaje en el que llegó y pégalo aquí."
     },
     "record": {
-      "openHint": "Todo lo que se envió, se firmó y se registró en este intercambio, para leerlo aquí y para compartirlo o guardarlo como archivo.",
+      "openHint": "Todo lo que se envió, se firmó y se registró, para leerlo aquí y para compartirlo o guardarlo como archivo.",
       "share": "Compartir o guardar una copia (JSON)",
       "shareHint": "La copia es un archivo con todo lo que hay en esta pantalla, incluidos los términos y los dos nombres. Cualquier persona a la que se la envíes podrá leerlo todo.",
       "shareUnavailable": "Este dispositivo no puede compartir ni guardar un archivo desde aquí. Puedes descargar una copia en la web.",
@@ -539,22 +539,22 @@
       "change": "Vence el {date}. Cambiar la fecha."
     },
     "invited": {
-      "heading": "¿Te invitaron a un intercambio?",
+      "heading": "¿Te enviaron un yup?",
       "intro": "Puedes leer una propuesta antes de iniciar sesión. Abre el enlace que te enviaron o pégalo aquí."
     }
   },
   "exchange": {
-    "title": "Intercambio con {name}",
-    "titleNoName": "Intercambio",
+    "title": "Yup con {name}",
+    "titleNoName": "Yup",
     "refresh": "Buscar novedades",
-    "updated": "Este intercambio se actualizó.",
-    "newer": "Este intercambio cambió desde que lo abriste.",
+    "updated": "Este yup se actualizó.",
+    "newer": "Este yup cambió desde que lo abriste.",
     "showLatest": "Mostrar lo más reciente",
     "claimedHeading": "Confirma quién abrió tu enlace",
     "claimedBody": "Alguien inició sesión y abrió tu invitación: {name}, {identifier}. ¿Es la persona a la que querías invitar?",
     "claimedSigned": "Esa persona ya firmó. Su firma surte efecto cuando confirmes.",
     "confirmCounterparty": "Sí, es a quien invité",
-    "notThem": "Si no lo es, dilo. Esa persona sale del intercambio, y puedes enviar un enlace nuevo a la persona a la que querías invitar.",
+    "notThem": "Si no lo es, dilo. Esa persona sale del yup, y puedes enviar un enlace nuevo a la persona a la que querías invitar.",
     "waitingConfirmation": "{name} todavía no ha confirmado que eres la persona a la que invitó. Puedes firmar ahora; tu firma surte efecto cuando lo confirme.",
     "waitingConfirmationSigned": "Ya firmaste. Tu firma surte efecto cuando {name} confirme que eres la persona a la que invitó.",
     "proposalHeading": "Propuesta pendiente de firma",
@@ -575,9 +575,9 @@
     "withdraw": "Retirar",
     "change": "Cambiar tu propuesta",
     "acceptBlocked": "Confirma quién es la otra parte antes de firmar.",
-    "declineEnds": "Rechazarla termina este intercambio. No se puede reabrir.",
+    "declineEnds": "Rechazarla termina este yup. No se puede reabrir.",
     "declineKeeps": "Rechazarla deja el acuerdo como está.",
-    "withdrawEnds": "Retirarla termina este intercambio. No se puede reabrir.",
+    "withdrawEnds": "Retirarla termina este yup. No se puede reabrir.",
     "withdrawKeeps": "Retirarla deja el acuerdo como está.",
     "confirmDecline": "Sí, rechazar",
     "confirmWithdraw": "Sí, retirar",
@@ -606,26 +606,26 @@
     "noteLabel": "Nota (opcional)",
     "reasonLabel": "Qué está mal",
     "remedyLabel": "Qué hiciste al respecto",
-    "noteRecord": "Se guarda en el registro de este intercambio.",
+    "noteRecord": "Se guarda en el registro de este acuerdo.",
     "noteRequired": "Primero escribe unas palabras.",
-    "endingHeading": "Terminar el intercambio",
+    "endingHeading": "Terminar el acuerdo",
     "proposeEnd": "Proponer terminar de común acuerdo",
-    "proposeEndText": "Si {name} acepta, el intercambio termina y se dispensa todo lo que siga pendiente.",
+    "proposeEndText": "Si {name} acepta, el acuerdo termina y se dispensa todo lo que siga pendiente.",
     "sendEndProposal": "Proponer terminar",
-    "endProposedByYou": "Propusiste terminar este intercambio. {name} aún no ha respondido.",
-    "endProposedByOther": "{name} propuso terminar este intercambio.",
+    "endProposedByYou": "Propusiste terminar este acuerdo. {name} aún no ha respondido.",
+    "endProposedByOther": "{name} propuso terminar este acuerdo.",
     "cancelEnd": "Retirar la propuesta",
     "declineEnd": "No terminarlo",
     "agreeEnd": "Aceptar terminar",
-    "agreeEndText": "Aceptar termina el intercambio ahora y dispensa todo lo que siga pendiente. No se puede deshacer.",
-    "confirmAgreeEnd": "Sí, terminar el intercambio",
+    "agreeEndText": "Aceptar termina el acuerdo ahora y dispensa todo lo que siga pendiente. No se puede deshacer.",
+    "confirmAgreeEnd": "Sí, terminar el acuerdo",
     "requestClose": "Cerrar sin acuerdo",
-    "requestCloseText": "Para cuando no pueden resolver las cosas entre ustedes. {name} tiene un plazo para responder. Después, el intercambio se cierra sin resolver y cada elemento conserva el estado que tenga. Hasta entonces puedes retirar la solicitud.",
+    "requestCloseText": "Para cuando no pueden resolver las cosas entre ustedes. {name} tiene un plazo para responder. Después, el acuerdo se cierra sin resolver y cada elemento conserva el estado que tenga. Hasta entonces puedes retirar la solicitud.",
     "statementLabel": "Tu declaración (opcional)",
     "statementRequiredLabel": "Tu declaración",
     "sendCloseRequest": "Pedir el cierre",
-    "closeRequestedByYou": "El {date} pediste cerrar este intercambio. Se cierra sin resolver cuando se acabe el plazo para responder, a menos que retires la solicitud o que entre ustedes resuelvan lo pendiente.",
-    "closeRequestedByOther": "El {date}, {name} pidió cerrar este intercambio. Se cierra sin resolver cuando se acabe el plazo para responder. Puedes agregar una declaración, resolver lo pendiente o proponer terminar de común acuerdo.",
+    "closeRequestedByYou": "El {date} pediste cerrar este acuerdo. Se cierra sin resolver cuando se acabe el plazo para responder, a menos que retires la solicitud o que entre ustedes resuelvan lo pendiente.",
+    "closeRequestedByOther": "El {date}, {name} pidió cerrar este acuerdo. Se cierra sin resolver cuando se acabe el plazo para responder. Puedes agregar una declaración, resolver lo pendiente o proponer terminar de común acuerdo.",
     "retractClose": "Retirar la solicitud",
     "addStatement": "Agregar una declaración",
     "sendStatement": "Agregar al registro",
@@ -639,15 +639,15 @@
       "WAIVE": "Dispensar"
     },
     "moneyMoveText": {
-      "CLAIM": "Esto registra que le pagaste a {name} fuera de Exchange. Exchange no mueve ni retiene dinero. Solo {name} puede confirmar que lo recibió.",
+      "CLAIM": "Esto registra que le pagaste a {name} fuera de nuestro servicio. No movemos ni retenemos dinero. Solo {name} puede confirmar que lo recibió.",
       "RECLAIM": "Explica qué hiciste respecto a la disputa. Se le pedirá a {name} que confirme de nuevo que lo recibió.",
       "RETRACT_CLAIM": "Esto lo regresa a aún sin pagar.",
       "CONFIRM": "Esto registra que recibiste el dinero. Confirmar es definitivo. No se puede deshacer.",
       "DISPUTE": "Explica qué está mal. {name} puede corregirlo y registrar el pago de nuevo.",
       "WAIVE": "Dispensarlo libera a {name} de pagar esto. No se puede deshacer."
     },
-    "waitingLong": "{name} no ha confirmado esto desde que lo marcaste como entregado el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrar el intercambio sin acuerdo; el registro mostrará entonces esto como entregado pero sin confirmar.",
-    "waitingLongMoney": "{name} no ha confirmado haber recibido esto desde que registraste el pago el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrar el intercambio sin acuerdo; el registro mostrará entonces esto como pagado pero sin confirmar.",
+    "waitingLong": "{name} no ha confirmado esto desde que lo marcaste como entregado el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrarlo sin acuerdo; el registro mostrará entonces esto como entregado pero sin confirmar.",
+    "waitingLongMoney": "{name} no ha confirmado haber recibido esto desde que registraste el pago el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrarlo sin acuerdo; el registro mostrará entonces esto como pagado pero sin confirmar.",
     "closeRequestLapses": "Si nada cambia, se cierra el {date}."
   },
   "record": {
@@ -655,12 +655,12 @@
     "historyEmpty": "Todavía no ha pasado nada.",
     "historyEarlier": "Mostrar las entradas anteriores",
     "open": "Abrir el registro completo",
-    "openHint": "Todo lo que se envió, se firmó y se registró en este intercambio, para leerlo, imprimirlo o descargarlo.",
-    "title": "Registro del intercambio {code}",
-    "back": "Volver al intercambio",
+    "openHint": "Todo lo que se envió, se firmó y se registró, para leerlo, imprimirlo o descargarlo.",
+    "title": "Registro {code}",
+    "back": "Volver al yup",
     "print": "Imprimir o guardar como PDF",
     "download": "Descargar una copia (JSON)",
-    "fileName": "registro-de-intercambio-{code}",
+    "fileName": "registro-de-acuerdo-{code}",
     "madeFor": "Esta copia se hizo para {name} el {date}.",
     "timesIn": "Las horas se muestran en la zona horaria {timezone}.",
     "summaryHeading": "Resumen",
@@ -669,8 +669,8 @@
     "agreementIs": "El acuerdo es la versión {number}.",
     "agreementNone": "Ninguna versión ha sido firmada por ambas partes.",
     "waiting": "La versión {number} está pendiente de firma.",
-    "endProposed": "{name} propuso terminar el intercambio de común acuerdo.",
-    "closeRequested": "El {date}, {name} pidió cerrar el intercambio sin acuerdo.",
+    "endProposed": "{name} propuso terminarlo de común acuerdo.",
+    "closeRequested": "El {date}, {name} pidió cerrarlo sin acuerdo.",
     "closedReasons": {
       "WITHDRAWN": "La propuesta fue retirada por la parte que la envió.",
       "DECLINED": "La propuesta fue rechazada.",
@@ -696,7 +696,7 @@
       "IN_FORCE": "Firmada por ambas partes. Este es el acuerdo.",
       "REPLACED": "Firmada por ambas partes. Fue el acuerdo hasta que una versión posterior la reemplazó.",
       "SUPERSEDED": "Reemplazada por una versión posterior antes de que ambas partes la firmaran.",
-      "VOIDED": "Seguía sin la firma de ambas partes cuando se cerró el intercambio.",
+      "VOIDED": "Seguía sin la firma de ambas partes cuando se cerró.",
       "DECLINED": "Rechazada.",
       "WITHDRAWN": "Retirada por la parte que la envió.",
       "EXPIRED": "Venció antes de que ambas partes la firmaran."
@@ -712,9 +712,9 @@
     },
     "events": {
       "you": {
-        "COUNTERPARTY_CLAIMED": "Abriste la invitación y te uniste al intercambio.",
+        "COUNTERPARTY_CLAIMED": "Abriste la invitación y te uniste como la parte invitada.",
         "COUNTERPARTY_CONFIRMED": "Confirmaste que la persona que se unió es a quien invitaste.",
-        "COUNTERPARTY_REJECTED": "Dijiste que la persona que había abierto la invitación no era a quien invitaste. Esa persona salió del intercambio, y todo lo que firmó quedó sin efecto.",
+        "COUNTERPARTY_REJECTED": "Dijiste que la persona que había abierto la invitación no era a quien invitaste. Esa persona fue retirada, y todo lo que firmó quedó sin efecto.",
         "REVISION_SENT": "Enviaste la versión {number} y, al enviarla, la firmaste.",
         "REVISION_ACCEPTED": "Firmaste la versión {number}.",
         "REVISION_DECLINED": "Rechazaste la versión {number}.",
@@ -724,16 +724,16 @@
         "CONTRIBUTION_CONFIRMED": "Confirmaste haber recibido esto:",
         "CONTRIBUTION_DISPUTED": "Disputaste esto:",
         "CONTRIBUTION_WAIVED": "Dispensaste esto:",
-        "END_PROPOSED": "Propusiste terminar el intercambio de común acuerdo.",
-        "END_PROPOSAL_CANCELLED": "Dejaste sin efecto la propuesta de terminar el intercambio de común acuerdo.",
-        "CLOSE_REQUESTED": "Pediste cerrar el intercambio sin acuerdo.",
-        "CLOSE_REQUEST_RETRACTED": "Retiraste la solicitud de cerrar el intercambio.",
+        "END_PROPOSED": "Propusiste terminarlo de común acuerdo.",
+        "END_PROPOSAL_CANCELLED": "Dejaste sin efecto la propuesta de terminarlo de común acuerdo.",
+        "CLOSE_REQUESTED": "Pediste cerrarlo sin acuerdo.",
+        "CLOSE_REQUEST_RETRACTED": "Retiraste la solicitud de cerrarlo.",
         "STATEMENT_ADDED": "Agregaste una declaración."
       },
       "named": {
-        "COUNTERPARTY_CLAIMED": "{name} abrió la invitación y se unió al intercambio.",
+        "COUNTERPARTY_CLAIMED": "{name} abrió la invitación y se unió como la parte invitada.",
         "COUNTERPARTY_CONFIRMED": "{name} confirmó que la persona que se unió es a quien invitó.",
-        "COUNTERPARTY_REJECTED": "{name} dijo que la persona que había abierto la invitación no era a quien invitó. Esa persona salió del intercambio, y todo lo que firmó quedó sin efecto.",
+        "COUNTERPARTY_REJECTED": "{name} dijo que la persona que había abierto la invitación no era a quien invitó. Esa persona fue retirada, y todo lo que firmó quedó sin efecto.",
         "REVISION_SENT": "{name} envió la versión {number} y, al enviarla, la firmó.",
         "REVISION_ACCEPTED": "{name} firmó la versión {number}.",
         "REVISION_DECLINED": "{name} rechazó la versión {number}.",
@@ -743,29 +743,29 @@
         "CONTRIBUTION_CONFIRMED": "{name} confirmó haber recibido esto:",
         "CONTRIBUTION_DISPUTED": "{name} disputó esto:",
         "CONTRIBUTION_WAIVED": "{name} dispensó esto:",
-        "END_PROPOSED": "{name} propuso terminar el intercambio de común acuerdo.",
-        "END_PROPOSAL_CANCELLED": "{name} dejó sin efecto la propuesta de terminar el intercambio de común acuerdo.",
-        "CLOSE_REQUESTED": "{name} pidió cerrar el intercambio sin acuerdo.",
-        "CLOSE_REQUEST_RETRACTED": "{name} retiró la solicitud de cerrar el intercambio.",
+        "END_PROPOSED": "{name} propuso terminarlo de común acuerdo.",
+        "END_PROPOSAL_CANCELLED": "{name} dejó sin efecto la propuesta de terminarlo de común acuerdo.",
+        "CLOSE_REQUESTED": "{name} pidió cerrarlo sin acuerdo.",
+        "CLOSE_REQUEST_RETRACTED": "{name} retiró la solicitud de cerrarlo.",
         "STATEMENT_ADDED": "{name} agregó una declaración."
       },
       "formerClaimant": {
-        "COUNTERPARTY_CLAIMED": "Alguien abrió la invitación y se unió al intercambio. Esa persona fue retirada después, o salió, antes de ser confirmada.",
-        "REVISION_SENT": "La persona que había abierto la invitación envió la versión {number}. Ya no forma parte del intercambio.",
-        "REVISION_ACCEPTED": "La persona que había abierto la invitación firmó la versión {number}. Ya no forma parte del intercambio, y esa firma no tiene efecto."
+        "COUNTERPARTY_CLAIMED": "Alguien abrió la invitación y se unió como la parte invitada. Esa persona fue retirada después, o salió, antes de ser confirmada.",
+        "REVISION_SENT": "La persona que había abierto la invitación envió la versión {number}. Ya no participa.",
+        "REVISION_ACCEPTED": "La persona que había abierto la invitación firmó la versión {number}. Ya no participa, y esa firma no tiene efecto."
       },
       "neutral": {
-        "COUNTERPARTY_RELEASED": "La persona que había abierto la invitación salió del intercambio antes de ser confirmada. Todo lo que firmó quedó sin efecto.",
+        "COUNTERPARTY_RELEASED": "La persona que había abierto la invitación salió antes de ser confirmada. Todo lo que firmó quedó sin efecto.",
         "REVISION_SUPERSEDED": "La versión {number} quedó sin efecto antes de que ambas partes la firmaran.",
         "REVISION_EXPIRED": "La versión {number} venció antes de que ambas partes la firmaran.",
         "AGREEMENT_IN_FORCE": "La versión {number}, ya firmada por ambas partes, pasó a ser el acuerdo.",
-        "INACTIVITY_PROMPTED": "Después de mucho tiempo sin actividad, se preguntó a ambas partes si el intercambio seguía en curso."
+        "INACTIVITY_PROMPTED": "Después de mucho tiempo sin actividad, se preguntó a ambas partes si el acuerdo seguía en curso."
       },
       "closed": {
-        "NOT_AGREED": "El intercambio se cerró sin acuerdo.",
-        "COMPLETED": "El intercambio se completó: todos los elementos obligatorios habían sido confirmados o dispensados.",
-        "ENDED_BY_AGREEMENT": "El intercambio se terminó de común acuerdo. Se dispensó todo lo que seguía pendiente.",
-        "UNRESOLVED": "El intercambio se cerró sin resolver. Cada elemento conservó el estado que tenía."
+        "NOT_AGREED": "Se cerró sin acuerdo.",
+        "COMPLETED": "El acuerdo se completó: todos los elementos obligatorios habían sido confirmados o dispensados.",
+        "ENDED_BY_AGREEMENT": "Ambas partes acordaron terminar el acuerdo. Se dispensó todo lo que seguía pendiente.",
+        "UNRESOLVED": "El acuerdo se cerró sin resolver. Cada elemento conservó el estado que tenía."
       },
       "moneyYou": {
         "CONTRIBUTION_CLAIMED": "Registraste el pago de esto:",
@@ -783,7 +783,7 @@
       }
     },
     "export": {
-      "about": "Esta es una copia del registro de un intercambio, tal como lo tenía el servicio cuando se hizo la copia. Lo que escribieron las partes aparece exactamente como lo escribieron.",
+      "about": "Esta es una copia del registro de un acuerdo o una propuesta, tal como lo tenía el servicio cuando se hizo la copia. Lo que escribieron las partes aparece exactamente como lo escribieron.",
       "signatures": "Cada firma la hizo una persona que había iniciado sesión en una cuenta. La única comprobación de quién es esa persona fue un solo código de un solo uso, enviado a una dirección de correo electrónico o a un número de teléfono, que ingresó al iniciar sesión. Eso pudo ocurrir algún tiempo antes de firmar. No se pidió ninguna otra prueba de identidad.",
       "statements": "Marcar algo como entregado, confirmarlo, disputarlo o dispensarlo, y cada nota, motivo y declaración, son lo que las propias partes registraron. El servicio los guardó tal como se hicieron y no comprobó si alguno es cierto.",
       "contentHash": "La huella de una versión es el resumen SHA-256, escrito en hexadecimal, de sus términos firmados como JSON canónico (RFC 8785) en UTF-8. En una copia descargada, los términos firmados son la parte «signed» de cada revisión y la huella es su «content_hash», así que cualquiera puede calcularla de nuevo y comparar. El mensaje enviado con una versión y la fecha hasta la que sigue abierta no forman parte de lo que se firma.",
@@ -817,20 +817,20 @@
       "outcome": {
         "CONFIRMED": "Entregado, y {name} confirmó que lo recibió.",
         "WAIVED": "{name} lo dispensó y liberó a {provider} de aportarlo.",
-        "WAIVED_BY_ENDING": "Dispensado cuando el intercambio terminó de común acuerdo.",
+        "WAIVED_BY_ENDING": "Dispensado cuando ambas partes acordaron terminarlo.",
         "DISPUTED": "{name} lo disputó. Lo que dijo cada parte está en el historial de abajo.",
         "CLAIMED": "{name} lo marcó como entregado. {other} no lo ha confirmado.",
         "OUTSTANDING": "Aún sin entregar.",
-        "OUTSTANDING_CLOSED": "Nunca se marcó como entregado antes de que se cerrara el intercambio."
+        "OUTSTANDING_CLOSED": "Nunca se marcó como entregado antes del cierre."
       },
       "moneyOutcome": {
         "CONFIRMED": "Pagado, y {name} confirmó que lo recibió.",
         "WAIVED": "{name} lo dispensó y liberó a {provider} de pagarlo.",
-        "WAIVED_BY_ENDING": "Dispensado cuando el intercambio terminó de común acuerdo.",
+        "WAIVED_BY_ENDING": "Dispensado cuando ambas partes acordaron terminarlo.",
         "DISPUTED": "{name} lo disputó. Lo que dijo cada parte está en el historial de abajo.",
         "CLAIMED": "{name} registró que lo pagó. {other} no ha confirmado que lo recibió.",
         "OUTSTANDING": "Aún sin pagar.",
-        "OUTSTANDING_CLOSED": "Nunca se registró como pagado antes de que se cerrara el intercambio."
+        "OUTSTANDING_CLOSED": "Nunca se registró como pagado antes del cierre."
       },
       "savePdf": "Guardar como PDF",
       "savePdfHint": "Se abre la ventana de impresión del navegador. Elige “Guardar como PDF” como impresora para conservar esta página, con el resumen y el registro completo, como archivo."
@@ -843,7 +843,7 @@
     "CONTRIBUTION_LOCKED": "Este elemento ya fue aceptado y no se puede cambiar.",
     "REVISION_EXPIRED": "Esta oferta ha vencido. Pide una nueva o envía la tuya.",
     "COUNTERPARTY_NOT_CONFIRMED": "Confirma quién es la otra parte antes de aceptar.",
-    "AWAITING_CONFIRMATION": "Podrás hacerlo cuando la persona que te invitó te haya confirmado. Hasta entonces puedes firmar los términos o salir del intercambio.",
+    "AWAITING_CONFIRMATION": "Podrás hacerlo cuando la persona que te invitó te haya confirmado. Hasta entonces puedes firmar los términos o salir.",
     "INVALID_REVISION": "Hay que corregir algunos términos antes de enviar.",
     "INVALID_REQUEST": "Algo en la solicitud no es correcto. Revísalo e inténtalo de nuevo.",
     "INVALID_IDENTIFIER": "Escribe un correo electrónico válido o un número de teléfono con su código de país.",
@@ -853,7 +853,7 @@
     "UNAUTHENTICATED": "Inicia sesión para continuar.",
     "ACCOUNT_SUSPENDED": "Esta cuenta ha sido suspendida.",
     "IDENTIFIER_IN_USE": "Ese correo electrónico o número de teléfono pertenece a otra cuenta.",
-    "VERSION_CONFLICT": "Este intercambio cambió mientras lo revisabas. Revísalo e inténtalo de nuevo.",
+    "VERSION_CONFLICT": "Esto cambió mientras lo revisabas. Revísalo e inténtalo de nuevo.",
     "PROFILE_INCOMPLETE": "Agrega tu nombre y confirma que tienes 18 años o más antes de firmar.",
     "CONSENT_OUTDATED": "Los términos de firma se actualizaron. Revísalos antes de firmar.",
     "INVITATION_UNAVAILABLE": "Este enlace de invitación ya no es válido. Pide uno nuevo a quien te lo envió.",
@@ -865,7 +865,7 @@
     "INTERNAL": "Algo salió mal de nuestro lado. Inténtalo de nuevo."
   },
   "a11y": {
-    "openExchange": "Abre este intercambio.",
+    "openExchange": "Abre este yup.",
     "required": "Obligatorio.",
     "signNeedsAgreement": "Disponible cuando confirmes, arriba, que leíste estos términos y los firmas.",
     "earlierAdded": "{count, plural, one {# entrada anterior agregada al historial.} other {# entradas anteriores agregadas al historial.}}"
@@ -891,15 +891,15 @@
       "DISPUTE": "Disputarlo registra que no lo aceptas como hecho. Nadie queda liberado: {name} puede corregirlo y marcarlo como entregado de nuevo.",
       "WAIVE": "Dispensarlo libera a {name} de ese elemento, para siempre. Todo lo demás sigue como se acordó.",
       "RECLAIM": "Marcarlo como entregado de nuevo, con lo que hiciste al respecto, le pide a {name} que lo confirme. Nadie queda liberado.",
-      "PROPOSE_END": "Si {name} acepta, el intercambio termina y los dos quedan liberados de todo lo que siga pendiente.",
-      "AGREE_END": "{name} propuso terminar. Aceptar termina el intercambio ahora y los libera a los dos de todo lo que siga pendiente.",
-      "REQUEST_CLOSE": "Nadie queda liberado. {name} tiene un plazo para responder; después, el intercambio se cierra sin resolver y el registro conserva cada elemento tal como esté.",
+      "PROPOSE_END": "Si {name} acepta, el acuerdo termina y los dos quedan liberados de todo lo que siga pendiente.",
+      "AGREE_END": "{name} propuso terminar. Aceptar termina el acuerdo ahora y los libera a los dos de todo lo que siga pendiente.",
+      "REQUEST_CLOSE": "Nadie queda liberado. {name} tiene un plazo para responder; después, el acuerdo se cierra sin resolver y el registro conserva cada elemento tal como esté.",
       "AMEND": "Un cambio solo entra en vigor cuando {name} también lo firma. Hasta entonces, el acuerdo sigue como está."
     },
     "nothingTheyOwe": "{name} no tiene nada pendiente que puedas disputar o dispensar.",
     "nothingInDoubt": "Ahora mismo no hay nada marcado como entregado ni en disputa.",
     "endPending": "Ya propusiste terminar. {name} todavía no ha respondido.",
-    "closePending": "Ya hay una solicitud abierta para cerrar sin acuerdo. La encontrarás en “Terminar el intercambio”.",
+    "closePending": "Ya hay una solicitud abierta para cerrar sin acuerdo. La encontrarás en “Terminar el acuerdo”.",
     "amendPending": "Ya hay un cambio propuesto esperando firma, más arriba."
   },
   "dispute": {
