@@ -39,6 +39,35 @@ export const ana: Account = {
 
 const PARTIES = { A: 'Ana Ruiz', B: 'Ben Ortiz' }
 
+/**
+ * Text in the data below that may show on a screen without coming from the
+ * wording (`pseudo.test.tsx`): what people wrote or chose, and what the
+ * service writes in the reader's language. Keep it in step with the data.
+ */
+export const STAND_IN_TEXT: readonly string[] = [
+  'Ana Ruiz',
+  'Ben Ortiz',
+  'Here is what we talked about on Tuesday.',
+  'Repair the back fence and the gate',
+  'Repair the back fence.',
+  'Repair the back fence',
+  'The gate closes and latches.',
+  'Payment for the repair',
+  'Paint the gate',
+  'Finished on Monday.',
+  // The exchange's currency and time zone, chosen by whoever started it.
+  'USD',
+  'America/Chicago',
+  // The record's notices and how a signature was checked come from the service.
+  'about, from the service',
+  'signatures, from the service',
+  'statements, from the service',
+  'content hash, from the service',
+  'described by the record',
+  // The version of the consent wording a signature was given under.
+  'draft-1',
+]
+
 export const revision: RevisionView = {
   id: 'c0000000-0000-4000-8000-000000000001',
   sequence: 1,

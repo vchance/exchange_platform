@@ -24,6 +24,8 @@ export interface Person {
 interface PersonOptions {
   /** The browser's language. English unless given. */
   locale?: string
+  /** The window's size, in CSS pixels. Playwright's desktop default unless given. */
+  viewport?: { width: number; height: number }
 }
 
 interface Fixtures {
@@ -43,6 +45,7 @@ export const test = base.extend<Fixtures>({
       const context = await browser.newContext({
         baseURL,
         locale: options.locale ?? 'en-US',
+        ...(options.viewport ? { viewport: options.viewport } : {}),
         timezoneId: 'UTC',
         permissions: ['clipboard-read', 'clipboard-write'],
       })

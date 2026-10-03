@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
 import { entryPagesPlugin } from './build/entry-pages.ts'
+import { MANIFEST_IN_BUILD, manifestOutPlugin } from './build/manifest.ts'
 
 // The build names itself to the service on every request, so a build too old
 // to act can be told so (`CLIENT_TOO_OLD`). The version is the package's.
@@ -21,9 +22,13 @@ const api = process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080'
 
 const wording = fileURLToPath(new URL('../../packages/shared/wording', import.meta.url))
 
+// Read by `scripts/check-budget.mjs`; kept out of `dist`, which is served.
+const manifest = fileURLToPath(new URL('./.build/manifest.json', import.meta.url))
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), entryPagesPlugin(wording)],
+  plugins: [react(), entryPagesPlugin(wording), manifestOutPlugin(manifest)],
+  build: { manifest: MANIFEST_IN_BUILD },
   define: { __WEB_VERSION__: JSON.stringify(version) },
   server: {
     proxy: {

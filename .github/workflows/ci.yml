@@ -132,8 +132,15 @@ jobs:
         run: npm test
 
       - name: Build the web app
+        id: build-web
         if: ${{ !cancelled() }}
         run: npm run build:web
+
+      # Fails when the invitation page outgrows apps/web/budget.json; prints
+      # what it loads, and the main app's size for information.
+      - name: Invitation page size budget
+        if: ${{ !cancelled() && steps.build-web.outcome == 'success' }}
+        run: npm run budget -w @yuppers/web
 
   # The mobile app's native configuration, checked before anyone builds it:
   # Expo's own checks of the dependencies and the app config, and the iOS and
