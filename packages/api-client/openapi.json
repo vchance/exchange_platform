@@ -65,7 +65,7 @@
             "description": "A code was sent"
           },
           "422": {
-            "description": "Not an email address or phone number",
+            "description": "Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1706,7 +1706,7 @@
             }
           },
           "422": {
-            "description": "The account has no such identifier",
+            "description": "The account has no such identifier (`INVALID_REQUEST`), or its phone number is of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1733,7 +1733,8 @@
         "tags": [
           "devices"
         ],
-        "summary": "Registers this device for push notifications, under the session making\nthe request, or updates it if it is registered already. A token is one\ndevice: registered by another account before, it now belongs to this one.",
+        "summary": "Registers this device for push notifications, under the session making\nthe request, or updates it if it is registered already.",
+        "description": "A token is one device, and it moves to this session only if it is not\nregistered, is registered by the same account, or is registered under a\nsession that has ended (signed out, revoked or expired): the same phone\nsigned into another account afterwards. Registered under another\naccount's live session, it stays where it is, so that someone who has\nlearned a token cannot take another person's notifications. That is\nanswered exactly as a registration is, with the device's ID, which this\naccount cannot use; a different answer would say that the token belongs\nto someone. The cost falls on a phone handed on without signing out: it\nis notified for the old account until that session ends (at most the\nsession's lifetime), and the app's next registration after that takes it.",
         "operationId": "register_device",
         "requestBody": {
           "content": {
@@ -1747,7 +1748,7 @@
         },
         "responses": {
           "200": {
-            "description": "The device, registered",
+            "description": "The device, registered (or, if another account's live session holds the token, left as it was and answered the same)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1863,7 +1864,7 @@
             }
           },
           "422": {
-            "description": "Not an email address or phone number",
+            "description": "Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2671,6 +2672,7 @@
           "INVALID_REVISION",
           "INVALID_REQUEST",
           "INVALID_IDENTIFIER",
+          "PHONE_COUNTRY_NOT_SERVED",
           "INVALID_CODE",
           "TOO_MANY_REQUESTS",
           "TOO_MANY_GUESSES",

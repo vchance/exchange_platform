@@ -55,7 +55,7 @@ pub struct RequestDeletionCode {
     responses(
         (status = 204, description = "A code was sent"),
         (status = 401, description = "Not signed in", body = ErrorBody),
-        (status = 422, description = "The account has no such identifier", body = ErrorBody),
+        (status = 422, description = "The account has no such identifier (`INVALID_REQUEST`), or its phone number is of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)", body = ErrorBody),
         (status = 429, description = "Too many deletion codes requested by this account", body = ErrorBody)
     )
 )]

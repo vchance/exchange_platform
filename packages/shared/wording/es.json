@@ -932,6 +932,7 @@
     "INVALID_REVISION": "Hay que corregir algunos términos antes de enviar.",
     "INVALID_REQUEST": "Algo en la solicitud no es correcto. Revísalo e inténtalo de nuevo.",
     "INVALID_IDENTIFIER": "Escribe un correo electrónico válido o un número de teléfono con su código de país.",
+    "PHONE_COUNTRY_NOT_SERVED": "Todavía no podemos enviar códigos a teléfonos de ese país. Usa un correo electrónico.",
     "INVALID_CODE": "Ese código no funcionó. Revísalo o pide uno nuevo.",
     "TOO_MANY_REQUESTS": "Demasiadas solicitudes en poco tiempo. Espera un momento e inténtalo de nuevo.",
     "TOO_MANY_GUESSES": "Se han introducido demasiados códigos incorrectos hoy. Por seguridad, no se podrán usar códigos hasta mañana.",

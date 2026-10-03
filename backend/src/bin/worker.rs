@@ -204,6 +204,12 @@ async fn main() -> anyhow::Result<()> {
                     Ok(removed) => tracing::info!(removed, "devices of ended sessions removed"),
                     Err(error) => tracing::error!(error = %Redacted(&error), "device purge failed"),
                 }
+                // Whether or not receipts can be read, or push is on.
+                match push::purge_tickets(&db, &receipt_rules, OffsetDateTime::now_utc()).await {
+                    Ok(0) => {}
+                    Ok(removed) => tracing::info!(removed, "push tickets past their receipts removed"),
+                    Err(error) => tracing::error!(error = %Redacted(&error), "push ticket purge failed"),
+                }
                 if let Some(wallet) = &wallet {
                     match deliver_wallet_updates(&db, &rules, wallet, OffsetDateTime::now_utc()).await {
                         Ok(updated) if updated.handled() == 0 => {}

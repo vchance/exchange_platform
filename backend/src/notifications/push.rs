@@ -670,6 +670,25 @@ async fn forget_ticket(conn: &mut PgConnection, id: &str) -> Result<(), sqlx::Er
     Ok(())
 }
 
+/// Forgets tickets older than [`ReceiptRules::keep`], whose receipts the
+/// push service no longer has. [`check_receipts`] forgets them too, but only
+/// on a pass where the service answered and only the oldest batch; this runs
+/// on its own, so the table stays bounded while receipts cannot be read or
+/// push has been turned off. Returns how many were removed. Called by the
+/// worker.
+pub async fn purge_tickets(
+    db: &PgPool,
+    rules: &ReceiptRules,
+    at: OffsetDateTime,
+) -> Result<u64, sqlx::Error> {
+    let removed = sqlx::query("DELETE FROM push_ticket WHERE created_at <= $1")
+        .bind(at - rules.keep)
+        .execute(db)
+        .await?
+        .rows_affected();
+    Ok(removed)
+}
+
 /// Removes devices whose session has ended: signed out somewhere the app
 /// could not say so, revoked, or expired. Nothing is sent to them anyway.
 /// Returns how many were removed. Called by the worker.

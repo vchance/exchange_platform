@@ -35,6 +35,9 @@ pub enum ErrorCode {
     InvalidRequest,
     /// Not a usable email address or phone number.
     InvalidIdentifier,
+    /// A phone number of a country the service does not send codes to
+    /// (`SMS_ALLOWED_COUNTRY_CODES`). An email address still works.
+    PhoneCountryNotServed,
     /// The one-time code is wrong, expired or used up. Deliberately one code
     /// for all three, so a guesser learns nothing.
     InvalidCode,
@@ -93,9 +96,11 @@ impl From<ErrorCode> for ApiError {
     fn from(code: ErrorCode) -> Self {
         use ErrorCode::*;
         let status = match code {
-            InvalidRequest | InvalidIdentifier | InvalidRevision | IdempotencyKeyReused => {
-                StatusCode::UNPROCESSABLE_ENTITY
-            }
+            InvalidRequest
+            | InvalidIdentifier
+            | PhoneCountryNotServed
+            | InvalidRevision
+            | IdempotencyKeyReused => StatusCode::UNPROCESSABLE_ENTITY,
             InvalidCode | Unauthenticated => StatusCode::UNAUTHORIZED,
             WrongActor | AccountSuspended | InvitationNotForYou => StatusCode::FORBIDDEN,
             NotFound | InvitationUnavailable | WalletUnavailable => StatusCode::NOT_FOUND,

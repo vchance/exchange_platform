@@ -338,8 +338,40 @@ fn auth_rules(get: Lookup<'_>) -> anyhow::Result<AuthRules> {
             defaults.failed_guesses_per_identifier_per_day,
         )?,
         sms_codes_per_hour: limit(get, "SMS_MAX_PER_HOUR", defaults.sms_codes_per_hour)?,
+        sms_codes_per_prefix_per_hour: limit(
+            get,
+            "SMS_MAX_PER_PREFIX_PER_HOUR",
+            defaults.sms_codes_per_prefix_per_hour,
+        )?,
+        phone_country_codes: country_codes(get)?.unwrap_or(defaults.phone_country_codes),
         ..defaults
     })
+}
+
+/// `SMS_ALLOWED_COUNTRY_CODES`: country calling codes, `+1,+52`, as digits.
+/// `None` when unset, for the default.
+fn country_codes(get: Lookup<'_>) -> anyhow::Result<Option<Vec<String>>> {
+    const NAME: &str = "SMS_ALLOWED_COUNTRY_CODES";
+    let Some(value) = optional(get, NAME) else {
+        return Ok(None);
+    };
+    let codes = value
+        .split(',')
+        .map(|code| {
+            let digits = code.trim().strip_prefix('+')?;
+            let valid = (1..=3).contains(&digits.len())
+                && digits.bytes().all(|b| b.is_ascii_digit())
+                && !digits.starts_with('0');
+            valid.then(|| digits.to_owned())
+        })
+        .collect::<Option<Vec<_>>>()
+        .with_context(|| {
+            format!(
+                "{NAME}={value} is not a comma-separated list of country calling codes \
+                 such as +1 or +1,+52"
+            )
+        })?;
+    Ok(Some(codes))
 }
 
 /// Configuration for the `worker` process.
@@ -597,6 +629,32 @@ mod tests {
         let on = sender(&[("CODE_DELIVERY", "log"), ("SMS_DELIVERY", "log")]);
         assert!(on.charged_per_message(&phone));
         assert!(!on.charged_per_message(&email));
+    }
+
+    #[test]
+    fn phone_numbers_are_taken_from_the_us_and_the_rest_of_nanp_unless_set() {
+        let read = |pairs: &[(&str, &str)]| auth_rules(&lookup(&table(pairs)));
+        assert_eq!(read(&[]).unwrap().phone_country_codes, ["1"]);
+        assert_eq!(
+            read(&[("SMS_ALLOWED_COUNTRY_CODES", " +1, +52 ")])
+                .unwrap()
+                .phone_country_codes,
+            ["1", "52"]
+        );
+        for wrong in ["1", "+", "+0", "+1234", "+1,", "+1;+52", "+1,52", "+a"] {
+            assert!(
+                read(&[("SMS_ALLOWED_COUNTRY_CODES", wrong)]).is_err(),
+                "{wrong}"
+            );
+        }
+        assert_eq!(read(&[]).unwrap().sms_codes_per_prefix_per_hour, 10);
+        assert_eq!(
+            read(&[("SMS_MAX_PER_PREFIX_PER_HOUR", "3")])
+                .unwrap()
+                .sms_codes_per_prefix_per_hour,
+            3
+        );
+        assert!(read(&[("SMS_MAX_PER_PREFIX_PER_HOUR", "0")]).is_err());
     }
 
     #[test]

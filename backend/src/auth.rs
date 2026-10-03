@@ -36,7 +36,7 @@ use std::pin::Pin;
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, PgPool};
-use time::Duration;
+use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::domain::identity::Identifier;
@@ -78,8 +78,29 @@ pub struct AuthRules {
     /// per number, which many requesters and many numbers get round. Past
     /// it, a code for a phone number is refused with `TOO_MANY_REQUESTS`
     /// until the hour turns. A placeholder; a deployment may set it
-    /// (`SMS_MAX_PER_HOUR`).
+    /// (`SMS_MAX_PER_HOUR`). Only a message the provider takes is counted:
+    /// one it refuses gives its place back, so numbers the provider will
+    /// not send to (its geographic permissions, a number that does not
+    /// exist) cannot use the cap up.
     pub sms_codes_per_hour: i64,
+    /// Codes the whole service may send by text message per hour to numbers
+    /// that begin alike: the country code and the three digits after it, the
+    /// area code for `+1` (see [`AuthRules::sms_prefix`]). Without it, a few
+    /// requesters with fresh numbers could use the whole service's cap and
+    /// turn off phone sign-in for everyone; with it they can turn it off for
+    /// one area code at a time, and need many to reach the cap. A
+    /// placeholder; a deployment may set it (`SMS_MAX_PER_PREFIX_PER_HOUR`).
+    pub sms_codes_per_prefix_per_hour: i64,
+    /// The country calling codes, digits only (`"1"`), whose phone numbers
+    /// the service takes. A code for any other number is refused with
+    /// `PHONE_COUNTRY_NOT_SERVED` before anything is counted or sent, and so
+    /// is attaching one to an account. `+1` is the North American Numbering
+    /// Plan: the US, Canada and some twenty Caribbean and Pacific countries
+    /// and territories, which share it; the SMS provider's geographic
+    /// permissions are what narrow it further (docs/operations.md). The
+    /// launch market is the US; a deployment may set it
+    /// (`SMS_ALLOWED_COUNTRY_CODES`).
+    pub phone_country_codes: Vec<String>,
     /// How long a session lasts. A placeholder.
     pub session_ttl: Duration,
 }
@@ -96,8 +117,57 @@ impl Default for AuthRules {
             code_requests_per_address_per_hour: 10,
             deletion_codes_per_hour: 5,
             sms_codes_per_hour: 50,
+            sms_codes_per_prefix_per_hour: 10,
+            phone_country_codes: vec!["1".to_owned()],
             session_ttl: Duration::days(30),
         }
+    }
+}
+
+impl AuthRules {
+    /// The allowed country code a phone number begins with, if any. Country
+    /// calling codes are a prefix code (no code begins another), so at most
+    /// one matches. Always `None` for an email address.
+    fn phone_country<'a>(&'a self, identifier: &Identifier) -> Option<&'a str> {
+        let Identifier::Phone(phone) = identifier else {
+            return None;
+        };
+        let digits = &phone[1..];
+        self.phone_country_codes
+            .iter()
+            .map(String::as_str)
+            .find(|code| digits.starts_with(code))
+    }
+
+    /// Whether the service takes this identifier: any email address, and a
+    /// phone number of an allowed country.
+    pub fn takes(&self, identifier: &Identifier) -> bool {
+        match identifier {
+            Identifier::Email(_) => true,
+            Identifier::Phone(_) => self.phone_country(identifier).is_some(),
+        }
+    }
+
+    /// Refuses a phone number of a country the service does not take
+    /// ([`AuthRules::phone_country_codes`]).
+    pub fn check_taken(&self, identifier: &Identifier) -> Result<(), ApiError> {
+        if self.takes(identifier) {
+            Ok(())
+        } else {
+            Err(ErrorCode::PhoneCountryNotServed.into())
+        }
+    }
+
+    /// What a phone number is counted under for
+    /// [`AuthRules::sms_codes_per_prefix_per_hour`]: its country code and
+    /// the three digits after it, `+1202` for `+12025550142`. For `+1` that
+    /// is the area code; elsewhere it is roughly a region or a mobile
+    /// network, which is close enough for a limit.
+    pub fn sms_prefix(&self, identifier: &Identifier) -> String {
+        let phone = identifier.as_str();
+        let country = self.phone_country(identifier).map_or(0, str::len);
+        let end = (1 + country + 3).min(phone.len());
+        phone[..end].to_owned()
     }
 }
 
@@ -290,6 +360,9 @@ pub fn token_hash(token: &str) -> [u8; 32] {
 pub const SMS_SENT: &str = "sms-sent";
 pub const SMS_REFUSED: &str = "sms-refused";
 pub const SMS_FAILED: &str = "sms-failed";
+pub const SMS_SENT_BY_PREFIX: &str = "sms-sent-by-prefix";
+pub const SMS_REFUSED_PREFIX: &str = "sms-refused-prefix";
+pub const SMS_REFUSED_COUNTRY: &str = "sms-refused-country";
 
 /// What every SMS count is counted under: one subject, the whole service.
 const EVERYONE: &str = "the whole service";
@@ -302,10 +375,17 @@ enum Counted {
     FailedGuessesByIdentifier,
     CodeRequestsByAccount,
     FailedGuessesByAccount,
-    /// Codes handed to the SMS provider, by the whole service.
+    /// Codes the SMS provider took, or is being handed, by the whole
+    /// service.
     SmsSent,
+    /// The same, per number prefix ([`AuthRules::sms_prefix`]).
+    SmsSentByPrefix,
     /// Codes not sent by SMS because the hourly cap was reached.
     SmsRefused,
+    /// Codes not sent by SMS because the prefix's hourly cap was reached.
+    SmsRefusedPrefix,
+    /// Codes not sent because the number's country is not served.
+    SmsRefusedCountry,
     /// Codes the SMS provider did not take.
     SmsFailed,
 }
@@ -318,7 +398,10 @@ impl Counted {
             Counted::CodeRequestsByAccount => "code-requests-by-account",
             Counted::FailedGuessesByAccount => "failed-guesses-by-account",
             Counted::SmsSent => SMS_SENT,
+            Counted::SmsSentByPrefix => SMS_SENT_BY_PREFIX,
             Counted::SmsRefused => SMS_REFUSED,
+            Counted::SmsRefusedPrefix => SMS_REFUSED_PREFIX,
+            Counted::SmsRefusedCountry => SMS_REFUSED_COUNTRY,
             Counted::SmsFailed => SMS_FAILED,
         }
     }
@@ -380,6 +463,42 @@ impl Counter {
         .fetch_one(conn)
         .await?;
         Ok(i64::from(count))
+    }
+
+    /// Takes one place in the current window and says which window it was,
+    /// so that [`Counter::release`] can give it back there.
+    async fn take(&self, conn: &mut PgConnection) -> Result<OffsetDateTime, sqlx::Error> {
+        sqlx::query_scalar(
+            "INSERT INTO sign_in_limit (scope, subject, window_start, count)
+             VALUES ($1, $2, date_trunc($3, now(), 'UTC'), 1)
+             ON CONFLICT (scope, subject, window_start)
+             DO UPDATE SET count = sign_in_limit.count + 1
+             RETURNING window_start",
+        )
+        .bind(self.counted.scope())
+        .bind(self.subject.as_slice())
+        .bind(self.counted.window())
+        .fetch_one(conn)
+        .await
+    }
+
+    /// Gives back a place taken in `window`, even if that window has since
+    /// ended. Never below zero.
+    async fn release(
+        &self,
+        conn: &mut PgConnection,
+        window: OffsetDateTime,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "UPDATE sign_in_limit SET count = count - 1
+             WHERE scope = $1 AND subject = $2 AND window_start = $3 AND count > 0",
+        )
+        .bind(self.counted.scope())
+        .bind(self.subject.as_slice())
+        .bind(window)
+        .execute(conn)
+        .await?;
+        Ok(())
     }
 }
 
@@ -443,7 +562,10 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
 /// for too many sign-in codes this hour, when the identifier has been sent
 /// too many, or, for deletion, when the account has asked for too many, or,
 /// for a code that would go by text message, when the service has sent its
-/// hourly cap of them ([`AuthRules::sms_codes_per_hour`]); and with
+/// hourly cap of them ([`AuthRules::sms_codes_per_hour`]) or of them to
+/// numbers beginning alike ([`AuthRules::sms_codes_per_prefix_per_hour`]);
+/// with `PHONE_COUNTRY_NOT_SERVED`, before anything is counted, for a phone
+/// number of a country the service does not take; and with
 /// `TOO_MANY_GUESSES` while the identifier has used up its wrong sign-in
 /// guesses for the day, or, for deletion, the account its wrong deletion
 /// guesses, since no code sent then could work.
@@ -457,6 +579,21 @@ pub async fn request_code(
     language: &str,
 ) -> Result<(), ApiError> {
     let purpose = requester.purpose();
+    let charged = sender.charged_per_message(identifier);
+
+    // Before anything is counted: a number the service would never send to
+    // must not use up anybody's allowance, the requester's included.
+    if !rules.takes(identifier) {
+        // For the metrics, only where a message would have been paid for;
+        // a failure to count is not the person's problem.
+        if charged && let Ok(mut conn) = db.acquire().await {
+            let _ = Counter::new(secret, Counted::SmsRefusedCountry, EVERYONE)
+                .add(&mut conn, 1)
+                .await;
+        }
+        return Err(ErrorCode::PhoneCountryNotServed.into());
+    }
+
     let mut tx = db.begin().await?;
 
     // The requester first, and then the identifier, always in that order.
@@ -524,25 +661,45 @@ pub async fn request_code(
     }
 
     // A text message costs money whoever asks for it, so the service as a
-    // whole sends only so many an hour. Last of the limits, so that only a
-    // code that would otherwise go is counted against it. The count's row
-    // stays locked until the code is stored, which makes the cap exact
+    // whole sends only so many an hour, and only so many of them to numbers
+    // beginning alike. Last of the limits, so that only a code that would
+    // otherwise go is counted against them. A place is taken in each before
+    // the message is handed over and given back if the provider does not
+    // take it, so a message refused costs no place while the cap still
+    // holds exactly: the rows stay locked until the code is stored, the
+    // prefix's always before the whole service's, which makes both exact
     // across every copy of the API.
-    let charged = sender.charged_per_message(identifier);
+    let mut taken = None;
     if charged {
-        let sent = Counter::new(secret, Counted::SmsSent, EVERYONE);
-        if sent.hold(&mut tx).await? >= rules.sms_codes_per_hour {
-            Counter::new(secret, Counted::SmsRefused, EVERYONE)
+        let prefix = Counter::new(
+            secret,
+            Counted::SmsSentByPrefix,
+            &rules.sms_prefix(identifier),
+        );
+        let everyone = Counter::new(secret, Counted::SmsSent, EVERYONE);
+        let refusal = if prefix.hold(&mut tx).await? >= rules.sms_codes_per_prefix_per_hour {
+            Some((Counted::SmsRefusedPrefix, "numbers beginning alike"))
+        } else if everyone.hold(&mut tx).await? >= rules.sms_codes_per_hour {
+            Some((Counted::SmsRefused, "the whole service"))
+        } else {
+            None
+        };
+        if let Some((counted, whose)) = refusal {
+            Counter::new(secret, counted, EVERYONE)
                 .add(&mut tx, 1)
                 .await?;
             tx.commit().await?;
             tracing::warn!(
                 cap = rules.sms_codes_per_hour,
-                "a code was not sent by SMS: the service's hourly cap is reached"
+                prefix_cap = rules.sms_codes_per_prefix_per_hour,
+                whose,
+                "a code was not sent by SMS: an hourly cap is reached"
             );
             return Err(ErrorCode::TooManyRequests.into());
         }
-        sent.add(&mut tx, 1).await?;
+        let prefix_window = prefix.take(&mut tx).await?;
+        let everyone_window = everyone.take(&mut tx).await?;
+        taken = Some([(prefix, prefix_window), (everyone, everyone_window)]);
     }
 
     let code = generate_code();
@@ -588,9 +745,18 @@ pub async fn request_code(
         // The error names no address or number and quotes no provider's
         // text (each sender sees to it).
         tracing::error!(%error, "one-time code could not be delivered");
-        // Counted for the metrics; a failure to count is not the person's
-        // problem.
-        if charged && let Ok(mut conn) = db.acquire().await {
+        // The places it took are given back, so that a message the
+        // provider refused costs none, and it is counted for the metrics.
+        // A failure here is not the person's problem: a place not given
+        // back stays taken until the hour turns, erring on the side of
+        // fewer messages. One statement at a time, so no lock is held
+        // across them.
+        if let Some(taken) = taken
+            && let Ok(mut conn) = db.acquire().await
+        {
+            for (counter, window) in &taken {
+                let _ = counter.release(&mut conn, *window).await;
+            }
             let _ = Counter::new(secret, Counted::SmsFailed, EVERYONE)
                 .add(&mut conn, 1)
                 .await;
@@ -796,6 +962,29 @@ mod tests {
         assert_eq!(counter("2001:db8:2::1"), counter("2001:db8:2::12"));
         assert_eq!(counter("::ffff:192.0.2.50"), counter("192.0.2.50"));
         assert_ne!(counter("192.0.2.50"), counter("192.0.2.51"));
+    }
+
+    #[test]
+    fn phone_numbers_are_taken_by_country_code_and_counted_by_prefix() {
+        let rules = AuthRules::default();
+        let parse = |text: &str| Identifier::parse(text).unwrap();
+        assert!(rules.takes(&parse("+12025550142")));
+        assert!(rules.takes(&parse("ana@example.com")));
+        for other in ["+447700900123", "+525512345678", "+79991234567"] {
+            assert!(!rules.takes(&parse(other)), "{other}");
+            assert!(rules.check_taken(&parse(other)).is_err(), "{other}");
+        }
+        assert_eq!(rules.sms_prefix(&parse("+12025550142")), "+1202");
+        assert_eq!(rules.sms_prefix(&parse("+1 (888) 555-0100")), "+1888");
+
+        let more = AuthRules {
+            phone_country_codes: vec!["1".to_owned(), "52".to_owned(), "353".to_owned()],
+            ..AuthRules::default()
+        };
+        assert!(more.takes(&parse("+525512345678")));
+        assert_eq!(more.sms_prefix(&parse("+525512345678")), "+52551");
+        assert_eq!(more.sms_prefix(&parse("+353861234567")), "+353861");
+        assert!(!more.takes(&parse("+5491112345678")));
     }
 
     #[test]

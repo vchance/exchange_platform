@@ -75,25 +75,30 @@ export function withAppLinks(config: ExpoConfig, domain: string | null): ExpoCon
   };
 }
 
-/** The EAS build profiles that make an app for someone other than its developer. */
-const RELEASE_PROFILES = ['preview', 'production'];
+/**
+ * The EAS build profiles that make an app for its developer only, whose
+ * service may be localhost. Any other profile, whatever it is called, makes
+ * an app for someone else.
+ */
+const DEVELOPMENT_PROFILES = ['development', 'development-simulator'];
 
 /** The settings `src/lib/config.ts` reads, each of which falls back to localhost when unset. */
 const SERVICE_SETTINGS = ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_WEB_URL'] as const;
 
 /**
- * Refuses a preview or production build whose service settings are missing
- * or not HTTPS. The app falls back to `http://localhost:8080` and
- * `http://localhost:5173` when they are unset, which is right for a
- * simulator on the development machine and wrong for any device anyone
- * else holds: such a build would install and then reach nothing. Every
- * other build (development, the tests, the browser harness, a local
- * `expo export`) runs without `EAS_BUILD_PROFILE` or with `development`,
- * and keeps the defaults.
+ * Refuses an EAS build whose service settings are missing or not HTTPS,
+ * unless it is a development build. The app falls back to
+ * `http://localhost:8080` and `http://localhost:5173` when they are unset,
+ * which is right for a simulator on the development machine and wrong for
+ * any device anyone else holds: such a build would install and then reach
+ * nothing. The check is by exception, so a profile added later (`staging`,
+ * say) is held to it without anyone remembering to list it. Everything that
+ * is not an EAS build (the tests, the browser harness, a local
+ * `expo export`) runs without `EAS_BUILD_PROFILE` and keeps the defaults.
  */
 export function checkReleaseSettings(env: Record<string, string | undefined>): void {
-  const profile = env.EAS_BUILD_PROFILE;
-  if (!profile || !RELEASE_PROFILES.includes(profile)) return;
+  const profile = env.EAS_BUILD_PROFILE?.trim();
+  if (!profile || DEVELOPMENT_PROFILES.includes(profile)) return;
   const wrong = SERVICE_SETTINGS.filter((name) => {
     const value = env[name]?.trim();
     if (!value) return true;

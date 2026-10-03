@@ -32,7 +32,7 @@ pub struct RequestCode {
     request_body = RequestCode,
     responses(
         (status = 204, description = "A code was sent"),
-        (status = 422, description = "Not an email address or phone number", body = ErrorBody),
+        (status = 422, description = "Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)", body = ErrorBody),
         (status = 429, description = "Too many codes requested for this identifier or from this address (`TOO_MANY_REQUESTS`), or too many wrong codes for this identifier today, so none is sent (`TOO_MANY_GUESSES`)", body = ErrorBody)
     )
 )]

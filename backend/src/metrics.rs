@@ -28,7 +28,7 @@ use axum::http::{Method, StatusCode};
 use axum::routing::get;
 use sqlx::PgPool;
 
-use crate::auth::{SMS_FAILED, SMS_REFUSED, SMS_SENT};
+use crate::auth::{SMS_FAILED, SMS_REFUSED, SMS_REFUSED_COUNTRY, SMS_REFUSED_PREFIX, SMS_SENT};
 use crate::notifications::outbox::Delivered;
 use crate::notifications::push::{PushDelivered, ReceiptsError, ReceiptsRead};
 
@@ -372,12 +372,15 @@ pub async fn render_outbox(text: &mut Text, pool: &PgPool, max_attempts: i32) {
 pub async fn render_sms(text: &mut Text, pool: &PgPool, cap: i64) {
     let counts: Result<Vec<(String, i64)>, sqlx::Error> = sqlx::query_as(
         "SELECT scope, sum(count)::bigint FROM sign_in_limit
-         WHERE scope IN ($1, $2, $3) AND window_start = date_trunc('hour', now(), 'UTC')
+         WHERE scope IN ($1, $2, $3, $4, $5)
+           AND window_start = date_trunc('hour', now(), 'UTC')
          GROUP BY scope",
     )
     .bind(SMS_SENT)
     .bind(SMS_REFUSED)
     .bind(SMS_FAILED)
+    .bind(SMS_REFUSED_PREFIX)
+    .bind(SMS_REFUSED_COUNTRY)
     .fetch_all(pool)
     .await;
     text.single(
@@ -390,22 +393,38 @@ pub async fn render_sms(text: &mut Text, pool: &PgPool, cap: i64) {
         tracing::warn!("metrics could not read the text message counts");
         return;
     };
+    let count = |scope: &str| {
+        counts
+            .iter()
+            .find(|(found, _)| found == scope)
+            .map_or(0, |(_, count)| *count)
+    };
+    let refusals = [
+        ("hourly_cap", count(SMS_REFUSED)),
+        ("prefix_cap", count(SMS_REFUSED_PREFIX)),
+        ("country", count(SMS_REFUSED_COUNTRY)),
+    ];
     let name = "yuppers_sms_codes_this_hour";
     text.family(
         name,
         Kind::Gauge,
-        "One-time codes for phone numbers this hour (UTC), by the whole service: sent (handed to the SMS provider, each a message paid for), refused (the hourly cap was reached; the person was told to wait), failed (the provider did not take it; also counted in sent).",
+        "One-time codes for phone numbers this hour (UTC), by the whole service: sent (taken by the SMS provider, each a message paid for), refused (not sent, for any reason in yuppers_sms_codes_refused_this_hour; the person was told), failed (the provider did not take it; not counted in sent).",
     );
-    for (result, scope) in [
-        ("sent", SMS_SENT),
-        ("refused", SMS_REFUSED),
-        ("failed", SMS_FAILED),
+    for (result, value) in [
+        ("sent", count(SMS_SENT)),
+        ("refused", refusals.iter().map(|(_, n)| n).sum()),
+        ("failed", count(SMS_FAILED)),
     ] {
-        let count = counts
-            .iter()
-            .find(|(found, _)| found == scope)
-            .map_or(0, |(_, count)| *count);
-        text.sample(name, &[("result", result)], count as f64);
+        text.sample(name, &[("result", result)], value as f64);
+    }
+    let name = "yuppers_sms_codes_refused_this_hour";
+    text.family(
+        name,
+        Kind::Gauge,
+        "One-time codes for phone numbers refused this hour (UTC), by the whole service, by reason: hourly_cap (SMS_MAX_PER_HOUR), prefix_cap (SMS_MAX_PER_PREFIX_PER_HOUR, numbers beginning alike), country (not in SMS_ALLOWED_COUNTRY_CODES).",
+    );
+    for (reason, value) in refusals {
+        text.sample(name, &[("reason", reason)], value as f64);
     }
 }
 

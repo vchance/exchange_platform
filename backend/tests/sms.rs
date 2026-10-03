@@ -1,7 +1,8 @@
 //! One-time codes by text message: routed by identifier, written in one
 //! segment in the reader's language, sent to Twilio's Messages API in the
-//! shape it takes (against a stand-in in this process), capped per hour for
-//! the whole service, and never logged with a whole phone number.
+//! shape it takes (against a stand-in in this process), only to the
+//! countries served, capped per hour for the whole service and for numbers
+//! beginning alike, and never logged with a whole phone number.
 //!
 //! The cap counts every text message the database has seen this hour, so
 //! the tests here take turns, and each starts with the counts cleared.
@@ -40,12 +41,19 @@ fn number() -> String {
     format!("+1999{:07}", Uuid::new_v4().as_u128() % 10_000_000)
 }
 
+/// The same, beginning `+1888`: another area code.
+fn number_elsewhere() -> String {
+    format!("+1888{:07}", Uuid::new_v4().as_u128() % 10_000_000)
+}
+
 /// Rules with the per-address limit out of the way (every test request
-/// comes from one address) and the given cap on text messages.
+/// comes from one address) and the given cap on text messages. Every
+/// [`number`] begins alike, so the cap per prefix is out of the way too.
 fn rules(cap: i64) -> AuthRules {
     AuthRules {
         code_requests_per_address_per_hour: 1_000_000,
         sms_codes_per_hour: cap,
+        sms_codes_per_prefix_per_hour: 1_000_000,
         ..AuthRules::default()
     }
 }
@@ -57,7 +65,12 @@ async fn start(cap: i64, sender: Arc<dyn CodeSender>) -> (App, MutexGuard<'stati
 
 /// [`start`] for a test that already holds its turn.
 async fn open(cap: i64, sender: Arc<dyn CodeSender>) -> App {
-    let app = App::start_messaging(DATABASE, rules(cap), sender, false).await;
+    open_with(rules(cap), sender).await
+}
+
+/// [`open`] with the given rules.
+async fn open_with(rules: AuthRules, sender: Arc<dyn CodeSender>) -> App {
+    let app = App::start_messaging(DATABASE, rules, sender, false).await;
     sqlx::query("DELETE FROM sign_in_limit WHERE scope LIKE 'sms-%'")
         .execute(&app.owner)
         .await
@@ -198,6 +211,152 @@ async fn the_service_sends_no_more_than_its_hourly_cap_of_text_messages() {
         "yuppers_sms_codes_this_hour{result=\"sent\"} 2",
         "yuppers_sms_codes_this_hour{result=\"refused\"} 2",
         "yuppers_sms_codes_this_hour{result=\"failed\"} 0",
+        "yuppers_sms_codes_refused_this_hour{reason=\"hourly_cap\"} 2",
+        "yuppers_sms_codes_refused_this_hour{reason=\"prefix_cap\"} 0",
+    ] {
+        assert!(page.contains(line), "{line} in\n{page}");
+    }
+}
+
+/// Every count in `sign_in_limit` but the refusals by country, summed.
+async fn all_counts(app: &App) -> i64 {
+    sqlx::query_scalar(
+        "SELECT coalesce(sum(count), 0)::bigint FROM sign_in_limit
+         WHERE scope <> 'sms-refused-country'",
+    )
+    .fetch_one(&app.owner)
+    .await
+    .unwrap()
+}
+
+async fn codes_for(app: &App, identifier: &str) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM one_time_code WHERE identifier = $1")
+        .bind(identifier)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_number_of_a_country_not_served_is_refused_before_anything_is_counted_or_sent() {
+    let (phone, mailbox) = (Arc::new(Phone::default()), Arc::new(Mailbox::default()));
+    // The default: +1 only.
+    let (app, _turn) = start(50, router(&phone, &mailbox)).await;
+    let before = all_counts(&app).await;
+    let (uk, mexico, france) = ("+447700900123", "+525512345678", "+33612345678");
+
+    // Signing in.
+    ask(&app, uk, "en")
+        .await
+        .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
+
+    // Deleting an account whose number was taken before the setting said
+    // otherwise.
+    let ana = app.user("Ana").await;
+    sqlx::query("UPDATE account SET phone = $1 WHERE id = $2")
+        .bind(mexico)
+        .bind(ana.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    app.call(
+        Some(&ana),
+        Method::POST,
+        "/v1/me/deletion/codes",
+        Some(json!({ "channel": "PHONE" })),
+        &[],
+    )
+    .await
+    .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
+
+    // Adding a number to an account: refused before any code is checked.
+    let ben = app.user("Ben").await;
+    app.call(
+        Some(&ben),
+        Method::POST,
+        "/v1/me/identifiers",
+        Some(json!({ "identifier": france, "code": "123456" })),
+        &[],
+    )
+    .await
+    .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
+    let added: Option<String> = sqlx::query_scalar("SELECT phone FROM account WHERE id = $1")
+        .bind(ben.id)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(added, None);
+
+    // Nothing sent, stored or counted against anyone: not the address, not
+    // the account, not the caps.
+    assert!(phone.0.lock().unwrap().is_empty());
+    for number in [uk, mexico, france] {
+        assert_eq!(codes_for(&app, number).await, 0, "{number}");
+    }
+    assert_eq!(all_counts(&app).await, before);
+    let page = counted(&app, 50).await;
+    for line in [
+        "yuppers_sms_codes_this_hour{result=\"sent\"} 0",
+        "yuppers_sms_codes_this_hour{result=\"refused\"} 2",
+        "yuppers_sms_codes_refused_this_hour{reason=\"country\"} 2",
+        "yuppers_sms_codes_refused_this_hour{reason=\"hourly_cap\"} 0",
+    ] {
+        assert!(page.contains(line), "{line} in\n{page}");
+    }
+
+    // A deployment can serve other countries instead.
+    let app = open_with(
+        AuthRules {
+            phone_country_codes: vec!["44".to_owned()],
+            ..rules(50)
+        },
+        router(&phone, &mailbox),
+    )
+    .await;
+    assert_eq!(ask(&app, uk, "en").await.status, StatusCode::NO_CONTENT);
+    ask(&app, &number(), "en")
+        .await
+        .refused(StatusCode::UNPROCESSABLE_ENTITY, "PHONE_COUNTRY_NOT_SERVED");
+    assert_eq!(phone.0.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn numbers_beginning_alike_have_their_own_hourly_cap() {
+    let (phone, mailbox) = (Arc::new(Phone::default()), Arc::new(Mailbox::default()));
+    let _turn = TURN.lock().await;
+    let app = open_with(
+        AuthRules {
+            sms_codes_per_prefix_per_hour: 2,
+            ..rules(50)
+        },
+        router(&phone, &mailbox),
+    )
+    .await;
+
+    for _ in 0..2 {
+        assert_eq!(
+            ask(&app, &number(), "en").await.status,
+            StatusCode::NO_CONTENT
+        );
+    }
+    // A third number in the same area code waits; another area code does
+    // not, so whoever uses up one prefix has not turned off phone sign-in
+    // for everyone.
+    ask(&app, &number(), "en")
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+    assert_eq!(
+        ask(&app, &number_elsewhere(), "en").await.status,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(phone.0.lock().unwrap().len(), 3);
+
+    let page = counted(&app, 50).await;
+    for line in [
+        "yuppers_sms_codes_this_hour{result=\"sent\"} 3",
+        "yuppers_sms_codes_this_hour{result=\"refused\"} 1",
+        "yuppers_sms_codes_refused_this_hour{reason=\"prefix_cap\"} 1",
+        "yuppers_sms_codes_refused_this_hour{reason=\"hourly_cap\"} 0",
     ] {
         assert!(page.contains(line), "{line} in\n{page}");
     }
@@ -329,6 +488,62 @@ async fn twilio_is_sent_the_message_in_the_shape_its_api_takes() {
             ("From".to_owned(), "+15550000000".to_owned()),
             ("Body".to_owned(), text.to_owned()),
         ]
+    );
+}
+
+#[tokio::test]
+async fn a_message_the_provider_refuses_uses_up_no_place_under_either_cap() {
+    let _turn = TURN.lock().await;
+    // Twilio refusing, as it does a number outside the account's
+    // geographic permissions.
+    let (stand_in, addr) = Twilio::start(
+        StatusCode::BAD_REQUEST,
+        json!({ "code": 21408, "message": "Permission to send an SMS has not been enabled" }),
+    )
+    .await;
+    let mailbox = Arc::new(Mailbox::default());
+    let refusing = Arc::new(CodeRouter::new(
+        mailbox.clone(),
+        Arc::new(twilio(addr, "+15550000000")),
+        Wording::embedded().unwrap(),
+    ));
+    // One message an hour, for the service and for each prefix.
+    let one = AuthRules {
+        sms_codes_per_prefix_per_hour: 1,
+        ..rules(1)
+    };
+    let app = open_with(one.clone(), refusing).await;
+    for _ in 0..3 {
+        ask(&app, &number(), "en")
+            .await
+            .refused(StatusCode::SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE");
+    }
+    assert_eq!(stand_in.received.lock().unwrap().len(), 3);
+    let page = counted(&app, 1).await;
+    for line in [
+        "yuppers_sms_codes_this_hour{result=\"sent\"} 0",
+        "yuppers_sms_codes_this_hour{result=\"failed\"} 3",
+        "yuppers_sms_codes_this_hour{result=\"refused\"} 0",
+    ] {
+        assert!(page.contains(line), "{line} in\n{page}");
+    }
+
+    // The place is still there for a message the provider takes, in the
+    // same area code; and then the caps hold.
+    let phone = Arc::new(Phone::default());
+    let app = App::start_messaging(DATABASE, one, router(&phone, &mailbox), false).await;
+    assert_eq!(
+        ask(&app, &number(), "en").await.status,
+        StatusCode::NO_CONTENT
+    );
+    ask(&app, &number_elsewhere(), "en")
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+    assert_eq!(phone.0.lock().unwrap().len(), 1);
+    assert!(
+        counted(&app, 1)
+            .await
+            .contains("yuppers_sms_codes_this_hour{result=\"sent\"} 1")
     );
 }
 

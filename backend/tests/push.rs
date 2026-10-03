@@ -261,18 +261,121 @@ async fn a_device_is_registered_updated_and_removed_by_its_own_account() {
     }
     assert!(devices_of(&app, &ana).await.is_empty());
 
-    // A token registered by one account and then by another is the second
-    // one's: whoever signed in on the device last.
-    device_id(&app, &ana, &phone).await;
-    device_id(&app, &ben, &phone).await;
-    assert!(devices_of(&app, &ana).await.is_empty());
-    assert_eq!(devices_of(&app, &ben).await, [phone]);
-
     // Nobody signed in registers nothing.
     let reply = app
         .call(None, Method::PUT, "/v1/me/devices", Some(json!({ "token": token("x"), "platform": "ios", "app_version": "1.0.0", "language": "en" })), &[])
         .await;
     reply.refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
+}
+
+#[tokio::test]
+async fn a_token_moves_to_another_account_only_once_its_session_has_ended() {
+    let (app, _turn) = app().await;
+    let ana = app.user("Ana").await;
+    let ben = app.user("Ben").await;
+    let phone = token("phone");
+    let id = device_id(&app, &ana, &phone).await;
+
+    // Ben has learned Ana's token. While her session lives, his registering
+    // it moves nothing, and his answer is the one a registration gets, so
+    // it does not say that the token is someone's. The ID it names is no
+    // use to him.
+    let reply = register(&app, &ben, &phone, "es").await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(reply.body["id"], id.as_str());
+    assert_eq!(devices_of(&app, &ana).await, std::slice::from_ref(&phone));
+    assert!(devices_of(&app, &ben).await.is_empty());
+    let language: String = sqlx::query_scalar("SELECT language FROM device WHERE id = $1::uuid")
+        .bind(&id)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(language, "en", "nothing about the device changed");
+    app.call(
+        Some(&ben),
+        Method::DELETE,
+        &format!("/v1/me/devices/{id}"),
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(devices_of(&app, &ana).await, std::slice::from_ref(&phone));
+
+    // Another session of Ana's own takes it: the same person, signed in
+    // again on the same phone.
+    let again = app.user("Ana again").await;
+    sqlx::query("UPDATE account_session SET account_id = $1 WHERE account_id = $2")
+        .bind(ana.id)
+        .bind(again.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(device_id(&app, &again, &phone).await, id);
+    let session: Uuid = sqlx::query_scalar("SELECT session_id FROM device WHERE id = $1::uuid")
+        .bind(&id)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+
+    // Once the session it is registered under has ended (here revoked
+    // without the app saying so; signing out removes the device outright),
+    // the phone signed into Ben's account takes it.
+    sqlx::query("UPDATE account_session SET revoked_at = now() WHERE id = $1")
+        .bind(session)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    device_id(&app, &ben, &phone).await;
+    assert!(devices_of(&app, &ana).await.is_empty());
+    assert_eq!(devices_of(&app, &ben).await, std::slice::from_ref(&phone));
+
+    // And an expired session is ended too.
+    sqlx::query(
+        "UPDATE account_session SET expires_at = now() - interval '1 second' WHERE account_id = $1",
+    )
+    .bind(ben.id)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    let carla = app.user("Carla").await;
+    device_id(&app, &carla, &phone).await;
+    assert!(devices_of(&app, &ben).await.is_empty());
+    assert_eq!(devices_of(&app, &carla).await, [phone]);
+}
+
+#[tokio::test]
+async fn push_tickets_past_their_receipts_are_removed_whether_or_not_receipts_are_read() {
+    let (app, _turn) = app().await;
+    let ana = app.user("Ana").await;
+    let id = device_id(&app, &ana, &token("phone")).await;
+    sqlx::query("DELETE FROM push_ticket")
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    for (ticket, age) in [("old", 25), ("older", 72), ("fresh", 1)] {
+        sqlx::query(
+            "INSERT INTO push_ticket (id, device_id, created_at)
+             VALUES ($1, $2::uuid, now() - $3 * interval '1 hour')",
+        )
+        .bind(ticket)
+        .bind(&id)
+        .bind(f64::from(age))
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    }
+    // No push sender, and so no receipts: push is off, or the service has
+    // not answered for a day.
+    let rules = ReceiptRules::default();
+    let removed = push::purge_tickets(&app.db, &rules, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    assert_eq!(removed, 2);
+    let left: Vec<String> = sqlx::query_scalar("SELECT id FROM push_ticket")
+        .fetch_all(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(left, ["fresh"]);
 }
 
 #[tokio::test]

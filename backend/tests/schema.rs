@@ -1319,7 +1319,14 @@ async fn a_device_belongs_to_a_session_and_its_token_is_one_device() {
 async fn text_messages_are_counted_for_the_whole_service_by_keyed_hash() {
     let mut tx = app().await;
     let subject = Uuid::new_v4().as_bytes().repeat(2);
-    for scope in ["sms-sent", "sms-refused", "sms-failed"] {
+    for scope in [
+        "sms-sent",
+        "sms-refused",
+        "sms-failed",
+        "sms-sent-by-prefix",
+        "sms-refused-prefix",
+        "sms-refused-country",
+    ] {
         sqlx::query(
             "INSERT INTO sign_in_limit (scope, subject, window_start, count)
              VALUES ($1, $2, date_trunc('hour', now()), 1)",

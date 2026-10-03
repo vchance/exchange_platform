@@ -77,14 +77,25 @@ fn is_expo_token(token: &str) -> bool {
 }
 
 /// Registers this device for push notifications, under the session making
-/// the request, or updates it if it is registered already. A token is one
-/// device: registered by another account before, it now belongs to this one.
+/// the request, or updates it if it is registered already.
+///
+/// A token is one device, and it moves to this session only if it is not
+/// registered, is registered by the same account, or is registered under a
+/// session that has ended (signed out, revoked or expired): the same phone
+/// signed into another account afterwards. Registered under another
+/// account's live session, it stays where it is, so that someone who has
+/// learned a token cannot take another person's notifications. That is
+/// answered exactly as a registration is, with the device's ID, which this
+/// account cannot use; a different answer would say that the token belongs
+/// to someone. The cost falls on a phone handed on without signing out: it
+/// is notified for the old account until that session ends (at most the
+/// session's lifetime), and the app's next registration after that takes it.
 #[utoipa::path(
     put,
     path = "/v1/me/devices",
     request_body = RegisterDevice,
     responses(
-        (status = 200, description = "The device, registered", body = DeviceRegistered),
+        (status = 200, description = "The device, registered (or, if another account's live session holds the token, left as it was and answered the same)", body = DeviceRegistered),
         (status = 401, description = "Not signed in", body = ErrorBody),
         (status = 422, description = "Not an Expo push token, a platform, a version or a language", body = ErrorBody)
     )
@@ -102,13 +113,20 @@ pub async fn register_device(
     }
 
     let mut tx = state.db.begin().await?;
-    let id: Uuid = sqlx::query_scalar(
+    // The condition is decided on the conflicting row, locked, so two
+    // registrations at once cannot both move it.
+    let moved: Option<Uuid> = sqlx::query_scalar(
         "INSERT INTO device (account_id, session_id, service, token, platform, app_version, language)
          VALUES ($1, $2, 'EXPO', $3, $4, $5, $6)
          ON CONFLICT (service, token) DO UPDATE
          SET account_id = EXCLUDED.account_id, session_id = EXCLUDED.session_id,
              platform = EXCLUDED.platform, app_version = EXCLUDED.app_version,
              language = EXCLUDED.language, updated_at = now()
+         WHERE device.account_id = EXCLUDED.account_id
+            OR NOT EXISTS (
+                SELECT 1 FROM account_session s
+                WHERE s.id = device.session_id
+                  AND s.revoked_at IS NULL AND s.expires_at > now())
          RETURNING id",
     )
     .bind(session.account_id)
@@ -117,8 +135,19 @@ pub async fn register_device(
     .bind(body.platform.as_str())
     .bind(app_version)
     .bind(language)
-    .fetch_one(&mut *tx)
+    .fetch_optional(&mut *tx)
     .await?;
+    let Some(id) = moved else {
+        // Another account's live session holds it. Left alone, and answered
+        // as if registered (above).
+        let id: Uuid =
+            sqlx::query_scalar("SELECT id FROM device WHERE service = 'EXPO' AND token = $1")
+                .bind(token)
+                .fetch_one(&mut *tx)
+                .await?;
+        tx.commit().await?;
+        return Ok(Json(DeviceRegistered { id: id.to_string() }));
+    };
     sqlx::query(
         "DELETE FROM device WHERE account_id = $1 AND id NOT IN (
              SELECT id FROM device WHERE account_id = $1

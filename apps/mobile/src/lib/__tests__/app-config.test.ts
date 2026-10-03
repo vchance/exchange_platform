@@ -39,7 +39,7 @@ describe('the settings a release build needs', () => {
     EXPO_PUBLIC_WEB_URL: 'https://yuppers.example',
   };
 
-  it('are not needed outside preview and production builds', () => {
+  it('are not needed for a development build, or outside EAS', () => {
     for (const EAS_BUILD_PROFILE of [undefined, '', 'development', 'development-simulator']) {
       expect(() => checkReleaseSettings({ EAS_BUILD_PROFILE })).not.toThrow();
       expect(() =>
@@ -53,13 +53,15 @@ describe('the settings a release build needs', () => {
   });
 
   it('pass with both set to HTTPS', () => {
-    for (const EAS_BUILD_PROFILE of ['preview', 'production']) {
+    for (const EAS_BUILD_PROFILE of ['preview', 'production', 'staging']) {
       expect(() => checkReleaseSettings({ EAS_BUILD_PROFILE, ...service })).not.toThrow();
     }
   });
 
-  it('stop a preview or production build when either is unset or not HTTPS', () => {
-    for (const EAS_BUILD_PROFILE of ['preview', 'production']) {
+  it('stop any other EAS build when either is unset or not HTTPS', () => {
+    // Any profile not known to be for development, including one added
+    // later under a name nobody listed.
+    for (const EAS_BUILD_PROFILE of ['preview', 'production', 'staging', 'Development', 'dev']) {
       for (const name of ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_WEB_URL'] as const) {
         for (const value of [undefined, '', '  ', 'http://api.yuppers.example', 'not a url', 'api.yuppers.example']) {
           const env = { EAS_BUILD_PROFILE, ...service, [name]: value };

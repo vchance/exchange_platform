@@ -158,7 +158,7 @@ pub struct AddIdentifier {
         (status = 200, description = "The updated account", body = Account),
         (status = 401, description = "Not signed in, or the code is wrong", body = ErrorBody),
         (status = 409, description = "The identifier belongs to another account", body = ErrorBody),
-        (status = 422, description = "Not an email address or phone number", body = ErrorBody),
+        (status = 422, description = "Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`)", body = ErrorBody),
         (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody)
     )
 )]
@@ -170,6 +170,9 @@ pub async fn add_identifier(
 ) -> Result<Json<Account>, ApiError> {
     let identifier = Identifier::parse(&body.identifier)?;
     let settings = &state.settings;
+    // No code can have been sent to such a number, and none is checked: a
+    // number the service does not take is not attached to an account.
+    settings.auth.check_taken(&identifier)?;
     auth::verify_code(
         &state.db,
         &settings.app_secret,

@@ -534,8 +534,18 @@ export interface paths {
         get?: never;
         /**
          * Registers this device for push notifications, under the session making
-         *     the request, or updates it if it is registered already. A token is one
-         *     device: registered by another account before, it now belongs to this one.
+         *     the request, or updates it if it is registered already.
+         * @description A token is one device, and it moves to this session only if it is not
+         *     registered, is registered by the same account, or is registered under a
+         *     session that has ended (signed out, revoked or expired): the same phone
+         *     signed into another account afterwards. Registered under another
+         *     account's live session, it stays where it is, so that someone who has
+         *     learned a token cannot take another person's notifications. That is
+         *     answered exactly as a registration is, with the device's ID, which this
+         *     account cannot use; a different answer would say that the token belongs
+         *     to someone. The cost falls on a phone handed on without signing out: it
+         *     is notified for the old account until that session ends (at most the
+         *     session's lifetime), and the app's next registration after that takes it.
          */
         put: operations["register_device"];
         post?: never;
@@ -884,7 +894,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -1554,7 +1564,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Not an email address or phone number */
+            /** @description Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2899,7 +2909,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The account has no such identifier */
+            /** @description The account has no such identifier (`INVALID_REQUEST`), or its phone number is of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2932,7 +2942,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The device, registered */
+            /** @description The device, registered (or, if another account's live session holds the token, left as it was and answered the same) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3031,7 +3041,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Not an email address or phone number */
+            /** @description Not an email address or phone number (`INVALID_IDENTIFIER`), or a phone number of a country the service does not take (`PHONE_COUNTRY_NOT_SERVED`) */
             422: {
                 headers: {
                     [name: string]: unknown;
