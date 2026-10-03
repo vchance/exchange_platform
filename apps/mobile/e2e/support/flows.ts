@@ -94,11 +94,13 @@ export async function join(person: Person, link: string, w: Wording = en): Promi
 /** Signs the proposal waiting on this person, on the exchange screen. */
 export async function acceptOpen(page: Page, w: Wording = en): Promise<void> {
   await button(page, w.exchange.accept).first().click()
-  await expect(title(page, w.exchange.signHeading)).toBeVisible()
+  // The signing panel, headed under the proposal's own heading.
+  const panel = page.getByRole('heading', { name: w.exchange.signHeading, level: 3 })
+  await expect(panel).toBeVisible()
   await turnOn(page, w.consent.agree)
   await page.getByTestId('consent-sign').click()
   // Signed: there is nothing left to sign.
-  await expect(title(page, w.exchange.signHeading)).toBeHidden()
+  await expect(panel).toBeHidden()
   await expect(button(page, w.exchange.accept)).toBeHidden()
 }
 
@@ -117,10 +119,12 @@ export function exchangeIdOf(page: Page): string {
  */
 export async function move(page: Page, label: string, note?: string): Promise<void> {
   await button(page, label).first().click()
-  await expect(title(page, label)).toBeVisible()
+  // The item's panel, headed under the agreement's own heading.
+  const panel = page.getByRole('heading', { name: label, level: 3 })
+  await expect(panel).toBeVisible()
   if (note !== undefined) await page.getByLabel(/^Note/).fill(note)
   await button(page, label).last().click()
-  await expect(title(page, label)).toBeHidden()
+  await expect(panel).toBeHidden()
 }
 
 /** The entries of the history at the foot of the exchange screen. */
