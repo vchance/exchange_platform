@@ -16,7 +16,7 @@ use utoipa::ToSchema;
 use super::AppState;
 use super::auth::expired_cookie;
 use super::extract::{ApiJson, Session};
-use crate::auth::{self, Purpose};
+use crate::auth::{self, Requester};
 use crate::deletion::{self, CodeChannel, DeletionPreview};
 use crate::error::{ApiError, ErrorBody};
 
@@ -45,7 +45,9 @@ pub struct RequestDeletionCode {
 }
 
 /// Sends a one-time code for deleting the account to its own email address
-/// or phone number. The code is good for that and nothing else.
+/// or phone number. The code is good for that and nothing else. Requests are
+/// counted against the account, apart from sign-in codes, so nobody asking
+/// for sign-in codes for the same address can use them up.
 #[utoipa::path(
     post,
     path = "/v1/me/deletion/codes",
@@ -54,7 +56,7 @@ pub struct RequestDeletionCode {
         (status = 204, description = "A code was sent"),
         (status = 401, description = "Not signed in", body = ErrorBody),
         (status = 422, description = "The account has no such identifier", body = ErrorBody),
-        (status = 429, description = "Too many codes requested", body = ErrorBody)
+        (status = 429, description = "Too many deletion codes requested by this account", body = ErrorBody)
     )
 )]
 pub async fn request_deletion_code(
@@ -72,7 +74,9 @@ pub async fn request_deletion_code(
         &settings.auth,
         state.code_sender.as_ref(),
         &identifier,
-        Purpose::DeleteAccount,
+        Requester::DeleteAccount {
+            account: session.account_id,
+        },
         &language,
     )
     .await?;
@@ -98,7 +102,8 @@ pub struct DeleteAccount {
     responses(
         (status = 204, description = "The account is deleted"),
         (status = 401, description = "Not signed in, or the code is wrong, expired, used up or was sent for something else", body = ErrorBody),
-        (status = 422, description = "The account has no such identifier", body = ErrorBody)
+        (status = 422, description = "The account has no such identifier", body = ErrorBody),
+        (status = 429, description = "Too many wrong deletion codes from this account today", body = ErrorBody)
     )
 )]
 pub async fn delete_account(
@@ -114,7 +119,9 @@ pub async fn delete_account(
         &settings.auth,
         &identifier,
         &body.code,
-        Purpose::DeleteAccount,
+        Requester::DeleteAccount {
+            account: session.account_id,
+        },
     )
     .await?;
 

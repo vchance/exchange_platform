@@ -10,12 +10,13 @@ mod common;
 use std::sync::{Arc, Mutex};
 
 use axum::http::header::SET_COOKIE;
-use axum::http::{Method, StatusCode};
+use axum::http::{HeaderName, Method, StatusCode};
 use common::{App, Reply, User, accept, consent, fence_job};
 use exchange_backend::auth::{CodeMessage, CodeSender, Purpose, SendFuture};
 use exchange_backend::deletion;
 use exchange_backend::domain::Rules;
 use exchange_backend::exchanges::service::run_timers;
+use exchange_backend::http::TrustedProxies;
 use exchange_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_due};
 use exchange_backend::notifications::wording::Wording;
 use exchange_backend::notifications::{Email, EmailSender};
@@ -410,6 +411,207 @@ async fn deleting_takes_a_code_sent_for_deleting_and_nothing_less() {
     app.get(&ana, "/v1/me")
         .await
         .refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
+}
+
+// ---- Proof, under a flood ---------------------------------------------------
+
+/// Where a stranger who knows Ana's address works from.
+const STRANGER: &str = "203.0.113.66";
+
+/// With requests read as coming through one proxy, which names the requester
+/// in `X-Forwarded-For`.
+async fn start_behind_a_proxy() -> Test {
+    let turn = TURN.lock().await;
+    let codes = Arc::new(Codes::default());
+    let app = App::start_behind(
+        DATABASE,
+        Rules::default(),
+        codes.clone(),
+        TrustedProxies::behind(HeaderName::from_static("x-forwarded-for"), 1),
+    )
+    .await;
+    Test {
+        app,
+        codes,
+        _turn: turn,
+    }
+}
+
+impl Test {
+    /// A request from `address`, signed in as `user` or as nobody.
+    async fn post_from(
+        &self,
+        address: &str,
+        user: Option<&User>,
+        path: &str,
+        body: Value,
+    ) -> Reply {
+        self.app
+            .call(
+                user,
+                Method::POST,
+                path,
+                Some(body),
+                &[("x-forwarded-for", address)],
+            )
+            .await
+    }
+
+    /// A six-digit code that was never sent to `identifier`, for guessing.
+    fn never_sent(&self, identifier: &str) -> String {
+        let sent = self.codes.0.lock().unwrap();
+        (0..)
+            .map(|n| format!("{n:06}"))
+            .find(|candidate| {
+                !sent
+                    .iter()
+                    .any(|(to, code, _)| to == identifier && code == candidate)
+            })
+            .unwrap()
+    }
+}
+
+/// The guarantee: someone without the account's session cannot keep its
+/// owner from getting a deletion code or from using one, whatever they do to
+/// the identifier's sign-in and from wherever, even the owner's own address.
+#[tokio::test]
+async fn nobody_without_the_session_can_keep_its_owner_from_deleting() {
+    let test = start_behind_a_proxy().await;
+    let app = &test.app;
+    let ana = app.user("Ana").await;
+    let to_ana = json!({ "identifier": ana.email });
+    let email = json!({ "channel": "EMAIL" });
+
+    // Ana asks for a deletion code, from the address the stranger uses.
+    done(
+        &test
+            .post_from(STRANGER, Some(&ana), "/v1/me/deletion/codes", email.clone())
+            .await,
+    );
+    let (kept, purpose) = test.codes.last(&ana.email);
+    assert_eq!(purpose, Purpose::DeleteAccount);
+
+    // The stranger asks for sign-in codes for her address and guesses at
+    // them until both of its sign-in limits are used up: twenty wrong
+    // guesses for the day, five codes for the hour.
+    for _ in 0..4 {
+        done(
+            &test
+                .post_from(STRANGER, None, "/v1/auth/codes", to_ana.clone())
+                .await,
+        );
+        for _ in 0..5 {
+            let guess = json!({
+                "identifier": ana.email, "code": test.never_sent(&ana.email), "delivery": "TOKEN",
+            });
+            test.post_from(STRANGER, None, "/v1/auth/sessions", guess)
+                .await
+                .refused(StatusCode::UNAUTHORIZED, "INVALID_CODE");
+        }
+    }
+    done(
+        &test
+            .post_from(STRANGER, None, "/v1/auth/codes", to_ana.clone())
+            .await,
+    );
+    let guess = json!({
+        "identifier": ana.email, "code": test.never_sent(&ana.email), "delivery": "TOKEN",
+    });
+    test.post_from(STRANGER, None, "/v1/auth/sessions", guess)
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES");
+    test.post_from(STRANGER, None, "/v1/auth/codes", to_ana.clone())
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+
+    // It worked against signing in: from anywhere, Ana can neither get a
+    // sign-in code nor use the one she was sent.
+    let (sign_in_code, purpose) = test.codes.last(&ana.email);
+    assert_eq!(purpose, Purpose::SignIn);
+    let own = "198.51.100.40";
+    test.post_from(own, None, "/v1/auth/codes", to_ana.clone())
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+    let session = json!({ "identifier": ana.email, "code": sign_in_code, "delivery": "TOKEN" });
+    test.post_from(own, None, "/v1/auth/sessions", session)
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES");
+
+    // The deletion endpoints need her session, which the stranger lacks.
+    let wrong = json!({ "channel": "EMAIL", "code": test.never_sent(&ana.email) });
+    for (path, body) in [
+        ("/v1/me/deletion/codes", email.clone()),
+        ("/v1/me/deletion", wrong),
+    ] {
+        test.post_from(STRANGER, None, path, body)
+            .await
+            .refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
+    }
+
+    // But she can still be sent a deletion code, from that same address...
+    done(
+        &test
+            .post_from(STRANGER, Some(&ana), "/v1/me/deletion/codes", email)
+            .await,
+    );
+    assert_eq!(test.codes.last(&ana.email).1, Purpose::DeleteAccount);
+    // ...and the one she asked for before all this still deletes.
+    let delete = json!({ "channel": "EMAIL", "code": kept });
+    done(
+        &test
+            .post_from(STRANGER, Some(&ana), "/v1/me/deletion", delete)
+            .await,
+    );
+    app.get(&ana, "/v1/me")
+        .await
+        .refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
+}
+
+#[tokio::test]
+async fn deletion_codes_are_counted_against_the_account_and_kept_live_like_sign_in_codes() {
+    let test = start_behind_a_proxy().await;
+    let app = &test.app;
+    let (ana, ben) = (app.user("Ana").await, app.user("Ben").await);
+
+    // Asking again leaves the newest three live; the oldest of four is dead,
+    // unless by chance it is also one of the three.
+    let mut codes = Vec::new();
+    for _ in 0..4 {
+        codes.push(test.deletion_code(&ana, "EMAIL", &ana.email).await);
+    }
+    if !codes[1..].contains(&codes[0]) {
+        test.delete_with(&ana, "EMAIL", &codes[0])
+            .await
+            .refused(StatusCode::UNAUTHORIZED, "INVALID_CODE");
+    }
+
+    // Five an hour for the account, from wherever it asks.
+    codes.push(test.deletion_code(&ana, "EMAIL", &ana.email).await);
+    test.post_from(
+        "198.51.100.41",
+        Some(&ana),
+        "/v1/me/deletion/codes",
+        json!({ "channel": "EMAIL" }),
+    )
+    .await
+    .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+
+    // That is the account's own count: signing in to the same address, and
+    // another account's deletion, are untouched by it.
+    done(
+        &test
+            .post_from(
+                "198.51.100.42",
+                None,
+                "/v1/auth/codes",
+                json!({ "identifier": ana.email }),
+            )
+            .await,
+    );
+    test.deletion_code(&ben, "EMAIL", &ben.email).await;
+
+    // The oldest code still live deletes, sign-in code or no.
+    done(&test.delete_with(&ana, "EMAIL", &codes[2]).await);
 }
 
 // ---- The account and its working data ---------------------------------------

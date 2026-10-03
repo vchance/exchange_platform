@@ -78,6 +78,12 @@ The index on `exchange (timezone)` for active exchanges is for the worker, which
 
 `backend/tests/schema.rs` checks the key and the grants; `backend/tests/reminders.rs` drives the worker's pass against a database of its own.
 
+## 0008_sign_in_limits
+
+Sign-in hardening (`DESIGN.md` §8, §18 item 4). A new code no longer ends the live ones, so `one_time_code` gains `purpose`: the codes kept live, checked and spent together are one identifier's for one purpose. Codes stored before it are taken as sign-in codes, so a deletion code in flight during the upgrade stops working, which is the safe way round.
+
+**`sign_in_limit`** counts code requests and failed guesses per requester's address, identifier or account, one row per thing counted and fixed window (an hour, or a UTC day). The service locks the row while it decides, so concurrent requests cannot both slip under a limit. Whom a row counts is a keyed hash under `APP_SECRET`, never an address or identifier in the clear, and the worker removes windows more than two days old; so deleting an account need not touch the table. The application role may read, add, change and remove rows. `backend/tests/schema.rs` checks the constraints and grants; `backend/tests/auth.rs` and `backend/tests/deletion.rs` the limits through the API.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

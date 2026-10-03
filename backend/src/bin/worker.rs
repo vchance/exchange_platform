@@ -1,8 +1,10 @@
-//! Background worker: outbox delivery, reminders, expiries, closures and the
-//! purge of old network metadata (DESIGN.md §13, §14). Runs as its own process so slow jobs never stall requests.
+//! Background worker: outbox delivery, reminders, expiries, closures, and the
+//! purge of old network metadata and of old sign-in limit counts (DESIGN.md
+//! §13, §14). Runs as its own process so slow jobs never stall requests.
 
 use std::time::Duration;
 
+use exchange_backend::auth::purge_sign_in_limits;
 use exchange_backend::config::WorkerConfig;
 use exchange_backend::domain::Rules;
 use exchange_backend::exchanges::reminders::run_reminders;
@@ -52,6 +54,11 @@ async fn main() -> anyhow::Result<()> {
                     Ok(0) => {}
                     Ok(removed) => tracing::info!(removed, "network metadata purged"),
                     Err(error) => tracing::error!(%error, "network metadata purge failed"),
+                }
+                match purge_sign_in_limits(&db).await {
+                    Ok(0) => {}
+                    Ok(removed) => tracing::info!(removed, "old sign-in limit counts removed"),
+                    Err(error) => tracing::error!(%error, "sign-in limit purge failed"),
                 }
                 // After both, so what they just caused goes out in the same
                 // pass.

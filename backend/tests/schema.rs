@@ -1167,3 +1167,58 @@ async fn a_reminder_is_recorded_once_and_then_neither_changed_nor_removed() {
         );
     }
 }
+
+#[tokio::test]
+async fn sign_in_limits_are_counted_by_keyed_hash_and_the_service_can_forget_them() {
+    let mut tx = app().await;
+    let subject = Uuid::new_v4().as_bytes().repeat(2);
+    let count = |scope: &'static str, subject: Vec<u8>| {
+        sqlx::query(
+            "INSERT INTO sign_in_limit (scope, subject, window_start, count)
+             VALUES ($1, $2, date_trunc('hour', now()), 1)",
+        )
+        .bind(scope)
+        .bind(subject)
+    };
+
+    count("code-requests-by-address", subject.clone())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    // One row per thing counted and window.
+    refused!(
+        tx,
+        UNIQUE,
+        count("code-requests-by-address", subject.clone())
+    );
+    // Only the kinds of count the service keeps, and only a hash: an address
+    // or identifier in the clear does not fit.
+    refused!(tx, CHECK, count("guesses", subject.clone()));
+    refused!(
+        tx,
+        CHECK,
+        count("failed-guesses-by-identifier", b"ana@example.com".to_vec())
+    );
+    // A one-time code says what it was sent for.
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "INSERT INTO one_time_code (identifier, purpose, code_hash, expires_at)
+             VALUES ('ana@example.com', 'anything', $1, now())",
+        )
+        .bind(subject.clone())
+    );
+
+    // The service adds to counts and removes old ones.
+    sqlx::query("UPDATE sign_in_limit SET count = count + 1 WHERE subject = $1")
+        .bind(subject.clone())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM sign_in_limit WHERE subject = $1")
+        .bind(subject)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+}
