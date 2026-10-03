@@ -14,6 +14,7 @@ The design guide is kept in a separate, private repository. Comments and documen
 | `apps/web/` | React web app built with Vite. Also the no-install path for invited counterparties. |
 | `apps/mobile/` | iOS and Android app: React Native with Expo, routed with Expo Router. The web app's flows for agreeing an exchange and seeing it through, on its own screens. |
 | `docs/operations.md` | Running the service: deployment, health, logs, metrics, backups and restore. |
+| `docs/wallet.md` | Apple Wallet and Google Wallet passes: what a pass shows and why, how it is signed and kept up to date, the settings, and the owner's steps once the accounts exist. |
 | `docs/mobile-release.md` | Building and releasing the mobile app: build profiles and version numbers, permissions, the iOS privacy manifest, what the app collects for the store forms, universal and app links, the owner's steps once the store accounts exist, and store listing drafts. |
 | `scripts/` | The load check, and backing up, restoring and checking a restored database. |
 | `packages/api-client/` | TypeScript API client, generated from the service's own API description. |
@@ -94,6 +95,7 @@ The app in `apps/mobile` takes an exchange from a draft to completion the way th
 - **Invitation links.** An invitation reaches the app in three ways: as a universal link (iOS) or app link (Android), once the web domain names the app (`APPLE_APP_ID` and `ANDROID_SHA256_CERT_FINGERPRINTS` in "Deploying", and [docs/mobile-release.md](docs/mobile-release.md)); its own scheme, `yuppers://{language}/i#{token}`, and pasting the link into the app ("Open an invitation" on the first screen, signed in or not; signed out, it leads to reading the proposal without an account, as the link does). Either way the token is taken out of the link before the router sees it and is held in memory only (`src/lib/invitation.ts`, `src/app/+native-intent.ts`). Links in notification emails, to an exchange (`{web origin}/exchanges/{id}`) or its record, are claimed the same way and open that exchange's screen.
 - **Languages.** The device's language before sign-in and the account's after. Hermes, the engine the app runs on, has a narrower `Intl` than a browser: the shared formatting avoids what it lacks, and `src/lib/plural-rules.ts` supplies plural rules for every language from the Unicode data, so adding a language needs nothing in the app.
 - **History and the record.** The exchange screen ends with its history, and `/exchanges/{id}/record` lays the whole record out to be read from top to bottom, by eye or with a screen reader, under the same plain summary as the web's (`src/screens/History.tsx`, `src/screens/RecordScreen.tsx`). A party takes their copy away through the system's share sheet, as a PDF or as the JSON document. For the PDF the record is laid out as one HTML page, summary first, with everything escaped and no script allowed (`src/lib/record-html.ts`), and `expo-print` prints it to a file. The share sheet takes a file, so either copy is written to the app's own cache first (`src/lib/record-sharer.ts`, with `expo-file-system`, `expo-print` and `expo-sharing`). There is never more than one such copy, and it goes when the next is made, when the account signs out, and on iOS as soon as the sheet closes.
+- **Wallet passes.** On an agreement in force, "Add to Apple Wallet" on iOS and "Add to Google Wallet" on Android, when the service issues passes for that wallet (`src/components/WalletButton.tsx`). On iOS the pass opens in Safari, which adds it to Wallet; the in-app sheet needs a native module the app does not have yet ([docs/wallet.md](docs/wallet.md)).
 - **Report and block.** On the exchange screen once someone has joined, on the invitation screen before signing in (report only), and as a list of the people blocked on the account screen (`src/screens/ExchangeSafety.tsx`, `InvitationReport.tsx`, `BlockedPeople.tsx`). What is sent, and what the person is then told, is decided in `packages/shared` and is the same as on the web.
 - **Tests.** `npm test -w @yuppers/mobile` runs every test twice, as an iOS build and as an Android build would load the app, including one that runs the whole app against a stand-in for the service. Native modules are mocked there; nothing replaces running it on devices before a release.
 
@@ -138,7 +140,7 @@ None of this replaces trying the apps with VoiceOver, TalkBack, NVDA and a keybo
 | `npx expo export --platform ios --platform android` (in `apps/mobile/`) | Builds both platforms' bundles, which proves they compile. |
 | `npm run build:web` | Production build of the web app, with one entry page per language (`DESIGN.md` §13.5). |
 | `npm run budget -w @yuppers/web` | After `build:web`: the invitation page's size, held to its budget (below). |
-| `cargo test` (in `backend/`) | Backend tests: the rules as pure functions, and the database, sign-in and exchange API against a running PostgreSQL. |
+| `cargo test` (in `backend/`) | Backend tests: the rules as pure functions, and the database, sign-in and exchange API against a running PostgreSQL, Wallet passes with throwaway credentials included. |
 | `cargo run --bin worker` (in `backend/`) | Background worker. |
 | `npm run e2e` | End-to-end tests of the web app in Chromium, against the real API and database (below). |
 | `npm run e2e:mobile` | End-to-end tests of the mobile app's screens in Chromium the size of a phone, through the browser harness, against the real API and database (below). |
@@ -177,6 +179,7 @@ What the harness cannot show, because it only exists on a device:
 - **Links handed over by the system.** `+native-intent.ts`, which takes an invitation's token out of a link before the router sees it, runs only on a device; in the browser the tests open the link's own address, `/{language}/i#…`, which the app handles too.
 - **The native date picker, the platform's switches and back gesture, screen reader announcements, larger text and less motion, and the narrower `Intl` of Hermes.** The browser has its own of each.
 - **A build too old for the service.** The harness names no client version, so `CLIENT_TOO_OLD` is never reached.
+- **Wallet buttons.** The harness is neither iOS nor Android, so it offers no wallet; the jest tests run the button as each, and nothing has added a pass to a real wallet ([docs/wallet.md](docs/wallet.md)).
 - **Composing and sending terms in the app.** Not covered yet: in these tests the person who starts an exchange does it through the API.
 
 ## CI
@@ -199,7 +202,7 @@ The workflow names the Rust and Node versions it uses; raise them there when the
 
 The base images in the `Dockerfile`, the PostgreSQL image in the workflows and every action are pinned by digest or commit, with the tag or version beside it. [`.github/dependabot.yml`](.github/dependabot.yml) proposes newer digests for the `Dockerfile` and the actions every week, as pull requests that CI checks like any other. It does not read the workflows' PostgreSQL image, so that digest, the same in every job of `ci.yml`, is updated by hand: `docker pull postgres:17`, then `docker inspect --format '{{index .RepoDigests 0}}' postgres:17`, and replace it everywhere at once.
 
-What remains, as of October 2026. Every package here is already at the newest version its dependents allow; npm's suggested fix for the Expo ones is a downgrade to Expo 44, which is not one. The Rust side has nothing open.
+What remains, as of October 2026. Every package here is already at the newest version its dependents allow; npm's suggested fix for the Expo ones is a downgrade to Expo 44, which is not one.
 
 | Package | Issue | Where it runs | Why it stays |
 |---|---|---|---|
@@ -207,6 +210,7 @@ What remains, as of October 2026. Every package here is already at the newest ve
 | `braces` 3.0.3 (high) | Stack exhaustion on deeply nested brace patterns | Jest's file matching, through `micromatch`, when the mobile tests run | No fixed release exists. The patterns are the repository's own test configuration. Accepted in the audit workflow, for when `npm audit` starts reporting it. |
 | `decode-uri-component` 0.2.2 (moderate) | Exponential time decoding malformed percent-encoding | The mobile app itself: `expo-router` reads the links the app opens with `query-string` 7 | Waiting on Expo. The fix, 0.5.0, is an ES module that `query-string` 7 cannot load, and `expo-router` 57 requires `query-string` 7. At worst, a crafted link makes the app hang for the person who opens it, and no one else. |
 | `uuid` 7.0.3 (moderate) | Missing bounds check when an output buffer is passed to v3, v5 or v6 | Generating the iOS project at build time, through `xcode` and `@expo/config-plugins` | `xcode` calls only `v4()`, without a buffer, so the flaw is never reached. Waiting on Expo. |
+| `rsa` 0.9.10 (Rust, medium) | RUSTSEC-2023-0071: RSA timing side channel ("Marvin"), observable over a network | The backend's tests only: it makes the throwaway RSA keys of the Wallet tests | No fixed release exists. The service signs with ring and does not contain the crate (`cargo tree -e normal -i rsa` finds nothing); the advisory itself says local use is fine. Below the audit's high threshold, so it is reported, not failed on. |
 
 ## Backend binaries
 
@@ -280,6 +284,7 @@ Nothing in the service assumes a particular host. A deployment is a PostgreSQL d
 | `LOG_FORMAT` | `text` (the default) or `json`, one object per line for a log collector. Each request logs one line with its method, path, status, latency and request ID; nothing personal is ever logged. |
 | `APPLE_APP_ID`, `ANDROID_SHA256_CERT_FINGERPRINTS`, `ANDROID_PACKAGE` | Off by default. Which apps may open the web origin's invitation links in place of the browser: the Apple team and bundle ID (`ABCDE12345.app.yuppers`), and the SHA-256 fingerprints of the Android signing certificates with the package (`app.yuppers` by default). The API serves them as `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json`, and serves neither file until its setting is given ([docs/mobile-release.md](docs/mobile-release.md)). |
 | `METRICS_ADDR` | Off by default. An address such as `0.0.0.0:9100` on which the api, or the worker, serves Prometheus metrics, on a listener of its own and never the public port. |
+| `APPLE_PASS_TYPE_ID`, `APPLE_TEAM_ID`, `APPLE_PASS_CERT`, `APPLE_PASS_KEY`, `APPLE_WWDR_CERT`, `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT`, `WALLET_DELIVERY` | Off by default. Apple Wallet and Google Wallet passes, each platform on once all its settings are given, on the api and the worker; the keys are secrets. `WALLET_DELIVERY` (`live` or `log`) is then required. [docs/wallet.md](docs/wallet.md) says where each comes from. |
 
 TLS termination is the proxy's or the platform's: the service speaks plain HTTP behind it, and `WEB_ORIGIN` tells it what the outside sees. Secrets belong in the platform's secret store, never in the image or the repository.
 
@@ -363,14 +368,13 @@ A person can delete their account from the account screen of the web app and of 
 
 The scaffold, the database schema (`backend/migrations/`), the domain rules (`backend/src/domain/`), sign-in (`backend/src/auth.rs`), the exchange API (`backend/src/exchanges/`, `backend/src/http/`), the web app's screens (`apps/web/src/`) and the mobile app's (`apps/mobile/src/`) exist: two people can take an exchange from a draft to completion in a browser or in the app. The mobile app has not yet been run on a device or a simulator. Still to build, in rough order:
 
-1. On the web: Wallet buttons.
-2. An SMS provider for one-time codes sent to phone numbers. Email is done: codes and notifications go out over SMTP (`backend/src/notifications/smtp.rs`) once a deployment supplies a server; a code requested for a phone number is refused by the SMTP sender.
-3. Push and Wallet passes. Universal and app links are configured on both sides, the app and the API, and wait only for the Apple team ID, the domain and the Android signing certificate ([docs/mobile-release.md](docs/mobile-release.md)).
-4. Somewhere for staff to read reports and act on them. Report and block exist in the API, on the web and in the mobile app (`backend/src/safety.rs`, `DESIGN.md` §9), and a report is stored with who made it, about which exchange and which party, and why; but there is no staff sign-in yet, so nothing reads them.
+1. An SMS provider for one-time codes sent to phone numbers. Email is done: codes and notifications go out over SMTP (`backend/src/notifications/smtp.rs`) once a deployment supplies a server; a code requested for a phone number is refused by the SMTP sender.
+2. Push notifications. Universal and app links are configured on both sides, the app and the API, and wait only for the Apple team ID, the domain and the Android signing certificate ([docs/mobile-release.md](docs/mobile-release.md)). Wallet passes are built, on the web and in both apps, and wait for the Apple and Google accounts ([docs/wallet.md](docs/wallet.md)).
+3. Somewhere for staff to read reports and act on them. Report and block exist in the API, on the web and in the mobile app (`backend/src/safety.rs`, `DESIGN.md` §9), and a report is stored with who made it, about which exchange and which party, and why; but there is no staff sign-in yet, so nothing reads them.
 
 `DESIGN.md` §13.4 lists what the exchange API deliberately leaves out for now.
 
-Before any of the Wallet or store work can start, the Apple and Google accounts in `DESIGN.md` §11 need creating.
+Before passes reach a device or the apps reach a store, the Apple and Google accounts in `DESIGN.md` §11 need creating.
 
 ## License
 

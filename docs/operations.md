@@ -29,6 +29,7 @@ All three come from the same image: the `api` is its default command, the other 
    - `MIGRATION_DATABASE_URL`: the owner's, for `migrate` only.
    - `APP_SECRET`: `openssl rand -hex 32`.
    - `SMTP_PASSWORD`, and `SMTP_USERNAME` if the provider treats it as secret.
+   - Once Wallet passes are wanted: `APPLE_PASS_KEY` and `GOOGLE_WALLET_SERVICE_ACCOUNT` ([docs/wallet.md](wallet.md)).
 
 3. **Settings** (plain environment):
    - `WEB_ORIGIN`: the public HTTPS origin, such as `https://app.example.com`, without a trailing slash. Cookie sessions are honored only from it, emails link into it, and because it is HTTPS every response carries HSTS.
@@ -37,6 +38,7 @@ All three come from the same image: the `api` is its default command, the other 
    - The `SIGN_IN_*` limits only if the placeholders in `.env.example` do not suit (README, "Deploying").
    - `LOG_FORMAT=json` if a log collector reads the output; `RUST_LOG` stays `info`.
    - `METRICS_ADDR=0.0.0.0:9100` on the api and the worker, if something will scrape them (below).
+   - The Wallet settings, on the api and the worker, once the accounts exist, with `WALLET_DELIVERY=live` ([docs/wallet.md](wallet.md)). Until then, none of them.
 
 4. **Migrate.** Run the image with `/usr/local/bin/migrate` and `MIGRATION_DATABASE_URL`. It exits 0 with `migrations applied`. Safe to run again; every release runs it before the new api and worker start.
 
@@ -76,7 +78,7 @@ A proxy that sets its own request ID ties its logs to the service's that way.
 
 The one exception is the development deliveries, `CODE_DELIVERY=log` and `NOTIFICATION_DELIVERY=log`, which write each code and email to the log because that is their job. A deployment has to choose a delivery, so it never gets them by default; check that both say `smtp`.
 
-Useful lines besides requests: `api listening`, `worker started`, `worker shutting down`, `notifications delivered` (counts per pass), `notification not sent; will retry` and `notification given up on` (with the outbox ID), `timers ran`, `reminders queued`, `database error`, `readiness check failed`.
+Useful lines besides requests: `api listening`, `worker started`, `worker shutting down`, `notifications delivered` (counts per pass), `notification not sent; will retry` and `notification given up on` (with the outbox ID), `timers ran`, `reminders queued`, `issuing Wallet passes` (at start, naming the platforms), `wallet passes updated`, `wallet pass not updated; will retry` and `wallet pass update given up on` (with the pass's ID), `database error`, `readiness check failed`.
 
 ## Metrics
 
@@ -119,6 +121,7 @@ Starting points; tune them once there is real traffic.
 - **Pool.** `yuppers_db_pool_in_use` at `yuppers_db_pool_max` for minutes: requests are queuing for connections.
 - **Worker alive.** `time() - yuppers_worker_last_pass_timestamp_seconds` above 60, or its scrape failing.
 - **Readiness** failing on every copy: the database is unreachable.
+- **Wallet passes**, once on: `wallet pass update given up on` in the worker's log, or rows in `wallet_pass` with `update_status = 'FAILED'` (`last_error` says why; APNs refusing the certificate means it expired or was revoked). And the pass type certificate's expiry date, which the api warns about at start 30 days ahead and refuses to start past.
 - **Refusals** are not errors: `429` is a limit working (too many codes asked for, too many wrong guesses), and `4xx` in general is a person or a client being told no. Watch them for sudden jumps, not as failures.
 
 ## When the worker is down
@@ -128,6 +131,7 @@ Requests keep working: people can sign in, sign and record deliveries. What stop
 - **Notification emails** queue in the outbox; nothing is lost. One-time codes are sent by the api itself, so sign-in is unaffected.
 - **Timers**: unanswered revisions do not expire, close requests do not lapse into closing as unresolved, idle exchanges are not prompted or closed.
 - **Reminders** of contributions due soon or overdue are not sent.
+- **Wallet passes** are not updated; each catches up with the latest face when the worker is back.
 - **Purges**: network addresses and user agents older than 90 days (`DESIGN.md` §14) and old sign-in counts are not removed, so a long outage keeps personal data past its retention period.
 
 To recover:
@@ -200,12 +204,13 @@ CI runs the same steps on every change (the `Backup and restore` job): it fills 
 
 ## Rotating `APP_SECRET`
 
-`APP_SECRET` keys the hashes of one-time codes and the hashes that sign-in limits are counted under. It does not touch sessions, invitation links, signatures or content hashes, and the worker does not use it.
+`APP_SECRET` keys the hashes of one-time codes and the hashes that sign-in limits are counted under, and the tokens of Wallet passes. It does not touch sessions, invitation links, signatures or content hashes, and the worker does not use it.
 
 To rotate it, set the new value and restart every api copy together (a rolling restart works, but while old and new copies both run, a code sent by one is refused by the other). What it invalidates:
 
 - **Codes in flight**: every sign-in, deletion and new-identifier code already sent stops working. People ask for a new one; nobody is signed out.
 - **Sign-in limit counts**: the counts for the current hour and day start again from zero, since they are kept under the old secret's hashes. The old rows are removed by the worker within two days.
+- **Wallet passes**: links to download an Apple pass that are in flight (ten minutes at most) stop working. Passes already on devices keep working, since only their tokens' hashes are checked; one handed out again after the rotation gets a new token, and other devices' copies of that pass then stop updating until it is added again.
 
 Rotate it if it may have leaked: anyone with it and a copy of the database could test guesses at codes offline, and could tell which identifiers a count belongs to.
 
