@@ -97,9 +97,9 @@ Also true, and relevant to how the owner answers some questions:
 
 ## Universal links and app links
 
-An invitation link is `https://<domain>/{language}/i#<token>`. With the app installed, iOS and Android can open such a link in the app instead of the browser, once three things agree:
+Two kinds of link are claimed (`DESIGN.md` §4.1): an invitation link, `https://<domain>/{language}/i#<token>`, and an exchange's own pages, `https://<domain>/exchanges/<id>` and `https://<domain>/exchanges/<id>/record`, which is where notification emails link to. With the app installed, iOS and Android can open such a link in the app instead of the browser, once three things agree:
 
-1. **The app names the domain.** `apps/mobile/app.config.ts` takes the host of `EXPO_PUBLIC_WEB_URL` at build time, the same setting invitation links are written with, and adds `applinks:<domain>` to the iOS associated domains and a verified (`autoVerify`) Android intent filter for `https://<domain>/*/i`. Only an HTTPS origin on the default port counts; a development build against `http://localhost:5173` names no domain and keeps using `yuppers://` links.
+1. **The app names the domain.** `apps/mobile/app.config.ts` takes the host of `EXPO_PUBLIC_WEB_URL` at build time, the same setting invitation links are written with, and adds `applinks:<domain>` to the iOS associated domains and a verified (`autoVerify`) Android intent filter for `https://<domain>/*/i` and every path under `https://<domain>/exchanges/`. Only an HTTPS origin on the default port counts; a development build against `http://localhost:5173` names no domain and keeps using `yuppers://` links.
 2. **The domain names the app.** The API serves `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json` as JSON, with no redirect, from its settings, and serves neither until they are set (`backend/src/http/web.rs`, `AppLinks`):
 
    | Setting | Value |
@@ -108,10 +108,10 @@ An invitation link is `https://<domain>/{language}/i#<token>`. With the app inst
    | `ANDROID_SHA256_CERT_FINGERPRINTS` | The SHA-256 fingerprints of the certificates the Android app is signed with, as colon-separated hex pairs, separated by commas. |
    | `ANDROID_PACKAGE` | Optional; `app.yuppers` by default. |
 
-   A value that is not one stops the API at start. The files must be served from the web origin itself, so this works as it is when the API serves the web app (`WEB_DIR`, the container image's default); a deployment that serves the web app from somewhere else must serve the two files there.
-3. **The link reaches the invitation screen.** It already does: every link the system hands the app goes through `src/app/+native-intent.ts`, which takes the token out of the fragment, holds it in memory and opens the invitation screen, for the `https` link exactly as for `yuppers://`. The tests cover the `https` form; no device has opened one yet.
+   The iOS file lists the paths the app takes (`/*/i`, `/*/i/` and `/exchanges/*`); the Android file only names the app, and the paths are in the app's intent filter. A value that is not one stops the API at start. The files must be served from the web origin itself, so this works as it is when the API serves the web app (`WEB_DIR`, the container image's default); a deployment that serves the web app from somewhere else must serve the two files there.
+3. **The link reaches the right screen.** Every link the system hands the app goes through `src/app/+native-intent.ts` (`routeForIncomingLink` in `src/lib/invitation.ts`). An invitation link gives up its token, which is held in memory, and opens the invitation screen, for the `https` link exactly as for `yuppers://`. An exchange's address opens that exchange's screen, or its record; someone signed out is asked to sign in first and then sees it. An address under `/exchanges/` that is neither (a page emails never link to) is handed to the router as it came. The tests cover the `https` forms; no device has opened one yet.
 
-Only invitation links are claimed. Notification emails link to `https://<domain>/exchanges/<id>`, which the app also has a screen for; claiming them as well is one more path in each file and in `app.config.ts`, left for the owner to decide (`DESIGN.md` §4.1).
+Every other page of the web app stays in the browser. A deployment whose files were cached by Apple before `/exchanges/*` was added picks it up when Apple's servers fetch the file again, which can take a day or more; Android checks again when the app is installed or updated.
 
 ## Once the accounts exist
 

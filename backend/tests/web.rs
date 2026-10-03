@@ -398,6 +398,10 @@ async fn the_app_link_files_name_the_apps_as_json_without_a_redirect() {
                     "components": [
                         { "/": "/*/i", "comment": "An invitation link" },
                         { "/": "/*/i/", "comment": "An invitation link" },
+                        {
+                            "/": "/exchanges/*",
+                            "comment": "A yup, as notification emails link to it",
+                        },
                     ],
                 }],
             },

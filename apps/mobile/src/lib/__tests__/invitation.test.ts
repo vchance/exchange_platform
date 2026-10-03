@@ -32,13 +32,32 @@ test('any other link is left as it came and holds nothing', () => {
     'yuppers://',
     'yuppers://account',
     'yuppers://exchanges/0b9f1c2e-7a41-4c6e-9a55-3d2f8e1b6c70',
-    'https://app.example/exchanges/0b9f1c2e-7a41-4c6e-9a55-3d2f8e1b6c70',
+    // Not an exchange's address: no such exchange, or a page emails never link to.
+    'https://app.example/exchanges/not-an-id',
+    'https://app.example/exchanges/0b9f1c2e-7a41-4c6e-9a55-3d2f8e1b6c70/revise',
+    'https://app.example/exchanges',
     // A fragment on some other address is not an invitation.
     `yuppers://account#${token}`,
     'yuppers://en/i#short',
     'yuppers://en/i',
   ]) {
     expect(routeForIncomingLink(link)).toBe(link);
+    expect(heldInvitation()).toBeNull();
+  }
+});
+
+test('an exchange’s web address, as notification emails write it, opens that exchange', () => {
+  const id = '0b9f1c2e-7a41-4c6e-9a55-3d2f8e1b6c70';
+  for (const [link, route] of [
+    [`https://app.example/exchanges/${id}`, `/exchanges/${id}`],
+    [`https://app.example/exchanges/${id}/`, `/exchanges/${id}`],
+    [`https://app.example/exchanges/${id.toUpperCase()}`, `/exchanges/${id}`],
+    [`https://app.example/exchanges/${id}?from=email`, `/exchanges/${id}`],
+    [`https://app.example/exchanges/${id}/record`, `/exchanges/${id}/record`],
+  ]) {
+    expect(routeForIncomingLink(link)).toBe(route);
+    expect(redirectSystemPath({ path: link, initial: true })).toBe(route);
+    // It is no invitation, and holds nothing.
     expect(heldInvitation()).toBeNull();
   }
 });

@@ -25,9 +25,10 @@
 //! span logs the path alone.
 //!
 //! The same origin also tells iOS and Android which apps may open its
-//! invitation links in place of the browser ([`AppLinks`]): two small JSON
-//! files under `/.well-known/`, served when a deployment names the apps and
-//! absent when it does not, whether or not this service serves the pages.
+//! invitation links and exchange pages in place of the browser
+//! ([`AppLinks`]): two small JSON files under `/.well-known/`, served when a
+//! deployment names the apps and absent when it does not, whether or not
+//! this service serves the pages.
 
 use std::path::{Path, PathBuf};
 
@@ -202,9 +203,12 @@ pub const DEFAULT_ANDROID_PACKAGE: &str = "app.yuppers";
 /// answered with the web app's page, which a system would read as a broken
 /// file.
 ///
-/// Only invitation links, `/{language}/i`, are claimed: every other page of
-/// the web app stays in the browser. The token is in the fragment, which
-/// neither file sees or needs.
+/// Two kinds of link are claimed (DESIGN.md §4.1): invitation links,
+/// `/{language}/i`, whose token is in the fragment, which neither file sees
+/// or needs; and an exchange's own pages, `/exchanges/{id}` and below, which
+/// is where notification emails link to. Every other page of the web app
+/// stays in the browser. On Android the app's intent filter says which paths
+/// it takes (`apps/mobile/app.config.ts`); the file only names the app.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AppLinks {
     apple: Option<String>,
@@ -238,6 +242,10 @@ impl AppLinks {
                         "components": [
                             { "/": "/*/i", "comment": "An invitation link" },
                             { "/": "/*/i/", "comment": "An invitation link" },
+                            {
+                                "/": "/exchanges/*",
+                                "comment": "A yup, as notification emails link to it",
+                            },
                         ],
                     }],
                 },

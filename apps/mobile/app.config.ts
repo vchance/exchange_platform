@@ -6,9 +6,10 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  * environment the build runs in.
  *
  * Universal links (iOS) and app links (Android): an invitation link is
- * `{web origin}/{language}/i#{token}` (`src/lib/config.ts`), and on a device
- * with the app installed the system can hand that link to the app instead of
- * the browser. It does so only for a domain the app names here and that
+ * `{web origin}/{language}/i#{token}` (`src/lib/config.ts`), and a
+ * notification email links to `{web origin}/exchanges/{id}` (or its
+ * `/record`). On a device with the app installed the system can hand either
+ * link to the app instead of the browser (DESIGN.md §4.1). It does so only for a domain the app names here and that
  * serves `/.well-known/apple-app-site-association` and
  * `/.well-known/assetlinks.json` naming the app back (the API serves both
  * once `APPLE_APP_ID` and `ANDROID_SHA256_CERT_FINGERPRINTS` are set;
@@ -41,6 +42,9 @@ export function appLinkDomain(webUrl: string | undefined): string | null {
 /** The two invitation paths the web serves without a redirect: `/{language}/i` and `/{language}/i/`. */
 const INVITATION_PATH_PATTERNS = ['/.*/i', '/.*/i/'];
 
+/** An exchange's pages, where notification emails link to: `/exchanges/{id}` and `/exchanges/{id}/record`. */
+const EXCHANGE_PATH_PREFIX = '/exchanges/';
+
 export function withAppLinks(config: ExpoConfig, domain: string | null): ExpoConfig {
   if (!domain) return config;
   return {
@@ -56,11 +60,14 @@ export function withAppLinks(config: ExpoConfig, domain: string | null): ExpoCon
         {
           action: 'VIEW',
           autoVerify: true,
-          data: INVITATION_PATH_PATTERNS.map((pathPattern) => ({
-            scheme: 'https',
-            host: domain,
-            pathPattern,
-          })),
+          data: [
+            ...INVITATION_PATH_PATTERNS.map((pathPattern) => ({
+              scheme: 'https',
+              host: domain,
+              pathPattern,
+            })),
+            { scheme: 'https', host: domain, pathPrefix: EXCHANGE_PATH_PREFIX },
+          ],
           category: ['BROWSABLE', 'DEFAULT'],
         },
       ],

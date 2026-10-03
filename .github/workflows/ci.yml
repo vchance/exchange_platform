@@ -181,6 +181,9 @@ jobs:
           grep --quiet 'NSPrivacyAccessedAPICategoryFileTimestamp' ios/*/PrivacyInfo.xcprivacy
           grep --quiet 'android:autoVerify="true"' "$manifest"
           grep --quiet 'android:host="yuppers.example"' "$manifest"
+          # Invitation links, and the exchange pages notification emails link to.
+          grep --quiet 'android:pathPattern="/.\*/i"' "$manifest"
+          grep --quiet 'android:pathPrefix="/exchanges/"' "$manifest"
           for permission in READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE SYSTEM_ALERT_WINDOW VIBRATE; do
             grep --quiet "android.permission.$permission\" tools:node=\"remove\"" "$manifest" \
               || { echo "::error::$permission is not removed"; exit 1; }

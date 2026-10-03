@@ -35,7 +35,7 @@ describe('the app config', () => {
     expect(base.android?.intentFilters).toBeUndefined();
   });
 
-  it('claims invitation links on the domain, on both platforms', () => {
+  it('claims invitation links and exchange pages on the domain, on both platforms', () => {
     const config = withAppLinks(base, 'yuppers.example');
     expect(config.ios?.associatedDomains).toEqual(['applinks:yuppers.example']);
     expect(config.ios?.bundleIdentifier).toBe('app.yuppers');
@@ -46,6 +46,7 @@ describe('the app config', () => {
         data: [
           { scheme: 'https', host: 'yuppers.example', pathPattern: '/.*/i' },
           { scheme: 'https', host: 'yuppers.example', pathPattern: '/.*/i/' },
+          { scheme: 'https', host: 'yuppers.example', pathPrefix: '/exchanges/' },
         ],
         category: ['BROWSABLE', 'DEFAULT'],
       },

@@ -276,6 +276,27 @@ test('a second invitation link arriving while one is open shows the new proposal
   for (const request of service.sent) expect(request.path).not.toContain(other);
 });
 
+/** A notification email's link, as the system hands it to the app as a universal or app link. */
+const emailed = (path = '') =>
+  redirectSystemPath({ path: `https://yuppers.example/exchanges/${EXCHANGE}${path}`, initial: true });
+
+test('a notification email’s link to an exchange opens its screen', async () => {
+  const { app } = await open(emailed(), { signedIn: true });
+  await screen.findByText('Yup with Ben Ortiz');
+  expect(app.getPathnameWithParams()).toBe(`/exchanges/${EXCHANGE}`);
+});
+
+test('signed out, a notification email’s link asks for sign-in on the way to the exchange', async () => {
+  const { app } = await open(emailed(), { signedIn: false });
+  await screen.findByText(w.signIn.intro);
+  expect(app.getPathnameWithParams()).toBe(`/exchanges/${EXCHANGE}`);
+});
+
+test('a notification email’s link to the record opens the record', async () => {
+  const { app } = await open(emailed('/record'), { signedIn: true });
+  await waitFor(() => expect(app.getPathnameWithParams()).toBe(`/exchanges/${EXCHANGE}/record`));
+});
+
 test('with no link to open, an invitation can be pasted', async () => {
   await open('/invitation', { signedIn: false });
   const pasting = w.mobile.openInvitation;
