@@ -35,24 +35,33 @@ export async function turnOn(scope: Page | Locator, label: string): Promise<void
 
 // ---- Signing in ----------------------------------------------------------------
 
+/*
+ * Signing in and the profile are looked for among what is on screen only. A
+ * screen opened from the signed-out first screen, such as an invitation, has
+ * its own sign-in under it in the navigation stack, which the browser keeps
+ * in the page, hidden.
+ */
+
 /** Signs in from a sign-in form already on the screen, reading the code from the API's log. */
 export async function signIn(person: Person, w: Wording = en): Promise<void> {
   const { page } = person
-  await page.getByLabel(w.signIn.identifierLabel).fill(person.email)
+  const shown = (locator: Locator) => locator.filter({ visible: true })
+  await shown(page.getByLabel(w.signIn.identifierLabel)).fill(person.email)
   const code = await codeFrom(person.email, 'sign-in', () =>
-    button(page, w.signIn.sendCode).click(),
+    shown(button(page, w.signIn.sendCode)).click(),
   )
-  await page.getByLabel(w.signIn.codeLabel).fill(code)
-  await button(page, w.signIn.submit).click()
+  await shown(page.getByLabel(w.signIn.codeLabel)).fill(code)
+  await shown(button(page, w.signIn.submit)).click()
 }
 
 /** The profile a new account is asked for: a name and being 18 or over. */
 export async function setUpProfile(person: Person, w: Wording = en): Promise<void> {
   const { page } = person
-  await expect(page.getByRole('heading', { name: w.profile.firstTitle })).toBeVisible()
-  await page.getByLabel(w.profile.nameLabel, { exact: true }).fill(person.name)
-  await turnOn(page, w.profile.adultLabel)
-  await button(page, w.profile.continue).click()
+  const shown = (locator: Locator) => locator.filter({ visible: true })
+  await expect(shown(page.getByRole('heading', { name: w.profile.firstTitle }))).toBeVisible()
+  await shown(page.getByLabel(w.profile.nameLabel, { exact: true })).fill(person.name)
+  await shown(page.getByLabel(w.profile.adultLabel, { exact: true })).check()
+  await shown(button(page, w.profile.continue)).click()
 }
 
 /** A new account, signed in and set up, on the list of exchanges. */
