@@ -24,15 +24,20 @@ test('the list groups exchanges in progress, drafts and closed ones, with the cl
   await page.reload()
   await expect(title(page, en.home.title)).toBeVisible()
 
+  // Each is read as where it stands, its reference and when it changed, and
+  // then who it is with: the name is the other party's own words, and is
+  // never the first thing said.
   const exchanges = page.getByRole('button', { name: /\. Reference / })
   const inProgress = page.getByRole('button', {
-    name: new RegExp(`^${fill(en.home.withParty, { name: 'Cleo' })}\\. ${en.states.NEGOTIATING}\\.`),
+    name: new RegExp(
+      `^${en.states.NEGOTIATING}\\. Reference .*\\. ${fill(en.home.withParty, { name: 'Cleo' })}$`,
+    ),
   })
   const draft = page.getByRole('button', {
-    name: new RegExp(`^${en.home.noParty}\\. ${en.states.DRAFT}\\.`),
+    name: new RegExp(`^${en.states.DRAFT}\\. Reference .*\\. ${en.home.noParty}$`),
   })
   const closed = page.getByRole('button', {
-    name: new RegExp(`\\. ${en.outcomes.NOT_AGREED}\\.`),
+    name: new RegExp(`^${en.outcomes.NOT_AGREED}\\. Reference `),
   })
 
   // In progress first, then drafts, each under its heading.
@@ -40,7 +45,7 @@ test('the list groups exchanges in progress, drafts and closed ones, with the cl
   await expect(page.getByRole('heading', { name: en.home.groupDrafts, level: 2 })).toBeVisible()
   await expect(inProgress).toBeVisible()
   await expect(draft).toBeVisible()
-  await expect(exchanges.first()).toHaveAccessibleName(/^With Cleo\./)
+  await expect(exchanges.first()).toHaveAccessibleName(/\. With Cleo$/)
 
   // What is closed is counted but folded away.
   await expect(page.getByRole('heading', { name: en.home.groupClosed, level: 2 })).toBeVisible()
