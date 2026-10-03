@@ -14,7 +14,7 @@ import { invitationToken } from '../app/routes'
  * is a cookie the page cannot read and is never stored here.
  */
 
-const KEY = 'exchange.invitation'
+const KEY = 'yuppers.invitation'
 
 function stored(): string | null {
   try {

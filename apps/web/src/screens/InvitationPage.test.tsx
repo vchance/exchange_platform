@@ -32,7 +32,7 @@ describe('the invitation page in a tab that already shows one', () => {
     expect(window.location.hash).toBe('')
     expect(window.location.pathname).toBe('/en/i')
     // A reload while signing in finds the second, not the first.
-    expect(window.sessionStorage.getItem('exchange.invitation')).toBe(OTHER_INVITATION)
+    expect(window.sessionStorage.getItem('yuppers.invitation')).toBe(OTHER_INVITATION)
   })
 
   test('a fragment that is not an invitation leaves the page as it is', async () => {
@@ -41,6 +41,6 @@ describe('the invitation page in a tab that already shows one', () => {
 
     await paste('/en/i#top')
     expect(shown('OFFR-7Y2M')).toBe(true)
-    expect(window.sessionStorage.getItem('exchange.invitation')).toBe(INVITATION)
+    expect(window.sessionStorage.getItem('yuppers.invitation')).toBe(INVITATION)
   })
 })

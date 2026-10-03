@@ -30,7 +30,7 @@ use yuppers_backend::telemetry::{self, LogFormat};
 const DATABASE: &str = "yuppers_test_smtp";
 const WEB_ORIGIN: &str = "https://app.test";
 const FROM: &str = "Yuppers <no-reply@example.test>";
-const USERNAME: &str = "exchange-user";
+const USERNAME: &str = "yuppers-user";
 const PASSWORD: &str = "hunter2-not-for-logs";
 
 static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());

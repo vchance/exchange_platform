@@ -32,7 +32,7 @@ struct Build(PathBuf);
 impl Build {
     fn write() -> Self {
         let directory = std::env::temp_dir().join(format!(
-            "exchange-web-test-{}-{}",
+            "yuppers-web-test-{}-{}",
             std::process::id(),
             uuid::Uuid::new_v4().simple()
         ));
@@ -360,7 +360,7 @@ async fn without_a_web_directory_the_api_stands_alone() {
 #[tokio::test]
 async fn a_directory_that_is_not_a_build_is_refused() {
     let empty = std::env::temp_dir().join(format!(
-        "exchange-not-a-build-{}",
+        "yuppers-not-a-build-{}",
         uuid::Uuid::new_v4().simple()
     ));
     std::fs::create_dir_all(&empty).unwrap();
