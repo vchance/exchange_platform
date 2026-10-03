@@ -434,6 +434,6 @@ fn a_neutral_status_line_says_in_force_and_no_date_whatever_presses() {
         neutral(date!(2026 - 10 - 06), &seen).standing,
         Standing::InForce
     );
-    // The detailed line, the default, says it.
+    // The detailed line, a deployment's choice, says it.
     assert_eq!(render(&seen, &context(), en).standing, Standing::Disputed);
 }

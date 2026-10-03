@@ -10,7 +10,7 @@
 //! | `GOOGLE_WALLET_ISSUER_ID` | the issuer ID |
 //! | `GOOGLE_WALLET_SERVICE_ACCOUNT` | the service account's JSON key file, a path or the JSON |
 //! | `WALLET_DELIVERY` | `log` or `live`: how the worker sends pass updates. Required once a platform is on |
-//! | `WALLET_STATUS_ON_FACE` | `detailed` (the default) or `neutral`: how much the status line says |
+//! | `WALLET_STATUS_ON_FACE` | `neutral` (the default) or `detailed`: how much the status line says |
 //!
 //! Two problems with Apple's certificates take Apple off, with an error in
 //! the log, rather than stopping the process: a WWDR certificate that has
@@ -65,10 +65,10 @@ impl WalletConfig {
             Some(other) => bail!("WALLET_DELIVERY={other} is not supported; use `live` or `log`"),
         };
         let status_on_face = match optional(get, "WALLET_STATUS_ON_FACE").as_deref() {
-            None | Some("detailed") => StatusOnFace::Detailed,
-            Some("neutral") => StatusOnFace::Neutral,
+            None | Some("neutral") => StatusOnFace::Neutral,
+            Some("detailed") => StatusOnFace::Detailed,
             Some(other) => {
-                bail!("WALLET_STATUS_ON_FACE={other} is not supported; use `detailed` or `neutral`")
+                bail!("WALLET_STATUS_ON_FACE={other} is not supported; use `neutral` or `detailed`")
             }
         };
         Ok(Self {

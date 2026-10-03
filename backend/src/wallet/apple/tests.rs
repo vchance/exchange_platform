@@ -427,17 +427,23 @@ fn a_wwdr_certificate_that_did_not_issue_the_pass_certificate_or_expired_takes_a
 }
 
 #[test]
-fn the_status_on_the_face_is_detailed_unless_set_neutral() {
+fn the_status_on_the_face_is_neutral_unless_set_detailed() {
     use crate::wallet::StatusOnFace;
     assert_eq!(
         with_settings(&[]).unwrap().status_on_face,
-        StatusOnFace::Detailed
+        StatusOnFace::Neutral
     );
     assert_eq!(
         with_settings(&[("WALLET_STATUS_ON_FACE", "neutral")])
             .unwrap()
             .status_on_face,
         StatusOnFace::Neutral
+    );
+    assert_eq!(
+        with_settings(&[("WALLET_STATUS_ON_FACE", "detailed")])
+            .unwrap()
+            .status_on_face,
+        StatusOnFace::Detailed
     );
     assert!(with_settings(&[("WALLET_STATUS_ON_FACE", "quiet")]).is_err());
 }
