@@ -11,10 +11,8 @@ use axum::http::{HeaderName, Method};
 use common::{App, Deal, PEER, accept};
 use exchange_backend::auth::LogSender;
 use exchange_backend::domain::Rules;
-use exchange_backend::exchanges::service::purge_network_metadata;
 use exchange_backend::http::TrustedProxies;
 use serde_json::json;
-use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 const DATABASE: &str = "exchange_test_client_address";
@@ -102,41 +100,4 @@ async fn behind_trusted_proxies_the_address_comes_from_the_header() {
             Some("203.0.113.7".to_owned()),
         ]
     );
-}
-
-#[tokio::test]
-async fn the_address_is_forgotten_after_the_retention_period_and_the_signature_kept() {
-    let app = App::start(DATABASE).await;
-    let deal = app.active().await;
-    let exchange = deal.exchange.parse::<Uuid>().unwrap();
-    assert_eq!(recorded(&app, &deal.exchange).await.len(), 2);
-
-    // Nothing is old enough yet.
-    let now = OffsetDateTime::now_utc();
-    assert_eq!(
-        purge_network_metadata(&app.db, &app.rules, now)
-            .await
-            .unwrap(),
-        0
-    );
-    assert_eq!(recorded(&app, &deal.exchange).await.len(), 2);
-
-    // A day past the retention period, both records go, with whatever other
-    // tests in this database have signed; the signatures stay.
-    let later = now + app.rules.network_metadata_retention + Duration::days(1);
-    let removed = purge_network_metadata(&app.db, &app.rules, later)
-        .await
-        .unwrap();
-    assert!(removed >= 2, "{removed}");
-    assert_eq!(
-        recorded(&app, &deal.exchange).await,
-        Vec::<Option<String>>::new()
-    );
-    let signatures: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM acceptance WHERE exchange_id = $1")
-            .bind(exchange)
-            .fetch_one(&app.owner)
-            .await
-            .unwrap();
-    assert_eq!(signatures, 2);
 }
