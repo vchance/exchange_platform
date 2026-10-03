@@ -1980,7 +1980,7 @@ async fn replaying_the_log_deletes_again_through_the_rules_and_only_once() {
     );
     // Someone the copy never held.
     let stranger = Uuid::new_v4();
-    let deleted_at = three_days_ago();
+    let deleted_at = just_now();
     let entries = deletion_log::parse(&log_text(&[ben.id, stranger], deleted_at)).unwrap();
 
     let mut lines = Vec::new();
@@ -2032,9 +2032,13 @@ async fn replaying_the_log_deletes_again_through_the_rules_and_only_once() {
     assert_eq!(events(app, &deal.exchange).await, recorded);
 }
 
-/// A time in the past, to the second, as a deletion log carries it.
-fn three_days_ago() -> OffsetDateTime {
-    OffsetDateTime::now_utc().replace_nanosecond(0).unwrap() - Duration::days(3)
+/// The time now, to the microsecond, as a deletion log carries it: after
+/// the accounts a test has made and the suspensions it has recorded, as a
+/// real deletion would be.
+fn just_now() -> OffsetDateTime {
+    let now = OffsetDateTime::now_utc();
+    now.replace_nanosecond(now.nanosecond() / 1000 * 1000)
+        .unwrap()
 }
 
 fn rfc3339(at: OffsetDateTime) -> String {
@@ -2134,7 +2138,7 @@ async fn replaying_deletes_an_account_suspended_in_the_copy_after_lifting_the_su
     assert_eq!(refused.code, ErrorCode::AccountSuspended);
     assert_eq!(status_of(app, ben.id).await, "SUSPENDED");
 
-    let deleted_at = three_days_ago();
+    let deleted_at = just_now();
     let entries = deletion_log::parse(&log_text(&[ben.id], deleted_at)).unwrap();
     let recorded = events(app, &deal.exchange).await;
     let suspended = review_history(app, ben.id).await;
@@ -2211,4 +2215,152 @@ async fn replaying_deletes_an_account_suspended_in_the_copy_after_lifting_the_su
     let again = deletion_log::replay(&app.db, &app.rules, &entries, |_| {}).await;
     assert_eq!((again.deleted, again.already_deleted), (0, 1));
     assert_eq!(review_history(app, ben.id).await, history);
+}
+
+/// A line whose time is before the account was created, or before it was
+/// last suspended, in the restored copy cannot be a deletion of that account
+/// as the copy holds it: the replay reports it and does nothing, and the
+/// database refuses the lifting too, whoever asks.
+#[tokio::test]
+async fn replaying_leaves_alone_a_line_the_copy_contradicts() {
+    let test = start().await;
+    let app = &test.app;
+    let deal = app.active().await;
+    let (ana, ben) = (&deal.ana, &deal.ben);
+    let before_both = just_now() - Duration::days(3);
+    // Ben is suspended after the time the line gives.
+    suspend_after_report(app, ana, ben, &deal.exchange).await;
+    let recorded = events(app, &deal.exchange).await;
+    let suspended = review_history(app, ben.id).await;
+
+    let entries = deletion_log::parse(&log_text(&[ana.id, ben.id], before_both)).unwrap();
+    let mut lines = Vec::new();
+    let summary = deletion_log::replay(&app.db, &app.rules, &entries, |line| {
+        lines.push(line.to_owned())
+    })
+    .await;
+    assert_eq!(summary.contradicted, vec![ana.id, ben.id]);
+    assert_eq!((summary.deleted, summary.lifted.len()), (0, 0));
+    assert!(!summary.complete());
+    assert!(lines[0].contains("LEFT ALONE"), "{}", lines[0]);
+    assert_eq!(status_of(app, ana.id).await, "ACTIVE");
+    assert_eq!(status_of(app, ben.id).await, "SUSPENDED");
+    assert_eq!(review_history(app, ben.id).await, suspended);
+    assert_eq!(events(app, &deal.exchange).await, recorded);
+    assert_eq!(logged_at(app, ana.id).await, None);
+
+    // The owner's function refuses the same lifting when asked directly.
+    let refused = sqlx::query("SELECT replay_lift_suspension($1, $2, 'Lifted to replay')")
+        .bind(ben.id)
+        .bind(before_both)
+        .execute(&app.db)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        refused.as_database_error().unwrap().code().as_deref(),
+        Some("42501")
+    );
+    // And with a time it can follow, it still lifts only for a deletion:
+    // a lifting not followed by the account's deletion does not commit.
+    let mut tx = app.db.begin().await.unwrap();
+    let lifted: bool = sqlx::query_scalar("SELECT replay_lift_suspension($1, now(), 'Lifted')")
+        .bind(ben.id)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert!(lifted);
+    let refused = tx.commit().await.unwrap_err();
+    assert_eq!(
+        refused.as_database_error().unwrap().code().as_deref(),
+        Some("42501")
+    );
+    assert_eq!(status_of(app, ben.id).await, "SUSPENDED");
+    assert_eq!(review_history(app, ben.id).await, suspended);
+
+    // A line after both is replayed as usual.
+    let entries = deletion_log::parse(&log_text(&[ben.id], just_now())).unwrap();
+    let summary = deletion_log::replay(&app.db, &app.rules, &entries, |_| {}).await;
+    assert_eq!((summary.deleted, summary.lifted.clone()), (1, vec![ben.id]));
+    assert!(summary.complete());
+}
+
+/// The output of one of the service's processes run against the test
+/// database, as the application role, until it exits (or `wait` passes):
+/// whether it succeeded, and what it wrote.
+fn run_process(binary: &str, app: &App, args: &[&str]) -> (bool, String) {
+    let output = std::process::Command::new(binary)
+        .args(args)
+        .env("DATABASE_URL", &app.app_url)
+        .env("BIND_ADDR", "127.0.0.1:0")
+        .env("WEB_ORIGIN", "http://127.0.0.1")
+        .env("APP_SECRET", "replay-mark-test-secret-0123456789abcdef")
+        .env("CODE_DELIVERY", "log")
+        .env("NOTIFICATION_DELIVERY", "log")
+        .env("METRICS_ADDR", "")
+        .env("WEB_DIR", "")
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+    let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&output.stderr));
+    (output.status.success(), text)
+}
+
+/// A database restored and not yet replayed holds a mark: the api and the
+/// worker refuse to start on it and say what to run, and replaying the
+/// deletion log clears it (docs/operations.md, "Restoring").
+#[tokio::test]
+async fn the_api_and_the_worker_wait_for_the_replay_that_clears_the_restore_mark() {
+    let test = start().await;
+    let app = &test.app;
+    let ana = app.user("Ana").await;
+    sqlx::query("INSERT INTO restore_marker (event, note) VALUES ('REPLAY_PENDING', 'test')")
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    let pending = || async {
+        sqlx::query_scalar::<_, bool>("SELECT restore_replay_pending()")
+            .fetch_one(&app.db)
+            .await
+            .unwrap()
+    };
+    assert!(pending().await);
+
+    for binary in [env!("CARGO_BIN_EXE_api"), env!("CARGO_BIN_EXE_worker")] {
+        let (started, said) = run_process(binary, app, &[]);
+        assert!(!started, "{binary}: {said}");
+        assert!(said.contains("replay-deletions"), "{binary}: {said}");
+    }
+
+    // A replay that leaves an account undeleted does not clear it.
+    let dir = std::env::temp_dir().join(format!("replay-mark-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let log = dir.join("deletions.txt");
+    std::fs::write(&log, log_text(&[ana.id], just_now() - Duration::days(30))).unwrap();
+    let (done, said) = run_process(
+        env!("CARGO_BIN_EXE_replay-deletions"),
+        app,
+        &[log.to_str().unwrap()],
+    );
+    assert!(!done, "{said}");
+    assert!(said.contains("LEFT ALONE"), "{said}");
+    assert!(pending().await);
+
+    // One that deletes every account it names does.
+    std::fs::write(&log, log_text(&[ana.id], just_now())).unwrap();
+    let (done, said) = run_process(
+        env!("CARGO_BIN_EXE_replay-deletions"),
+        app,
+        &[log.to_str().unwrap()],
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(done, "{said}");
+    assert!(said.contains("no longer marked"), "{said}");
+    assert!(!pending().await);
+    let history: Vec<String> =
+        sqlx::query_scalar("SELECT event FROM restore_marker ORDER BY id DESC LIMIT 2")
+            .fetch_all(&app.owner)
+            .await
+            .unwrap();
+    assert_eq!(history, ["REPLAYED", "REPLAY_PENDING"]);
 }

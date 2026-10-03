@@ -1051,7 +1051,8 @@
     "WALLET_UNAVAILABLE": "Passes for this wallet aren’t available yet.",
     "SESSION_TOO_OLD": "This page needs a sign-in from the last 12 hours. Sign out and sign in again.",
     "CONTENT_HIDDEN": "Part of this yup has been hidden by review, so its terms can’t be signed or changed.",
-    "REPORT_RESOLVED": "This report has already been resolved."
+    "REPORT_RESOLVED": "This report has already been resolved.",
+    "SUBJECT_IS_REVIEWER": "The person reported is a reviewer. Only the owner can suspend a reviewer, or lift a reviewer’s suspension, after taking their reviewer role away."
   },
   "a11y": {
     "openExchange": "Opens this yup.",

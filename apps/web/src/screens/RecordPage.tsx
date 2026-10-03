@@ -1,5 +1,6 @@
 import type { components } from '@yuppers/api-client'
 import {
+  documentOf,
   moneyIds,
   recordFile,
   recordMoments,
@@ -20,7 +21,7 @@ import { EventList } from '../components/EventList'
 import { HelpLink } from '../components/HelpLink'
 import { RecordSummary } from '../components/RecordSummary'
 import { TermsView } from '../components/TermsView'
-import { Failure, PageHeading, Written } from '../components/ui'
+import { Failure, PageHeading, WithName, Written } from '../components/ui'
 import { api } from '../lib/api'
 import './record.css'
 
@@ -191,7 +192,7 @@ function Record({ record }: { record: RecordDocument }) {
         <Version
           key={revision.id}
           revision={revision}
-          name={(slot) => revision.signed.parties[slot]}
+          name={(slot) => documentOf(revision).parties[slot]}
           when={when}
         />
       ))}
@@ -229,7 +230,8 @@ interface VersionProps {
 export function Version({ revision, name, when }: VersionProps) {
   const { wording, fmt } = useI18n()
   const w = wording.record
-  const { standing, signed } = revision
+  const { standing } = revision
+  const signed = documentOf(revision)
   const heading = `record-version-${revision.sequence}`
 
   return (
@@ -237,11 +239,11 @@ export function Version({ revision, name, when }: VersionProps) {
       <div className="record-version-head">
         <h2 id={heading}>{fmt(w.versionHeading, { number: revision.sequence })}</h2>
         <p>
-          {fmt(w.versionSent, {
-            name: name(revision.author),
-            date: when(revision.sent_at),
-            expires: when(revision.expires_at),
-          })}
+          <WithName
+            message={w.versionSent}
+            name={name(revision.author)}
+            values={{ date: when(revision.sent_at), expires: when(revision.expires_at) }}
+          />
           {revision.answers && (
             <>
               <br />
@@ -283,7 +285,11 @@ export function Version({ revision, name, when }: VersionProps) {
         {revision.signatures.map((signature) => (
           <li key={signature.party} className="record-signature">
             <p>
-              {fmt(w.versionSignedBy, { name: signature.name, date: when(signature.signed_at) })}
+              <WithName
+                message={w.versionSignedBy}
+                name={signature.name}
+                values={{ date: when(signature.signed_at) }}
+              />
             </p>
             <p className="hint">
               {fmt(w.verifiedBy, {

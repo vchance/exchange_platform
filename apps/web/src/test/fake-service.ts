@@ -522,7 +522,21 @@ export function fakeService(account: Account | null): FakeService {
   return service
 }
 
+/** A report as the queue lists it: nothing of what the reporter wrote, or who anyone is. */
 function queuedReport(id: string, hours: number, overdue: boolean) {
+  return {
+    id,
+    created_at: '2026-10-22T09:00:00Z',
+    age_seconds: hours * 3600,
+    overdue,
+    reason: overdue ? ('SCAM' as const) : ('HARASSMENT' as const),
+    has_reporter: !overdue,
+    display_code: 'PVVS-5Q2K',
+  }
+}
+
+/** A report as its page shows it, once opened. */
+function openedReport(id: string, hours: number, overdue: boolean) {
   return {
     id,
     created_at: '2026-10-22T09:00:00Z',
@@ -536,6 +550,13 @@ function queuedReport(id: string, hours: number, overdue: boolean) {
     display_code: 'PVVS-5Q2K',
   }
 }
+
+/**
+ * A name written right to left, with a character that would turn the rest
+ * of its line around: the staff screen must keep it from steering the words
+ * around it.
+ */
+export const RTL_NAME = 'مريم\u202E الحداد'
 
 /** The staff review calls, for a reviewer. */
 function staff(call: string): [number, unknown] | null {
@@ -553,7 +574,7 @@ function staff(call: string): [number, unknown] | null {
     return [
       200,
       {
-        report: queuedReport(REPORT, 2, false),
+        report: openedReport(REPORT, 2, false),
         reporter: { id: BEN_ID, status: 'ACTIVE', party: 'B', name: PARTIES.B },
         subject: { id: ana.id, status: 'ACTIVE', party: 'A', name: PARTIES.A },
         content_hidden: false,
@@ -606,7 +627,21 @@ function staff(call: string): [number, unknown] | null {
     ]
   }
   if (call === `POST /v1/staff/suspensions/${BEN_ID}/lift`) return [204, null]
-  if (call === 'GET /v1/staff/hidden') return [200, []]
+  if (call === 'GET /v1/staff/hidden') {
+    return [
+      200,
+      [
+        {
+          exchange_id: ACTIVE,
+          display_code: 'PVVS-5Q2K',
+          account_id: ana.id,
+          name: RTL_NAME,
+          hidden_at: '2026-10-21T09:00:00Z',
+          report_id: OLD_REPORT,
+        },
+      ],
+    ]
+  }
   return null
 }
 

@@ -1,4 +1,5 @@
 import {
+  documentOf,
   directionOf,
   eventMessage,
   moneyIds,
@@ -142,7 +143,8 @@ export function recordHtml(
   /** One version that was sent, in full, with its signatures. */
   function version(revision: RecordRevision): string {
     const parts: string[] = [];
-    const { standing, signed } = revision;
+    const { standing } = revision;
+    const signed = documentOf(revision);
     const name = (slot: 'A' | 'B') => signed.parties[slot];
     parts.push(heading(2, fmt(w.versionHeading, { number: revision.sequence })));
     parts.push(

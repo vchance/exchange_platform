@@ -3,10 +3,15 @@
 
 mod common;
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use axum::http::{Method, StatusCode};
 use common::{App, Deal, Reply, User, accept, consent, fence_job};
 use serde_json::{Value, json};
 use time::{Duration, OffsetDateTime};
+use tracing::instrument::WithSubscriber;
+use tracing_subscriber::layer::SubscriberExt;
 use uuid::Uuid;
 use yuppers_backend::exchanges::service::run_timers;
 use yuppers_backend::safety::{REPORT_DETAILS_MAX_CHARS, REPORTS_PER_ACCOUNT_PER_DAY};
@@ -1332,4 +1337,117 @@ async fn a_blocked_person_gets_the_made_up_links_answers_about_the_blockers_link
     assert_eq!(shown.status, StatusCode::OK);
     assert_ne!((shown.status, shown.body), (unknown.status, unknown.body));
     claim(&app, &carla, &to_carla).await.ok();
+}
+
+// ---- Round trips before the answer -------------------------------------------
+
+/// Counts the statements sent to the database while it is on.
+struct Statements(Arc<AtomicUsize>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Statements {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        // sqlx reports each statement it has run, once, at this target.
+        if event.metadata().target() == "sqlx::query" {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
+
+/// The body of a request about a link, made from its token.
+type Body = fn(&str) -> Value;
+
+/// How many statements the request made, by its reply.
+async fn round_trips(app: &App, user: &User, path: &str, body: Value) -> (Reply, usize) {
+    let count = Arc::new(AtomicUsize::new(0));
+    let subscriber = tracing_subscriber::registry().with(Statements(count.clone()));
+    let reply = app.post(user, path, body).with_subscriber(subscriber).await;
+    (reply, count.load(Ordering::SeqCst))
+}
+
+/// Timing as well as wording: a made-up token, a dead link, a link from
+/// someone who blocked the viewer or whom the viewer blocked, and a link from
+/// an account that is suspended are each refused after the same number of
+/// database round trips, before anything about the exchange is loaded. So nothing tells them apart by how long the
+/// refusal takes (the earlier code loaded the exchange, and in a claim locked
+/// it, only for a live link).
+#[tokio::test]
+async fn every_dead_link_is_refused_after_the_same_round_trips_as_a_made_up_one() {
+    let app = app().await;
+    let deal = app.active().await;
+    let (ana, ben) = (&deal.ana, &deal.ben);
+    block(&app, ana, &deal.exchange).await;
+    let carla = app.user("Carla").await;
+
+    // Live links from Ana, whom Ben has been blocked by.
+    let (_, _, blocked_link) = propose(&app, ana).await;
+    // A link Ana replaced.
+    let (replaced, _, old_link) = propose(&app, ana).await;
+    app.post(
+        ana,
+        &format!("/v1/exchanges/{replaced}/invitation"),
+        json!({}),
+    )
+    .await
+    .ok();
+    // A link from someone now suspended.
+    let sam = app.user("Sam").await;
+    let (_, _, suspended_link) = propose(&app, &sam).await;
+    sqlx::query("UPDATE account SET status = 'SUSPENDED' WHERE id = $1")
+        .bind(sam.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    // A link someone else already used.
+    let (_, _, used_link) = propose(&app, &carla).await;
+    claim(&app, &app.user("Dora").await, &used_link).await.ok();
+
+    let calls: [(&str, Body); 4] = [
+        ("/v1/invitations/preview", |token| json!({ "token": token })),
+        ("/v1/invitations/claim", |token| json!({ "token": token })),
+        (
+            "/v1/invitations/claim",
+            |token| json!({ "token": token, "only_if_yours": true }),
+        ),
+        (
+            "/v1/invitations/report",
+            |token| json!({ "token": token, "reason": "SCAM" }),
+        ),
+    ];
+    // Once first, which registers the statement reports with the counter.
+    round_trips(&app, ben, calls[0].0, calls[0].1("made-up")).await;
+    for (path, body) in calls {
+        let (made_up, expected) = round_trips(&app, ben, path, body("made-up")).await;
+        assert!(expected > 0, "statements are counted");
+        made_up.refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+        for (what, token) in [
+            ("blocked", &blocked_link),
+            ("replaced", &old_link),
+            ("suspended", &suspended_link),
+            ("used", &used_link),
+        ] {
+            let (reply, trips) = round_trips(&app, ben, path, body(token)).await;
+            reply.refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+            assert_eq!(trips, expected, "{path} {what}");
+        }
+    }
+
+    // The count is real: a live link to someone it may be shown to goes on
+    // to load the exchange, and makes more.
+    let (_, _, live) = propose(&app, &carla).await;
+    let (_, dead) = round_trips(
+        &app,
+        ben,
+        "/v1/invitations/preview",
+        json!({ "token": "made-up" }),
+    )
+    .await;
+    let (shown, more) = round_trips(
+        &app,
+        ben,
+        "/v1/invitations/preview",
+        json!({ "token": live }),
+    )
+    .await;
+    assert_eq!(shown.status, StatusCode::OK, "{}", shown.body);
+    assert!(more > dead, "{more} > {dead}");
 }

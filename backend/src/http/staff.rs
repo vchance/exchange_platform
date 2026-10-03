@@ -3,14 +3,16 @@
 //!
 //! Every path here is for reviewers only. To anyone else, signed in or not,
 //! each one answers `404 NOT_FOUND`, exactly as a path that does not exist,
-//! before anything in the request is looked at. A reviewer whose one-time
+//! before anything in the request is looked at. So does every other path
+//! under `/v1/staff`, and every method a path does not take, so that nothing
+//! tells the paths that exist from those that do not. A reviewer whose one-time
 //! code was entered too long ago is told `SESSION_TOO_OLD`, and signs in
 //! again.
 
 use axum::extract::{FromRequestParts, Path, State};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
-use axum::routing::{get, post};
+use axum::routing::{any, get, post};
 use axum::{Json, Router};
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -33,6 +35,19 @@ pub fn routes() -> Router<AppState> {
         .route("/staff/suspensions/{account}/lift", post(lift))
         .route("/staff/hidden", get(hidden))
         .route("/staff/hidden/restore", post(restore))
+        // After the routes above, so that it covers each of them.
+        .method_not_allowed_fallback(not_found)
+        // Every other path under /staff. A route of its own rather than a
+        // fallback, which would not reach paths under one prefix only.
+        .route("/staff", any(not_found))
+        .route("/staff/", any(not_found))
+        .route("/staff/{*rest}", any(not_found))
+}
+
+/// What every unknown path and method under `/v1/staff` answers: the same
+/// as a staff path answers anyone who is not a reviewer.
+async fn not_found() -> ApiError {
+    ErrorCode::NotFound.into()
 }
 
 /// A signed-in reviewer whose one-time code is recent enough.
@@ -61,7 +76,10 @@ fn id(raw: &str) -> Result<Uuid, ApiError> {
     raw.parse().map_err(|_| ErrorCode::NotFound.into())
 }
 
-/// Staff only. The open reports, oldest first, each with its age.
+/// Staff only. The open reports, oldest first, each with its age, its
+/// reason and its exchange's code, and nothing of what the reporter wrote or
+/// who they are: those are read by opening the report. Reports the reviewer
+/// takes part in are left out. Limited per reviewer, with the other lists.
 #[utoipa::path(
     get,
     path = "/v1/staff/reports",
@@ -69,20 +87,22 @@ fn id(raw: &str) -> Result<Uuid, ApiError> {
     responses(
         (status = 200, description = "The queue", body = ReviewQueue),
         (status = 401, description = "The reviewer must sign in again (`SESSION_TOO_OLD`)", body = ErrorBody),
-        (status = 404, description = "Not a reviewer", body = ErrorBody)
+        (status = 404, description = "Not a reviewer", body = ErrorBody),
+        (status = 429, description = "Too many lists read in the last hour", body = ErrorBody)
     )
 )]
 pub async fn queue(
     State(state): State<AppState>,
-    _staff: Staff,
+    Staff(session): Staff,
 ) -> Result<Json<ReviewQueue>, ApiError> {
-    Ok(Json(review::queue(&state.db).await?))
+    Ok(Json(review::queue(&state.db, session.account_id).await?))
 }
 
 /// Staff only. Opens an open report: what it says, who it is about, the
 /// reported exchange's record with nothing hidden, and what review has done
 /// so far. Recorded in the audit history. A resolved report shows nothing
-/// more.
+/// more. A report the reviewer takes part in (they made it, it is about
+/// them, or they hold or held a place in its exchange) is "not found".
 #[utoipa::path(
     get,
     path = "/v1/staff/reports/{id}",
@@ -108,7 +128,9 @@ pub async fn open_report(
 
 /// Staff only. Resolves an open report, once: dismissed, the exchange's
 /// content hidden from the person reported, their account suspended, or
-/// both. A note is required for every outcome but `DISMISSED`.
+/// both. A note is required for every outcome but `DISMISSED`. A report the
+/// reviewer takes part in is "not found"; suspending another reviewer is
+/// refused (`SUBJECT_IS_REVIEWER`).
 #[utoipa::path(
     post,
     path = "/v1/staff/reports/{id}/resolution",
@@ -119,7 +141,7 @@ pub async fn open_report(
         (status = 204, description = "Resolved"),
         (status = 401, description = "The reviewer must sign in again (`SESSION_TOO_OLD`)", body = ErrorBody),
         (status = 404, description = "Not a reviewer, or no such report", body = ErrorBody),
-        (status = 409, description = "Already resolved (`REPORT_RESOLVED`), or the outcome cannot apply (`ACTION_NOT_ALLOWED`)", body = ErrorBody),
+        (status = 409, description = "Already resolved (`REPORT_RESOLVED`), the outcome cannot apply (`ACTION_NOT_ALLOWED`), or the person reported is a reviewer, whom only the owner can suspend (`SUBJECT_IS_REVIEWER`)", body = ErrorBody),
         (status = 422, description = "The note is missing or too long", body = ErrorBody),
         (status = 429, description = "Too many actions in the last hour", body = ErrorBody)
     )
@@ -130,11 +152,20 @@ pub async fn resolve(
     Path(report): Path<String>,
     ApiJson(body): ApiJson<Resolution>,
 ) -> Result<StatusCode, ApiError> {
-    review::resolve(&state.db, session.account_id, id(&report)?, body).await?;
+    review::resolve(
+        &state.db,
+        &state.settings.rules,
+        session.account_id,
+        id(&report)?,
+        body,
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Staff only. The suspended accounts, most recently suspended first.
+/// Staff only. The suspended accounts, most recently suspended first,
+/// leaving out the reviewer's own and those a report they take part in led
+/// to. Limited per reviewer, with the other lists.
 #[utoipa::path(
     get,
     path = "/v1/staff/suspensions",
@@ -142,18 +173,23 @@ pub async fn resolve(
     responses(
         (status = 200, description = "Suspended accounts", body = [Suspension]),
         (status = 401, description = "The reviewer must sign in again (`SESSION_TOO_OLD`)", body = ErrorBody),
-        (status = 404, description = "Not a reviewer", body = ErrorBody)
+        (status = 404, description = "Not a reviewer", body = ErrorBody),
+        (status = 429, description = "Too many lists read in the last hour", body = ErrorBody)
     )
 )]
 pub async fn suspensions(
     State(state): State<AppState>,
-    _staff: Staff,
+    Staff(session): Staff,
 ) -> Result<Json<Vec<Suspension>>, ApiError> {
-    Ok(Json(review::suspensions(&state.db).await?))
+    Ok(Json(
+        review::suspensions(&state.db, session.account_id).await?,
+    ))
 }
 
 /// Staff only. Lifts a suspension; the account can sign in again. A note is
-/// required.
+/// required. The reviewer's own suspension, and one that a report they take
+/// part in led to, is "not found"; a reviewer's is the owner's to lift
+/// (`SUBJECT_IS_REVIEWER`).
 #[utoipa::path(
     post,
     path = "/v1/staff/suspensions/{account}/lift",
@@ -164,6 +200,7 @@ pub async fn suspensions(
         (status = 204, description = "Lifted"),
         (status = 401, description = "The reviewer must sign in again (`SESSION_TOO_OLD`)", body = ErrorBody),
         (status = 404, description = "Not a reviewer, or no such suspended account", body = ErrorBody),
+        (status = 409, description = "The account is a reviewer's (`SUBJECT_IS_REVIEWER`)", body = ErrorBody),
         (status = 422, description = "The note is missing or too long", body = ErrorBody),
         (status = 429, description = "Too many actions in the last hour", body = ErrorBody)
     )
@@ -178,7 +215,9 @@ pub async fn lift(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Staff only. Content hidden by review, most recently hidden first.
+/// Staff only. Content hidden by review, most recently hidden first,
+/// leaving out what is hidden from the reviewer and what a report they take
+/// part in hid. Limited per reviewer, with the other lists.
 #[utoipa::path(
     get,
     path = "/v1/staff/hidden",
@@ -186,18 +225,20 @@ pub async fn lift(
     responses(
         (status = 200, description = "Hidden content", body = [HiddenContent]),
         (status = 401, description = "The reviewer must sign in again (`SESSION_TOO_OLD`)", body = ErrorBody),
-        (status = 404, description = "Not a reviewer", body = ErrorBody)
+        (status = 404, description = "Not a reviewer", body = ErrorBody),
+        (status = 429, description = "Too many lists read in the last hour", body = ErrorBody)
     )
 )]
 pub async fn hidden(
     State(state): State<AppState>,
-    _staff: Staff,
+    Staff(session): Staff,
 ) -> Result<Json<Vec<HiddenContent>>, ApiError> {
-    Ok(Json(review::hidden(&state.db).await?))
+    Ok(Json(review::hidden(&state.db, session.account_id).await?))
 }
 
 /// Staff only. Shows hidden content to the account again. A note is
-/// required.
+/// required. Content hidden from the reviewer, or by a report they take part
+/// in, is "not found".
 #[utoipa::path(
     post,
     path = "/v1/staff/hidden/restore",

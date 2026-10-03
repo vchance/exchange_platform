@@ -21,6 +21,7 @@ export { formatMessage } from './message'
 export { labelText } from './label'
 export type { MessageValues } from './message'
 export {
+  documentOf,
   eventMessage,
   joinRecord,
   noteKind,
@@ -37,6 +38,7 @@ export type {
   RecordEvent,
   RecordFile,
   RecordRevision,
+  SignedDocument,
 } from './record'
 export { useHistory, useRecord } from './use-record'
 export type { HistoryReading, RecordReading } from './use-record'

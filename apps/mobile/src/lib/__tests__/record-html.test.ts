@@ -41,8 +41,8 @@ test('the summary comes first, then the record in full', () => {
 test('what the parties wrote is escaped and set apart, and the page can run nothing', () => {
   const found = record();
   const hostile = '<script>alert(1)</script><img src="https://example.test/x">';
-  found.revisions[0].signed.terms = hostile;
-  found.revisions[0].signed.contributions[0].description = `A & B ${hostile}`;
+  found.revisions[0].signed!.terms = hostile;
+  found.revisions[0].signed!.contributions[0].description = `A & B ${hostile}`;
   const html = recordHtml(found, en);
   expect(html).not.toContain('<script>');
   expect(html).not.toContain('<img');

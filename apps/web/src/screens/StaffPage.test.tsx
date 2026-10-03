@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { REPORT, RESOLVED_REPORT, rita, staleRita } from '../test/fake-service'
+import { REPORT, RESOLVED_REPORT, RTL_NAME, rita, staleRita } from '../test/fake-service'
 import { button, field, heading, press, settle, start, stop, type, until } from '../test/harness'
 
 /*
@@ -26,6 +26,24 @@ function sent(service: { fetch: typeof fetch }) {
     return original(request)
   }) as typeof fetch
   return calls
+}
+
+/**
+ * The pieces of text on the page holding `text` that sit in no element that
+ * isolates their direction (a `<bdi>`, or one with `dir="auto"`), each as
+ * the HTML of its parent; none, when `text` is shown and always isolated.
+ * Then nothing in what someone wrote can turn the screen's own words around.
+ */
+function unisolated(text: string): string[] {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+  const found: string[] = []
+  let shown = false
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent!.includes(text)) continue
+    shown = true
+    if (!node.parentElement?.closest('bdi, [dir="auto"]')) found.push(node.parentElement!.outerHTML)
+  }
+  return shown ? found : [`${text} is not shown`]
 }
 
 describe('the staff review screen', () => {
@@ -106,5 +124,30 @@ describe('the staff review screen', () => {
       (link) => link.textContent === wording.staff.back,
     )
     expect(back?.getAttribute('href')).toBe('/staff')
+  })
+
+  test('names and what people wrote are isolated, so they cannot turn the words around them', async () => {
+    const { wording } = await start('/staff', rita)
+    await heading(wording.staff.title)
+    const rtl = 'مريم'
+    await until(() => document.body.textContent!.includes(rtl), 'the hidden content')
+    expect(unisolated(rtl)).toEqual([])
+    // The character that turns text around is taken out of the name too.
+    expect(document.body.textContent).not.toContain('\u202E')
+    expect(RTL_NAME).toContain('\u202E')
+    // The suspended account's name and the note about it.
+    expect(unisolated('Ben Ortiz')).toEqual([])
+    expect(unisolated('Threats in the notes.')).toEqual([])
+  })
+
+  test('on a report, every name and everything written is isolated', async () => {
+    const { wording } = await start(`/staff/reports/${REPORT}`, rita)
+    await heading(wording.staff.detailTitle.replace('{code}', 'PVVS-5Q2K'))
+    await until(() => document.body.textContent!.includes('Ana Ruiz'), 'the report')
+    // The people, as the report and the record name them, and what the
+    // reporter and the parties wrote.
+    for (const written of ['Ana Ruiz', 'Ben Ortiz', 'She threatened me in a note.']) {
+      expect(unisolated(written)).toEqual([])
+    }
   })
 })

@@ -90,10 +90,26 @@ async fn main() -> anyhow::Result<()> {
         });
     }
     tracing::info!("worker started");
+    // Whether the database is known not to be a restored copy waiting for
+    // its deletion log to be replayed. Nothing runs until it is.
+    let mut replay_checked = false;
 
     loop {
         tokio::select! {
             _ = ticker.tick() => {
+                if !replay_checked {
+                    match db::replay_pending(&db).await {
+                        Ok(true) => anyhow::bail!(db::REPLAY_PENDING),
+                        Ok(false) => replay_checked = true,
+                        Err(error) => {
+                            tracing::error!(
+                                error = %Redacted(&error),
+                                "could not check whether this database waits for a deletion replay; nothing runs until it can"
+                            );
+                            continue;
+                        }
+                    }
+                }
                 let timers = run_timers(&db, &rules, OffsetDateTime::now_utc()).await;
                 metrics.timers(&timers);
                 match timers {

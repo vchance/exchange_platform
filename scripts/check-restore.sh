@@ -12,7 +12,8 @@
 #     holds on a table, sequence, schema or function;
 #   - every trigger, the append-only ones among them, and whether it is
 #     enabled;
-#   - for every table, its row count and a digest of all its rows.
+#   - for every table, its row count and a digest of all its rows, except
+#     restore_marker, where the restore itself writes (migration 0018).
 #
 # Meant for a source nobody is writing to while the check runs, such as a
 # copy restored from the same backup, or a staging database; against a live
@@ -86,7 +87,8 @@ CROSS JOIN LATERAL (
                 md5(coalesce(string_agg(t::text, E''\\n'' ORDER BY t::text COLLATE "C"), '''')) AS digest
          FROM %I.%I AS t', table_schema, table_name), false, true, '') AS doc
 ) AS x
-WHERE table_schema = 'public' AND table_type = 'BASE TABLE';
+WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+  AND table_name <> 'restore_marker';
 SQL
 }
 

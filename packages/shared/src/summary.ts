@@ -2,7 +2,7 @@ import type { components } from '@yuppers/api-client'
 
 import type { I18n } from './i18n'
 import { isMoney } from './money'
-import type { RecordDocument, RecordRevision } from './record'
+import { documentOf, type RecordDocument, type RecordRevision } from './record'
 import type { ClosedReason } from './wording/types'
 
 type Schemas = components['schemas']
@@ -153,7 +153,7 @@ export function summarizeRecord(record: RecordDocument): RecordSummary {
     exchange.closed_outcome === 'ENDED_BY_AGREEMENT' ? (closing?.waived ?? []) : [],
   )
 
-  const items: SummaryItem[] = (revision?.signed.contributions ?? []).flatMap((contribution) => {
+  const items: SummaryItem[] = ((revision ? documentOf(revision) : undefined)?.contributions ?? []).flatMap((contribution) => {
     const status = statuses.get(contribution.id) ?? 'PENDING'
     // A contribution an amendment removed is not part of what was agreed.
     if (agreed && status === 'REMOVED') return []

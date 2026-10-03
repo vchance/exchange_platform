@@ -1573,20 +1573,27 @@ async fn reviewers_are_named_by_the_owner_and_review_history_cannot_be_rewritten
         .execute(&mut *tx)
         .await
         .unwrap();
-    refused!(tx, CHECK, event(None, "REPORT_VIEWED"));
+    // With no reviewer, the service's role is refused before anything else
+    // is looked at (0019); the owner's test below checks the rest.
+    refused!(tx, INSUFFICIENT_PRIVILEGE, event(None, "REPORT_VIEWED"));
     refused!(tx, CHECK, event(Some(staff), "STAFF_GRANTED"));
     refused!(tx, CHECK, event(Some(staff), "REPORT_FORGOTTEN"));
-    // The owner also lifts a suspension, replaying the deletion log, and
-    // then says why (0016); without a note, a lifting needs a reviewer.
-    refused!(tx, CHECK, event(None, "SUSPENSION_LIFTED"));
-    sqlx::query(
-        "INSERT INTO review_event (action, account_id, note)
-         VALUES ('SUSPENSION_LIFTED', $1, 'Lifted to replay a deletion.')",
-    )
-    .bind(a.account_a)
-    .execute(&mut *tx)
-    .await
-    .unwrap();
+    refused!(tx, INSUFFICIENT_PRIVILEGE, event(None, "SUSPENSION_LIFTED"));
+    // An entry with no reviewer reads as the owner's, and only the owner
+    // writes one (0019): the service's role is refused, whatever the action.
+    for action in ["SUSPENSION_LIFTED", "STAFF_GRANTED", "STAFF_REVOKED"] {
+        let error = refused!(
+            tx,
+            INSUFFICIENT_PRIVILEGE,
+            sqlx::query(
+                "INSERT INTO review_event (action, account_id, note)
+                 VALUES ($1, $2, 'Lifted to replay a deletion.')",
+            )
+            .bind(action)
+            .bind(a.account_a)
+        );
+        assert!(error.to_string().contains("schema owner"), "{error}");
+    }
     for statement in [
         "UPDATE review_event SET note = 'changed'",
         "DELETE FROM review_event",
@@ -1603,6 +1610,22 @@ async fn reviewers_are_named_by_the_owner_and_review_history_cannot_be_rewritten
 #[tokio::test]
 async fn the_schema_owner_cannot_rewrite_review_history_either() {
     let mut tx = owner().await.begin().await.unwrap();
+    // The owner writes the entries with no reviewer: naming and removing
+    // reviewers. Every other action needs a reviewer, and a suspension
+    // lifted by the owner (replaying the deletion log, 0016) says why, and
+    // stands only if the account is deleted when the transaction ends
+    // (0019).
+    let event = |action: &'static str, note: Option<&'static str>| {
+        sqlx::query("INSERT INTO review_event (action, note) VALUES ($1, $2)")
+            .bind(action)
+            .bind(note)
+    };
+    refused!(tx, CHECK, event("REPORT_VIEWED", None));
+    refused!(tx, CHECK, event("SUSPENSION_LIFTED", None));
+    event("STAFF_GRANTED", None)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
     for statement in [
         "UPDATE review_event SET note = note",
         "DELETE FROM review_event",
@@ -1629,10 +1652,23 @@ async fn the_deletion_log_holds_an_account_once_and_the_service_only_adds_to_it(
         sqlx::query("INSERT INTO deletion_log (account_id) VALUES ($1)").bind(account)
     };
 
+    // A live account cannot be put in the log: a replay would delete it
+    // (0019). Only one already deleted can.
+    let error = refused!(tx, INSUFFICIENT_PRIVILEGE, log(account));
+    assert!(
+        error.to_string().contains("only a deleted account"),
+        "{error}"
+    );
+    sqlx::query("UPDATE account SET status = 'DELETED', email = NULL WHERE id = $1")
+        .bind(account)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
     log(account).execute(&mut *tx).await.unwrap();
     // An account is deleted once, and only an account that exists.
     refused!(tx, UNIQUE, log(account));
-    refused!(tx, FOREIGN_KEY, log(Uuid::new_v4()));
+    // Nor one that does not exist, which is not deleted either.
+    refused!(tx, INSUFFICIENT_PRIVILEGE, log(Uuid::new_v4()));
     // Adding it again where it is already is how a replay or a retry writes.
     sqlx::query(
         "INSERT INTO deletion_log (account_id) VALUES ($1) ON CONFLICT (account_id) DO NOTHING",
@@ -1657,4 +1693,121 @@ async fn the_deletion_log_holds_an_account_once_and_the_service_only_adds_to_it(
     ] {
         refused!(tx, INSUFFICIENT_PRIVILEGE, sqlx::query(statement));
     }
+}
+
+/// What scripts/restore.sh checks a restored database against: the grants
+/// and triggers of the migrations it has applied, and nothing else
+/// (scripts/restore-inventory.txt; backend/tests/inventory.rs checks the
+/// file migration by migration). Here against the database at hand, which
+/// in CI is also each restored copy.
+#[tokio::test]
+async fn the_database_holds_exactly_the_grants_and_triggers_of_its_migrations() {
+    const QUERY: &str = include_str!("../../scripts/restore-inventory.sql");
+    const EXPECTED: &str = include_str!("../../scripts/restore-inventory.txt");
+    let owner = owner().await;
+    let applied: i64 =
+        sqlx::query_scalar("SELECT max(version) FROM _sqlx_migrations WHERE success")
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+    let url = env("DATABASE_URL");
+    let role = url
+        .split_once("://")
+        .and_then(|(_, rest)| rest.split([':', '@']).next())
+        .unwrap()
+        .to_owned();
+    let held: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(
+        QUERY.replace(":'app_role'", &format!("'{role}'")),
+    ))
+    .fetch_all(&owner)
+    .await
+    .unwrap();
+    let mut expected: Vec<String> = EXPECTED
+        .lines()
+        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+        .filter_map(|line| {
+            let (from, rest) = line.split_once(' ').unwrap();
+            (from.parse::<i64>().unwrap() <= applied).then(|| rest.to_owned())
+        })
+        .collect();
+    expected.sort();
+    assert_eq!(held, expected);
+}
+
+/// The mark a restore leaves (migration 0018): written by the owner alone,
+/// never changed, and cleared only by the replay's own function, which
+/// refuses while an account the deletion log names is not deleted.
+#[tokio::test]
+async fn the_restore_mark_is_the_owners_to_write_and_the_replays_to_clear() {
+    let mut tx = app().await;
+    for statement in [
+        "INSERT INTO restore_marker (event) VALUES ('REPLAYED')",
+        "UPDATE restore_marker SET note = 'changed'",
+        "DELETE FROM restore_marker",
+        "TRUNCATE restore_marker",
+    ] {
+        let error = refused!(tx, INSUFFICIENT_PRIVILEGE, sqlx::query(statement));
+        assert!(
+            error.to_string().contains("permission denied"),
+            "{statement}: {error}"
+        );
+    }
+    let pending: bool = sqlx::query_scalar("SELECT restore_replay_pending()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert!(!pending, "a database in use is not waiting for a replay");
+    tx.rollback().await.unwrap();
+
+    let mut tx = owner().await.begin().await.unwrap();
+    sqlx::query("INSERT INTO restore_marker (event, note) VALUES ('REPLAY_PENDING', 'test')")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let pending: bool = sqlx::query_scalar("SELECT restore_replay_pending()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert!(pending);
+    for statement in [
+        "UPDATE restore_marker SET note = 'changed'",
+        "DELETE FROM restore_marker",
+    ] {
+        let error = refused!(tx, INSUFFICIENT_PRIVILEGE, sqlx::query(statement));
+        assert!(
+            error.to_string().contains("append-only"),
+            "{statement}: {error}"
+        );
+    }
+    // An account in the deletion log that is live again: not cleared.
+    let account = account(&mut tx).await;
+    for statement in [
+        "UPDATE account SET status = 'DELETED' WHERE id = $1",
+        "INSERT INTO deletion_log (account_id) VALUES ($1)",
+        "UPDATE account SET status = 'ACTIVE' WHERE id = $1",
+    ] {
+        sqlx::query(statement)
+            .bind(account)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
+    refused!(tx, CHECK, sqlx::query("SELECT restore_replay_done()"));
+    sqlx::query("UPDATE account SET status = 'DELETED' WHERE id = $1")
+        .bind(account)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let cleared: bool = sqlx::query_scalar("SELECT restore_replay_done()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert!(cleared);
+    let (pending, again): (bool, bool) =
+        sqlx::query_as("SELECT restore_replay_pending(), restore_replay_done()")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    assert_eq!((pending, again), (false, false));
+    tx.rollback().await.unwrap();
 }

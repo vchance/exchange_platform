@@ -17,7 +17,12 @@
 # exchanges are left through the rules and the other party is told. An
 # account already deleted, or one the copy never held, is skipped, so
 # running it twice is harmless. It prints what it did for each account and
-# exits non-zero if any is left undeleted.
+# exits non-zero if any is left undeleted. A line whose time the copy
+# contradicts (before the account was created or last suspended there) is
+# reported and left alone, and also leaves the exit status non-zero.
+#
+# Once every account in the log is deleted, it clears the mark restore.sh
+# left, and the api and the worker can start on the copy.
 
 set -eu
 

@@ -2,7 +2,7 @@
 # Restores a backup made by scripts/backup.sh (docs/operations.md,
 # "Restoring").
 #
-#   scripts/restore.sh [--overwrite] [-d DATABASE_URL] FILE
+#   scripts/restore.sh [--overwrite] [--no-replay-needed] [-d DATABASE_URL] FILE
 #
 # Connects as the schema owner: -d, or else MIGRATION_DATABASE_URL. The
 # database must exist, and should be a new, empty one owned by that role:
@@ -24,7 +24,18 @@
 # name was where the backup was made.
 #
 # A restore brings back accounts deleted since the backup. Replay the
-# deletion log afterwards with scripts/replay-deletions.sh.
+# deletion log afterwards with scripts/replay-deletions.sh. Until it has
+# run, the restored database is marked as waiting for it (restore_marker,
+# migration 0018), and the api and the worker refuse to start on it;
+# replay-deletions clears the mark once every account in the log is deleted.
+# --no-replay-needed marks it as needing no replay instead, for an emergency
+# where whoever restores knows that no account was deleted since the backup;
+# the mark records that it was used, and when.
+#
+# Afterwards it checks that the application role holds exactly the grants,
+# and the database exactly the triggers, that the migrations the backup
+# holds give (scripts/restore-inventory.txt, printed by
+# scripts/restore-inventory.sql), and fails if not.
 #
 # The restore is one transaction: it either completes or leaves the database
 # as it was. Set PG_BIN to the directory holding pg_restore and psql if those
@@ -33,16 +44,18 @@
 set -eu
 
 usage() {
-    echo "usage: $0 [--overwrite] [-d DATABASE_URL] FILE" >&2
+    echo "usage: $0 [--overwrite] [--no-replay-needed] [-d DATABASE_URL] FILE" >&2
     exit 2
 }
 
 url="${MIGRATION_DATABASE_URL:-}"
 overwrite=no
+replay=needed
 file=
 while [ $# -gt 0 ]; do
     case "$1" in
         --overwrite) overwrite=yes ;;
+        --no-replay-needed) replay=not-needed ;;
         -d)
             [ $# -ge 2 ] || usage
             url="$2"
@@ -69,13 +82,22 @@ fi
 
 bin="${PG_BIN:+$PG_BIN/}"
 app_role="${APP_ROLE:-exchange_app}"
+here=$(dirname -- "$0")
+inventory="$here/restore-inventory.txt"
+if [ ! -r "$inventory" ] || [ ! -r "$here/restore-inventory.sql" ]; then
+    echo "$0: cannot read $inventory or restore-inventory.sql beside it" >&2
+    exit 2
+fi
+backup_name=$(basename -- "$file")
 
 # The query goes in on standard input, where psql substitutes its variables
-# (it does not in --command): the role's name reaches the server only as
-# :'app_role', quoted by psql, never pasted into the text.
+# (it does not in --command): the role's name and the backup's reach the
+# server only as :'app_role' and :'backup_name', quoted by psql, never pasted
+# into the text.
 sql() {
     printf '%s\n' "$1" | "${bin}psql" --no-psqlrc --quiet --tuples-only --no-align \
-        --set ON_ERROR_STOP=1 --set app_role="$app_role" --dbname="$url" --file=-
+        --set ON_ERROR_STOP=1 --set app_role="$app_role" --set backup_name="$backup_name" \
+        --dbname="$url" --file=-
 }
 
 # Readable as a backup before anything is touched.
@@ -110,25 +132,54 @@ fi
 "${bin}pg_restore" --no-owner --single-transaction --exit-on-error $clean \
     --dbname="$url" "$file"
 
-# What must hold afterwards, checked rather than assumed.
-triggers=$(sql "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
-                WHERE NOT t.tgisinternal AND t.tgenabled <> 'D'
-                  AND t.tgname IN ('revision_append_only', 'revision_attachment_append_only',
-                                   'contribution_snapshot_append_only', 'acceptance_append_only',
-                                   'exchange_event_append_only')")
-if [ "$triggers" != "5" ]; then
-    echo "$0: restored, but only $triggers of the 5 append-only triggers are in place" >&2
-    exit 1
+# The mark first, so that whatever fails below, the api and the worker do
+# not start on this copy before someone has looked. A backup made before
+# migration 0018 has no table for it: it is made here as 0018 makes it, and
+# 0018 then finds it there.
+created_marker=no
+if [ "$(sql "SELECT to_regclass('public.restore_marker') IS NULL")" = "t" ]; then
+    created_marker=yes
+    sql "CREATE TABLE restore_marker (
+             id      bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+             event   text NOT NULL CHECK (event IN (
+                         'REPLAY_PENDING', 'REPLAY_NOT_NEEDED', 'REPLAYED')),
+             at      timestamptz NOT NULL DEFAULT now(),
+             by_role text NOT NULL DEFAULT session_user,
+             note    text CHECK (char_length(note) <= 1000));
+         CREATE TRIGGER restore_marker_append_only
+             BEFORE UPDATE OR DELETE OR TRUNCATE ON restore_marker
+             FOR EACH STATEMENT EXECUTE FUNCTION forbid_change();
+         GRANT SELECT ON restore_marker TO :\"app_role\";" >/dev/null
 fi
-writable=$(sql "SELECT count(*) FROM (VALUES ('revision'), ('revision_attachment'),
-                    ('contribution_snapshot'), ('acceptance'), ('exchange_event')) AS t(name)
-                WHERE has_table_privilege(:'app_role', t.name, 'UPDATE')
-                   OR has_table_privilege(:'app_role', t.name, 'DELETE')
-                   OR has_table_privilege(:'app_role', t.name, 'TRUNCATE')
-                   OR NOT has_table_privilege(:'app_role', t.name, 'INSERT')")
-if [ "$writable" != "0" ]; then
-    echo "$0: restored, but $app_role's rights on the append-only tables are not as the" >&2
-    echo "migrations set them" >&2
+if [ "$replay" = "needed" ]; then
+    sql "INSERT INTO restore_marker (event, note)
+         VALUES ('REPLAY_PENDING', 'restore.sh ' || :'backup_name')" >/dev/null
+else
+    sql "INSERT INTO restore_marker (event, note)
+         VALUES ('REPLAY_NOT_NEEDED', 'restore.sh --no-replay-needed ' || :'backup_name')" >/dev/null
+fi
+
+# What must hold afterwards, checked rather than assumed: every grant the
+# application role holds, and every trigger, exactly as the migrations the
+# backup holds give them. Nothing missing (an append-only trigger, say), and
+# nothing more (a grant someone added by hand to the database backed up).
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+trap 'exit 130' INT TERM
+applied=$(sql "SELECT coalesce(max(version), 0) FROM _sqlx_migrations WHERE success")
+awk -v applied="$applied" '!/^#/ && NF { if ($1 + 0 <= applied + 0) { sub(/^[^ ]+ /, ""); print } }' \
+    "$inventory" | LC_ALL=C sort >"$work/expected"
+sql "$(cat "$here/restore-inventory.sql")" | LC_ALL=C sort >"$work/held"
+if [ "$created_marker" = "yes" ]; then
+    # Made above, not by the backup's migrations.
+    grep -v ' restore_marker ' "$work/held" >"$work/held.without" || true
+    mv "$work/held.without" "$work/held"
+fi
+if ! diff -u "$work/expected" "$work/held" >"$work/difference"; then
+    cat "$work/difference" >&2
+    echo "$0: restored, but $app_role's grants or the triggers are not what the $applied" >&2
+    echo "migrations of the backup give (above: - missing, + not expected). Do not use" >&2
+    echo "this copy until that is understood." >&2
     exit 1
 fi
 
@@ -136,8 +187,14 @@ migrations=$(sql "SELECT count(*) || ' migrations, the latest ' || max(version)
                   FROM _sqlx_migrations WHERE success")
 exchanges=$(sql "SELECT count(*) FROM exchange")
 events=$(sql "SELECT count(*) FROM exchange_event")
-echo "restored $file: $migrations; $exchanges exchanges, $events events"
-# Accounts deleted since the backup are live again in the copy until the
-# deletion log is replayed (docs/operations.md, "Restoring").
-echo "next: run migrate, then scripts/replay-deletions.sh with the newest deletion log," >&2
-echo "before the api and the worker start on this database" >&2
+held=$(wc -l <"$work/held" | tr -d ' ')
+echo "restored $file: $migrations; $exchanges exchanges, $events events; grants and triggers as expected ($held)"
+if [ "$replay" = "needed" ]; then
+    # Accounts deleted since the backup are live again in the copy until the
+    # deletion log is replayed (docs/operations.md, "Restoring").
+    echo "next: run migrate, then scripts/replay-deletions.sh with the newest deletion log." >&2
+    echo "Until it has run, the api and the worker refuse to start on this database." >&2
+else
+    echo "marked as needing no replay (--no-replay-needed, recorded in restore_marker):" >&2
+    echo "accounts deleted since the backup stay live here. Run migrate next." >&2
+fi

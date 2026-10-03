@@ -1,5 +1,6 @@
 import type { ErrorCode } from '@yuppers/api-client';
 import {
+  documentOf,
   moneyIds,
   recordFile,
   recordMoments,
@@ -246,7 +247,7 @@ function Record({ record, failure, reload }: RecordProps) {
         <Version
           key={revision.id}
           revision={revision}
-          name={(slot) => revision.signed.parties[slot]}
+          name={(slot) => documentOf(revision).parties[slot]}
           when={when}
         />
       ))}
@@ -297,7 +298,8 @@ function Version({ revision, name, when }: VersionProps) {
   const { wording, fmt } = useI18n();
   const colors = useColors();
   const w = wording.record;
-  const { standing, signed } = revision;
+  const { standing } = revision;
+  const signed = documentOf(revision);
 
   return (
     <Card>

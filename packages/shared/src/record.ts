@@ -14,6 +14,7 @@ type Schemas = components['schemas']
 export type RecordDocument = Schemas['RecordDocument']
 export type RecordEvent = Schemas['RecordEvent']
 export type RecordRevision = Schemas['RecordRevision']
+export type SignedDocument = Schemas['SignedDocument']
 export type HistoryPage = Schemas['HistoryPage']
 type Continuation = Schemas['Continuation']
 type Parties = Schemas['Parties']
@@ -108,9 +109,20 @@ export function noteKind(event: RecordEvent): RecordNoteKind {
   }
 }
 
+/**
+ * What a revision in the record says: the document its signatures cover, or,
+ * when a reviewer has hidden what was written in the exchange from the
+ * reader, the redacted copy the record gives in its place (`content_hidden`
+ * says so). One of the two is always there. Only `signed` hashes to the
+ * revision's `content_hash`.
+ */
+export function documentOf(revision: RecordRevision): SignedDocument {
+  return (revision.signed ?? revision.redacted) as SignedDocument
+}
+
 /** What a revision in the record says, in the shape the terms are read in everywhere else. */
 export function termsOfRevision(revision: RecordRevision): RevisionTerms {
-  const signed = revision.signed
+  const signed = documentOf(revision)
   return {
     party_a_name: signed.parties.A,
     party_b_name: signed.parties.B,

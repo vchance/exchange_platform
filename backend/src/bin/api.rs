@@ -60,6 +60,18 @@ async fn main() -> anyhow::Result<()> {
         metrics: Arc::new(HttpMetrics::default()),
     };
 
+    // Never on a restored copy whose deletion log is still to be replayed.
+    // A database that cannot be reached yet is not refused: readiness says
+    // so until it can be, and the check there covers the mark too.
+    match db::replay_pending(&state.db).await {
+        Ok(true) => anyhow::bail!(db::REPLAY_PENDING),
+        Ok(false) => {}
+        Err(error) => tracing::warn!(
+            error = %yuppers_backend::error::Redacted(&error),
+            "could not check whether this database waits for a deletion replay; not ready until it can"
+        ),
+    }
+
     let web = match &config.web_dir {
         Some(directory) => {
             let web = WebApp::open(directory)

@@ -602,7 +602,10 @@ async fn revisions(
                     .remove(&record.id)
                     .expect("every revision asked about has a standing"),
                 content_hash: hex(&record.content_hash),
-                signed: serde_json::from_str(&signed).expect("the canonical document is JSON"),
+                signed: Some(
+                    serde_json::from_str(&signed).expect("the canonical document is JSON"),
+                ),
+                redacted: None,
                 signatures,
                 void_signatures: on_it.void,
             }

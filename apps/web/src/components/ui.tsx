@@ -1,5 +1,5 @@
 import type { ErrorCode } from '@yuppers/api-client'
-import { labelText } from '@yuppers/shared'
+import { labelText, type MessageValues } from '@yuppers/shared'
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 
 import { useI18n } from '../app/context'
@@ -66,11 +66,20 @@ const NAME_MARK = '\u0000'
  * A message with someone's name in it, the name isolated in `<bdi>`: a name
  * written right to left, or with characters that change direction, cannot
  * turn the words around it, and nothing in it can steer the rest of the
- * line. Control and direction characters are taken out of it as well.
+ * line. Control and direction characters are taken out of it as well. The
+ * message's other placeholders, if any, are filled from `values`.
  */
-export function WithName({ message, name }: { message: string; name: string }) {
+export function WithName({
+  message,
+  name,
+  values,
+}: {
+  message: string
+  name: string
+  values?: MessageValues
+}) {
   const { fmt } = useI18n()
-  const [before, ...after] = fmt(message, { name: NAME_MARK }).split(NAME_MARK)
+  const [before, ...after] = fmt(message, { ...values, name: NAME_MARK }).split(NAME_MARK)
   if (after.length === 0) return <>{before}</>
   return (
     <>

@@ -5,7 +5,7 @@ import { useMemo, type ReactNode } from 'react'
 import { useI18n } from '../app/context'
 import type { Slot } from '../lib/api'
 import { HelpLink } from './HelpLink'
-import { Written } from './ui'
+import { WithName, Written } from './ui'
 
 type Contribution = components['schemas']['ContributionDto']
 type Status = components['schemas']['Status']
@@ -78,7 +78,13 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer, le
         const provided = terms.contributions.filter((contribution) => contribution.from === slot)
         return (
           <section key={slot}>
-            <H>{slot === you ? w.youProvide : fmt(w.otherProvides, { name: nameOf(slot) })}</H>
+            <H>
+              {slot === you ? (
+                w.youProvide
+              ) : (
+                <WithName message={w.otherProvides} name={nameOf(slot)} />
+              )}
+            </H>
             {provided.length === 0 && <p>{w.nothing}</p>}
             <ul className="plain contributions" hidden={provided.length === 0}>
               {provided.map((contribution) => {

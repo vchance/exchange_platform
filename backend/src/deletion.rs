@@ -74,7 +74,16 @@
 //! it was deleted, so if the restored copy has it suspended, its suspension
 //! was lifted after the backup; the replay lifts it again, recorded in the
 //! review history as the owner's, and deletes the account in the same
-//! transaction (`replay`).
+//! transaction (`replay`). The service's role may not write an entry with no
+//! reviewer, so the lifting goes through the database's own
+//! `replay_lift_suspension` (migration 0019), which runs as the owner.
+//!
+//! **A line the copy contradicts.** A replay acts on nothing whose time in
+//! the log is before the account was created, or before it was last
+//! suspended, in the restored copy: neither can be a deletion of the account
+//! as the copy holds it, so the log is not the one it claims to be, or has
+//! been tampered with. It is reported, and left for whoever restores to look
+//! into (`Replayed::Contradicted`).
 
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
@@ -90,7 +99,7 @@ use crate::domain::identity::Identifier;
 use crate::domain::revision::Slot;
 use crate::error::{ApiError, ErrorCode};
 use crate::exchanges::repo;
-use crate::{languages, review, wallet};
+use crate::{languages, wallet};
 
 /// Which of the account's identifiers a code is sent to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, ToSchema)]
@@ -234,6 +243,10 @@ pub enum Replayed {
     AlreadyDeleted,
     /// This database never held it: it was made after the backup.
     NotHere,
+    /// The log's time for it is before the account was created, or before it
+    /// was last suspended, here: nothing was done. Not a deletion of this
+    /// account as this database holds it.
+    Contradicted,
 }
 
 /// The note on the review history's entry for a suspension lifted by a
@@ -267,13 +280,21 @@ pub async fn replay(
     account: Uuid,
     deleted_at: OffsetDateTime,
 ) -> Result<Replayed, ApiError> {
-    let status: Option<String> = sqlx::query_scalar("SELECT status FROM account WHERE id = $1")
-        .bind(account)
-        .fetch_optional(db)
-        .await?;
-    let done = match status.as_deref() {
+    let found: Option<(String, bool)> = sqlx::query_as(
+        "SELECT a.status,
+                $2 < a.created_at OR $2 < coalesce((
+                    SELECT max(e.occurred_at) FROM review_event e
+                    WHERE e.account_id = a.id AND e.action = 'ACCOUNT_SUSPENDED'), $2)
+         FROM account a WHERE a.id = $1",
+    )
+    .bind(account)
+    .bind(deleted_at)
+    .fetch_optional(db)
+    .await?;
+    let done = match found {
         None => return Ok(Replayed::NotHere),
-        Some("DELETED") => Done::Nothing,
+        Some((status, _)) if status == "DELETED" => Done::Nothing,
+        Some((_, true)) => return Ok(Replayed::Contradicted),
         Some(_) => retry(db, rules, account, Request::Replay(deleted_at)).await?,
     };
     Ok(match done {
@@ -372,8 +393,15 @@ async fn attempt(
             };
             // Replaying a deletion the log proves (`replay`). Lifted in this
             // transaction, so the account is never left reinstated and not
-            // deleted.
-            review::lift_suspension(&mut tx, None, account, &replay_lift_note(deleted_at)).await?;
+            // deleted, by the owner's function: it refuses a time the account
+            // contradicts, and the lifting stands only if the account is
+            // deleted and logged when this commits (migration 0019).
+            sqlx::query("SELECT replay_lift_suspension($1, $2, $3)")
+                .bind(account)
+                .bind(deleted_at)
+                .bind(replay_lift_note(deleted_at))
+                .execute(&mut *tx)
+                .await?;
             done = Done::LiftedAndDeleted;
             (email, phone)
         }

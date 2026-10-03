@@ -302,10 +302,10 @@ describe('what a proposal changes, for the person asked to sign it', () => {
               answers: { id: v1.id, sequence: 1 },
               standing: { status: 'OPEN', since: v1.standing.since },
               signed: {
-                ...v1.signed,
+                ...v1.signed!,
                 contributions: [
-                  { ...v1.signed.contributions[0], description: 'Repair the back fence and gate' },
-                  v1.signed.contributions[1],
+                  { ...v1.signed!.contributions[0], description: 'Repair the back fence and gate' },
+                  v1.signed!.contributions[1],
                 ],
               },
             },

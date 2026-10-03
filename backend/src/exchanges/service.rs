@@ -354,6 +354,14 @@ async fn view(
     Ok(view)
 }
 
+/// Whether an account is active: neither suspended nor deleted.
+async fn active(conn: &mut PgConnection, account: Uuid) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT status = 'ACTIVE' FROM account WHERE id = $1")
+        .bind(account)
+        .fetch_one(&mut *conn)
+        .await
+}
+
 /// Whether an account has been deleted.
 async fn deleted(conn: &mut PgConnection, account: Uuid) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar("SELECT status = 'DELETED' FROM account WHERE id = $1")
@@ -770,6 +778,17 @@ pub async fn run_command(
             if crate::review::is_hidden_from(&mut tx, id, session.account_id).await? {
                 return Err(ErrorCode::ContentHidden.into());
             }
+            // Nobody is bound to someone who can no longer sign in to keep
+            // the agreement. A suspension withdraws what the account sent
+            // (`crate::review`), and a deletion too (`crate::deletion`), so
+            // this is only ever met if an account was suspended some other
+            // way. It is checked all the same.
+            if let Some(open) = &aggregate.exchange.open
+                && let Some(author) = aggregate.account_of(open.author)
+                && !active(&mut tx, author).await?
+            {
+                return Err(ErrorCode::ActionNotAllowed.into());
+            }
             let language = require_signer(&mut tx, session, &consent, settings).await?;
             signing = Some((language, consent.version));
             (
@@ -816,12 +835,14 @@ pub async fn run_command(
         }
         CommandDto::ConfirmCounterparty => {
             // Confirming says "this is who I meant", of someone shown by name
-            // and address. A claimant who deletes their account leaves the
-            // exchange as they go (`crate::deletion`), so nobody deleted
-            // should be found here. It is checked all the same: a signature
-            // left behind must never bind the initiator to nobody.
+            // and address. A claimant who deletes their account, or whose
+            // account is suspended, leaves the exchange as they go
+            // (`crate::deletion`, `crate::review`), so nobody deleted or
+            // suspended should be found here. It is checked all the same: a
+            // signature left behind must never bind the initiator to someone
+            // who cannot sign in.
             if let Some(claimant) = aggregate.account_of(Slot::B)
-                && deleted(&mut tx, claimant).await?
+                && !active(&mut tx, claimant).await?
             {
                 return Err(ErrorCode::ActionNotAllowed.into());
             }
@@ -997,32 +1018,92 @@ struct InvitationRow {
     claimed_by: Option<Uuid>,
 }
 
-async fn find_invitation(
-    conn: &mut PgConnection,
-    token: &str,
-    lock: bool,
-) -> Result<Option<InvitationRow>, sqlx::Error> {
-    type Row = (
-        Uuid,
-        Uuid,
-        Option<String>,
-        Option<String>,
-        OffsetDateTime,
-        Option<Uuid>,
-        Option<OffsetDateTime>,
-    );
-    let query = format!(
-        "SELECT id, exchange_id, bound_email, bound_phone, expires_at, claimed_by, revoked_at
-         FROM invitation WHERE token_hash = $1 {}",
-        if lock { "FOR UPDATE" } else { "" }
-    );
-    let row: Option<Row> = sqlx::query_as(sqlx::AssertSqlSafe(query))
-        .bind(auth::token_hash(token.trim()).as_slice())
-        .fetch_optional(&mut *conn)
-        .await?;
+/// Everything an answer about an invitation link turns on, as one query
+/// reads it for one viewer: the link, whether its exchange still waits for
+/// someone to sign its offer, its initiator and whether their account is
+/// active, whether the viewer and the initiator have blocked each other, and
+/// the viewer's own identifiers.
+///
+/// The preview, the claim and through them the report on a link each read
+/// this first and decide from it alone whether to refuse, and only then load
+/// anything more. A made-up token, a dead link, a link whose initiator is
+/// suspended and a link from someone the viewer has blocked, or who has
+/// blocked them, so cost the same: this one round trip, then the refusal. A
+/// block cannot be told from a dead link by how long the answer takes
+/// (DESIGN.md §9).
+struct Gate {
+    invitation: Option<InvitationRow>,
+    /// The exchange is negotiating, with an offer waiting to be signed.
+    offer_open: bool,
+    initiator: Option<Uuid>,
+    initiator_active: bool,
+    blocked: bool,
+    viewer_email: Option<String>,
+    viewer_phone: Option<String>,
+}
 
-    Ok(row.map(
-        |(id, exchange, email, phone, expires_at, claimed_by, revoked_at)| InvitationRow {
+type GateRow = (
+    Option<Uuid>,
+    Option<Uuid>,
+    Option<String>,
+    Option<String>,
+    Option<OffsetDateTime>,
+    Option<Uuid>,
+    Option<OffsetDateTime>,
+    bool,
+    Option<Uuid>,
+    bool,
+    bool,
+    Option<String>,
+    Option<String>,
+);
+
+/// Reads the [`Gate`] for `viewer` and `token`: one query, whatever the
+/// token. The row is the viewer's account, so there is always one, with
+/// nothing found where the token names no link.
+async fn gate(conn: &mut PgConnection, viewer: Uuid, token: &str) -> Result<Gate, ApiError> {
+    let row: Option<GateRow> = sqlx::query_as(
+        "SELECT i.id, i.exchange_id, i.bound_email, i.bound_phone, i.expires_at,
+                i.claimed_by, i.revoked_at,
+                coalesce(e.state = 'NEGOTIATING' AND e.open_revision_id IS NOT NULL, false),
+                initiator.account_id,
+                coalesce(ia.status = 'ACTIVE', false),
+                EXISTS (SELECT 1 FROM account_block b
+                        WHERE (b.blocker_account_id = v.id
+                               AND b.blocked_account_id = initiator.account_id)
+                           OR (b.blocker_account_id = initiator.account_id
+                               AND b.blocked_account_id = v.id)),
+                v.email, v.phone
+         FROM account v
+         LEFT JOIN invitation i ON i.token_hash = $1
+         LEFT JOIN exchange e ON e.id = i.exchange_id
+         LEFT JOIN participant initiator
+           ON initiator.exchange_id = i.exchange_id AND initiator.slot = 'A'
+         LEFT JOIN account ia ON ia.id = initiator.account_id
+         WHERE v.id = $2",
+    )
+    .bind(auth::token_hash(token.trim()).as_slice())
+    .bind(viewer)
+    .fetch_optional(&mut *conn)
+    .await?;
+    // The viewer's account is gone: deleted a moment ago by another request.
+    let (
+        id,
+        exchange,
+        email,
+        phone,
+        expires_at,
+        claimed_by,
+        revoked_at,
+        offer_open,
+        initiator,
+        initiator_active,
+        blocked,
+        viewer_email,
+        viewer_phone,
+    ) = row.ok_or(ErrorCode::Unauthenticated)?;
+    let invitation = match (id, exchange, expires_at) {
+        (Some(id), Some(exchange), Some(expires_at)) => Some(InvitationRow {
             id,
             exchange,
             record: invitation::Invitation {
@@ -1034,14 +1115,49 @@ async fn find_invitation(
                     .or(phone.map(Identifier::Phone)),
             },
             claimed_by,
-        },
-    ))
+        }),
+        _ => None,
+    };
+    Ok(Gate {
+        invitation,
+        offer_open,
+        initiator,
+        initiator_active,
+        blocked,
+        viewer_email,
+        viewer_phone,
+    })
+}
+
+impl Gate {
+    /// The link, if it can show its offer to the viewer: live, its offer
+    /// still open, its initiator active, and no block between the two.
+    /// Every other case is the same dead link.
+    fn showable(&self, at: OffsetDateTime) -> Option<&InvitationRow> {
+        let found = self.invitation.as_ref()?;
+        let record = &found.record;
+        let live = !record.revoked && !record.claimed && at < record.expires_at;
+        (live && self.offer_open && self.initiator_active && !self.blocked).then_some(found)
+    }
+}
+
+/// Locks an invitation row, once its exchange is locked, so that two claims
+/// of one link take turns.
+async fn lock_invitation(conn: &mut PgConnection, id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT 1 FROM invitation WHERE id = $1 FOR UPDATE")
+        .bind(id)
+        .execute(conn)
+        .await?;
+    Ok(())
 }
 
 /// What the holder of an invitation link reads once signed in, before
 /// deciding whether to claim it: the proposal itself. Every way a link can be
-/// dead gives the same answer, and so does a block between the viewer and the
-/// initiator, so the preview and the claim agree for them.
+/// dead gives the same answer, and so does an initiator who is not active
+/// (suspended or deleted) and a block between the viewer and the initiator,
+/// so the preview and the claim agree for them. Whether to refuse is decided
+/// from one query ([`gate`]) before anything else is read, so that the
+/// answers also take the same time.
 ///
 /// Reading needs an account: the HTTP layer refuses anyone signed out before
 /// the token is looked at. That is what keeps a block from showing. Were the
@@ -1053,52 +1169,32 @@ pub async fn preview_invitation(
     token: &str,
 ) -> Result<InvitationPreview, ApiError> {
     let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
-    let mut conn = db.acquire().await?;
+    let mut tx = db.begin().await?;
+    // The gate and the proposal read from one snapshot, so the proposal is
+    // the one the gate let through.
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await?;
 
-    let found = find_invitation(&mut conn, token, false)
-        .await?
-        .ok_or_else(unavailable)?;
-    let invitation = &found.record;
-    if invitation.revoked || invitation.claimed || now() >= invitation.expires_at {
-        return Err(unavailable());
-    }
+    let gate = gate(&mut tx, viewer, token).await?;
+    let found = gate.showable(now()).ok_or_else(unavailable)?;
 
-    let aggregate = repo::load(&mut conn, found.exchange, false)
+    let aggregate = repo::load(&mut tx, found.exchange, false)
         .await?
         .ok_or_else(unavailable)?;
     let open = match (&aggregate.exchange.state, &aggregate.open) {
         (State::Negotiating, Some(open)) => open,
         _ => return Err(unavailable()),
     };
-    if blocked_between(&mut conn, viewer, aggregate.accounts[0]).await? {
-        return Err(unavailable());
-    }
 
     Ok(InvitationPreview {
         display_code: aggregate.display_code.clone(),
-        expires_at: rfc3339(invitation.expires_at),
-        bound: invitation.bound_to.is_some(),
+        expires_at: rfc3339(found.record.expires_at),
+        bound: found.record.bound_to.is_some(),
         currency: aggregate.currency.clone(),
         timezone: aggregate.timezone.clone(),
         revision: RevisionView::from_record(open),
     })
-}
-
-/// Whether either of two accounts has blocked the other.
-async fn blocked_between(
-    conn: &mut PgConnection,
-    account: Uuid,
-    other: Option<Uuid>,
-) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM account_block
-                        WHERE (blocker_account_id = $1 AND blocked_account_id = $2)
-                           OR (blocker_account_id = $2 AND blocked_account_id = $1))",
-    )
-    .bind(account)
-    .bind(other)
-    .fetch_one(&mut *conn)
-    .await
 }
 
 /// What a claim may do.
@@ -1114,8 +1210,63 @@ pub enum Claim {
     OnlyIfYours,
 }
 
+/// A claim the [`Gate`] lets go on.
+#[derive(Clone, Copy)]
+enum Passed {
+    /// The account used this link before: it may still hold the place.
+    Yours(Uuid),
+    /// The account may take the place in this exchange.
+    Take { exchange: Uuid, pre_bound: bool },
+}
+
+/// Whether a claim may go on, decided from the [`Gate`] alone.
+fn claim_gate(
+    gate: &Gate,
+    account: Uuid,
+    claim: Claim,
+    at: OffsetDateTime,
+) -> Result<Passed, ApiError> {
+    let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
+    let found = gate.invitation.as_ref().ok_or_else(unavailable)?;
+    // A link whose initiator is suspended or gone is dead to everyone, the
+    // person who already used it included.
+    if !gate.initiator_active {
+        return Err(unavailable());
+    }
+    // The account's own place, if it still holds it: checked once the
+    // exchange is loaded.
+    if found.claimed_by == Some(account) {
+        return Ok(Passed::Yours(found.exchange));
+    }
+    if claim == Claim::OnlyIfYours || !gate.offer_open {
+        return Err(unavailable());
+    }
+    let claimant = invitation::Claimant {
+        email: gate.viewer_email.clone(),
+        phone: gate.viewer_phone.clone(),
+        is_initiator: gate.initiator == Some(account),
+        blocked: gate.blocked,
+    };
+    let passed = invitation::claim(&found.record, &claimant, at).map_err(|refusal| {
+        ApiError::from(match refusal {
+            invitation::Refusal::OwnInvitation => ErrorCode::ActionNotAllowed,
+            invitation::Refusal::BoundToSomeoneElse => ErrorCode::InvitationNotForYou,
+            // Dead links, and blocks, all look the same from outside.
+            _ => ErrorCode::InvitationUnavailable,
+        })
+    })?;
+    Ok(Passed::Take {
+        exchange: found.exchange,
+        pre_bound: passed.pre_bound,
+    })
+}
+
 /// The signed-in account takes the invited party's place in the exchange,
 /// or with [`Claim::OnlyIfYours`] only finds the place it already took.
+///
+/// Whether to refuse is decided from one query ([`gate`]), the same for
+/// every token, before the exchange is loaded or locked; what follows runs
+/// only for a claim that may go on, and checks again under the lock.
 pub async fn claim_invitation(
     db: &PgPool,
     rules: &Rules,
@@ -1128,57 +1279,37 @@ pub async fn claim_invitation(
     let mut tx = db.begin().await?;
     acting(&mut tx, account).await?;
 
-    // Find the exchange first, so the locks are always taken in the same
-    // order as everywhere else: the exchange, then the invitation.
-    let exchange = find_invitation(&mut tx, token, false)
-        .await?
-        .ok_or_else(unavailable)?
-        .exchange;
+    let exchange = match claim_gate(&gate(&mut tx, account, token).await?, account, claim, now())? {
+        Passed::Yours(exchange) | Passed::Take { exchange, .. } => exchange,
+    };
+
+    // The exchange first, then the invitation: the order every other change
+    // takes them in. Then the gate again, under the lock: a block, a
+    // revocation, a suspension or another claim may have come first.
     let aggregate = repo::load(&mut tx, exchange, true)
         .await?
         .ok_or_else(unavailable)?;
-    let found = find_invitation(&mut tx, token, true)
-        .await?
-        .ok_or_else(unavailable)?;
+    let gate = gate(&mut tx, account, token).await?;
+    let found = gate.invitation.as_ref().ok_or_else(unavailable)?;
+    if found.exchange != exchange {
+        return Err(unavailable());
+    }
+    lock_invitation(&mut tx, found.id).await?;
     let at = now();
 
     // Claiming twice with the same account is harmless, for as long as the
     // place is still theirs. For someone since removed from it, the link is
     // spent like any other, and says so the same way.
-    if found.claimed_by == Some(account) && aggregate.accounts[1] == Some(account) {
-        return view(&mut tx, rules, exchange, account).await;
-    }
-    if claim == Claim::OnlyIfYours {
-        return Err(unavailable());
-    }
-
-    let initiator = aggregate.accounts[0];
-    let (email, phone): (Option<String>, Option<String>) =
-        sqlx::query_as("SELECT email, phone FROM account WHERE id = $1")
-            .bind(account)
-            .fetch_one(&mut *tx)
-            .await?;
-    let blocked = blocked_between(&mut tx, account, initiator).await?;
-
-    let claimant = invitation::Claimant {
-        email,
-        phone,
-        is_initiator: initiator == Some(account),
-        blocked,
+    let pre_bound = match claim_gate(&gate, account, claim, at)? {
+        Passed::Yours(_) if aggregate.accounts[1] == Some(account) => {
+            return view(&mut tx, rules, exchange, account).await;
+        }
+        Passed::Yours(_) => return Err(unavailable()),
+        Passed::Take { pre_bound, .. } => pre_bound,
     };
-    let claim = invitation::claim(&found.record, &claimant, at).map_err(|refusal| {
-        ApiError::from(match refusal {
-            invitation::Refusal::OwnInvitation => ErrorCode::ActionNotAllowed,
-            invitation::Refusal::BoundToSomeoneElse => ErrorCode::InvitationNotForYou,
-            // Dead links, and blocks, all look the same from outside.
-            _ => ErrorCode::InvitationUnavailable,
-        })
-    })?;
 
     let actor = Actor::Party(Slot::B);
-    let command = Command::ClaimCounterparty {
-        pre_bound: claim.pre_bound,
-    };
+    let command = Command::ClaimCounterparty { pre_bound };
     let decision: Decision = decide(&aggregate.exchange, actor, command, at, rules).map_err(
         |refusal| match refusal {
             exchange::Refusal::NotAllowed => unavailable(),

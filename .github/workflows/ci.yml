@@ -531,7 +531,10 @@ jobs:
   # after the backup, restores that backup again, sees the account come back,
   # replays the deletion log of a newer backup, and proves the account is
   # deleted again with its identifiers free and its sessions gone
-  # (docs/operations.md, "Restoring").
+  # (docs/operations.md, "Restoring"). Along the way: the api and the worker
+  # refuse to start on a copy until its deletion log is replayed, the replay
+  # clears that mark, --no-replay-needed is recorded, and a grant the
+  # migrations did not give fails the restore.
   backup:
     name: Backup and restore
     runs-on: ubuntu-26.04
@@ -675,10 +678,49 @@ jobs:
       - name: The copy matches the source
         run: scripts/check-restore.sh "$SOURCE_URL" "$RESTORED_URL"
 
-      - name: Restoring again over the copy, when told to
+      # Until the deletion log is replayed, the copy is marked, and neither
+      # process starts on it (docs/operations.md, "Restoring").
+      - name: The api and the worker refuse to start before the replay
+        env:
+          DATABASE_URL: ${{ env.RESTORED_APP_URL }}
+          BIND_ADDR: 127.0.0.1:8091
+          WEB_ORIGIN: http://127.0.0.1:8091
+          CODE_DELIVERY: log
+          NOTIFICATION_DELIVERY: log
+          NO_COLOR: "1"
         run: |
-          scripts/restore.sh --overwrite -d "$RESTORED_URL" .backup/yuppers.dump
+          test "$("$PSQL" --no-psqlrc -At "$RESTORED_URL" -c "SELECT restore_replay_pending()")" = t
+          for process in api worker; do
+            if timeout 60 "backend/target/debug/$process" > ".backup/$process-refused.log" 2>&1; then
+              echo "::error::the $process started on a copy waiting for its replay"
+              exit 1
+            fi
+            grep --quiet "replay-deletions" ".backup/$process-refused.log"
+          done
+
+      - name: Restoring again over the copy, when told to, with no replay needed
+        run: |
+          scripts/restore.sh --overwrite --no-replay-needed -d "$RESTORED_URL" .backup/yuppers.dump
           scripts/check-restore.sh "$SOURCE_URL" "$RESTORED_URL"
+          # The override is recorded, and the copy is no longer waiting.
+          test "$("$PSQL" --no-psqlrc -At "$RESTORED_URL" -c "SELECT event FROM restore_marker ORDER BY id DESC LIMIT 1")" = REPLAY_NOT_NEEDED
+          test "$("$PSQL" --no-psqlrc -At "$RESTORED_URL" -c "SELECT restore_replay_pending()")" = f
+
+      # restore.sh checks the application role's grants and every trigger
+      # against what the backup's migrations give (scripts/restore-inventory.txt).
+      - name: A grant the migrations did not give fails the restore
+        run: |
+          "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "GRANT UPDATE ON revision TO exchange_app"
+          scripts/backup.sh -d "$SOURCE_URL" .backup/tampered.dump
+          "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "REVOKE UPDATE ON revision FROM exchange_app"
+          "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "CREATE DATABASE yuppers_tampered OWNER exchange"
+          if scripts/restore.sh -d postgres://exchange:exchange@127.0.0.1:5432/yuppers_tampered .backup/tampered.dump 2> .backup/tampered.err; then
+            echo "::error::restore.sh accepted a grant the migrations did not give"
+            exit 1
+          fi
+          grep --quiet '^+grant relation revision UPDATE' .backup/tampered.err
+          "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "DROP DATABASE yuppers_tampered"
+          rm .backup/tampered.dump .backup/tampered.dump.deletions
 
       # From here the source stands for the live database, and changes after
       # the backup: one person deletes their account through the API, with
@@ -774,8 +816,14 @@ jobs:
       - name: Replaying the deletion log deletes it again
         run: |
           set -o pipefail
+          test "$("$PSQL" --no-psqlrc -At "$REPLAYED_URL" -c "SELECT restore_replay_pending()")" = t
           scripts/replay-deletions.sh -d "$REPLAYED_APP_URL" .backup/newer.dump.deletions | tee .backup/replay.out
           grep --quiet "^$DELETED_ID: deleted again" .backup/replay.out
+          # Every account in the log is deleted, so the mark is cleared and
+          # the api can start on the copy (the record check below starts it).
+          grep --quiet "no longer marked as waiting" .backup/replay.out
+          test "$("$PSQL" --no-psqlrc -At "$REPLAYED_URL" -c "SELECT restore_replay_pending()")" = f
+          test "$("$PSQL" --no-psqlrc -At "$REPLAYED_URL" -c "SELECT event || ' ' || by_role FROM restore_marker ORDER BY id DESC LIMIT 1")" = "REPLAYED exchange_app"
           read -r status email sessions devices holders < <(printf '%s\n' "
             SELECT status, coalesce(email, '-'),
                    (SELECT count(*) FROM account_session WHERE account_id = a.id),

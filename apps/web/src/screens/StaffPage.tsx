@@ -1,5 +1,5 @@
 import type { ErrorCode } from '@yuppers/api-client'
-import { failureCode, moneyIds, recordMoments, termsOfRevision } from '@yuppers/shared'
+import { documentOf, failureCode, moneyIds, recordMoments, termsOfRevision } from '@yuppers/shared'
 import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
@@ -8,7 +8,7 @@ import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { EventList } from '../components/EventList'
 import { Panel } from '../components/Panel'
-import { ErrorNote, Failure, Field, Notice, PageHeading, Written } from '../components/ui'
+import { ErrorNote, Failure, Field, Notice, PageHeading, WithName, Written } from '../components/ui'
 import { api } from '../lib/api'
 import {
   staffApi,
@@ -371,7 +371,7 @@ function Hidden() {
               <p className="hint">
                 {entry.name && (
                   <>
-                    {fmt(w.nameInYup, { name: entry.name })}
+                    <WithName message={w.nameInYup} name={entry.name} />
                     <br />
                   </>
                 )}
@@ -454,7 +454,7 @@ function Report({ detail }: { detail: ReportDetail }) {
       {account.name && (
         <>
           <br />
-          {fmt(w.nameInYup, { name: account.name })}
+          <WithName message={w.nameInYup} name={account.name} />
         </>
       )}
     </>
@@ -595,7 +595,7 @@ function ReviewedRecord({ record }: { record: NonNullable<ReportDetail['record']
         <Version
           key={revision.id}
           revision={revision}
-          name={(slot) => revision.signed.parties[slot]}
+          name={(slot) => documentOf(revision).parties[slot]}
           when={when}
         />
       ))}

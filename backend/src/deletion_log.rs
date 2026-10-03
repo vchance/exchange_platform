@@ -87,12 +87,19 @@ pub struct Summary {
     /// Could not be deleted this time (the database refused or was busy).
     /// Replaying again tries them again.
     pub failed: Vec<Uuid>,
+    /// Left alone because the log's time is before the account was created,
+    /// or before it was last suspended, here
+    /// (`deletion::Replayed::Contradicted`). Replaying again changes nothing:
+    /// whoever restores looks into where the log came from, and removes the
+    /// line once satisfied that it is wrong.
+    pub contradicted: Vec<Uuid>,
 }
 
 impl Summary {
-    /// Every account in the log is deleted, or was never here.
+    /// Every account in the log is deleted, or was never here, and the
+    /// database contradicted no line.
     pub fn complete(&self) -> bool {
-        self.failed.is_empty()
+        self.failed.is_empty() && self.contradicted.is_empty()
     }
 }
 
@@ -107,7 +114,15 @@ impl fmt::Display for Summary {
             self.already_deleted,
             self.not_here,
             self.failed.len()
-        )
+        )?;
+        if !self.contradicted.is_empty() {
+            write!(
+                f,
+                ", {} left alone because this database contradicts the log",
+                self.contradicted.len()
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -147,6 +162,14 @@ pub async fn replay(
                 report(&format!(
                     "{account}: deleted again (deleted {when}); it was suspended here, and the \
                      suspension was lifted first, in the review history as the owner's"
+                ));
+            }
+            Ok(Replayed::Contradicted) => {
+                summary.contradicted.push(account);
+                report(&format!(
+                    "{account}: LEFT ALONE: the log says it was deleted {when}, before this \
+                     database says it was created or last suspended; check where this log came \
+                     from (nothing was done)"
                 ));
             }
             Err(error) => {
@@ -250,5 +273,18 @@ mod tests {
         );
         summary.failed.push(BEN.parse().unwrap());
         assert!(!summary.complete());
+
+        // A line the database contradicts leaves the replay incomplete too,
+        // and says so.
+        let contradicted = Summary {
+            contradicted: vec![ANA.parse().unwrap()],
+            ..Summary::default()
+        };
+        assert!(!contradicted.complete());
+        assert!(
+            contradicted
+                .to_string()
+                .ends_with(", 1 left alone because this database contradicts the log")
+        );
     }
 }

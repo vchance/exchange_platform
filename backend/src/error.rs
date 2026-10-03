@@ -78,6 +78,10 @@ pub enum ErrorCode {
     ContentHidden,
     /// The report has already been resolved.
     ReportResolved,
+    /// A reviewer cannot suspend another reviewer, or lift a reviewer's
+    /// suspension. The owner takes the reviewer's role away first, from the
+    /// command line (`staff revoke`); the report can then be resolved.
+    SubjectIsReviewer,
     NotFound,
     ServiceUnavailable,
     Internal,
@@ -124,7 +128,8 @@ impl From<ErrorCode> for ApiError {
             | ProfileIncomplete
             | ConsentOutdated
             | ContentHidden
-            | ReportResolved => StatusCode::CONFLICT,
+            | ReportResolved
+            | SubjectIsReviewer => StatusCode::CONFLICT,
             ClientTooOld => StatusCode::UPGRADE_REQUIRED,
             ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             Internal => StatusCode::INTERNAL_SERVER_ERROR,

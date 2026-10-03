@@ -159,6 +159,9 @@ pub struct App {
     pub owner: PgPool,
     /// The schema owner's connection string, for a command run as the owner.
     pub owner_url: String,
+    /// The application role's connection string, for a process run as the
+    /// service.
+    pub app_url: String,
     pub rules: Rules,
     /// What the router counted of the requests made through it.
     pub metrics: Arc<HttpMetrics>,
@@ -316,6 +319,7 @@ impl App {
             metrics,
             owner: connect(owner_url).await,
             owner_url: owner_url.clone(),
+            app_url: app_url.clone(),
             rules,
         }
     }

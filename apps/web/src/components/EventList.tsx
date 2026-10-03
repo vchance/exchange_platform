@@ -3,7 +3,7 @@ import { eventMessage, noteKind, type RecordEvent } from '@yuppers/shared'
 
 import { useI18n } from '../app/context'
 import './history.css'
-import { Written } from './ui'
+import { WithName, Written } from './ui'
 
 type Schemas = components['schemas']
 
@@ -40,7 +40,13 @@ export function EventList({ events, parties, reader, when, money }: Props) {
             <p className="hint">
               <time dateTime={event.at}>{when(event.at)}</time>
             </p>
-            <p>{fmt(message, values)}</p>
+            <p>
+              {typeof values.name === 'string' ? (
+                <WithName message={message} name={values.name} values={values} />
+              ) : (
+                fmt(message, values)
+              )}
+            </p>
             {event.contribution?.description && (
               <Written>{event.contribution.description}</Written>
             )}

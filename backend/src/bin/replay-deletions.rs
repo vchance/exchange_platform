@@ -10,10 +10,16 @@
 //! database never held, is reported and skipped, so replaying a file twice
 //! changes nothing the second time. One suspended in the copy has its
 //! suspension lifted, recorded in the review history as the owner's, and is
-//! deleted in the same transaction. It prints a line for each account and a
-//! count at the end, and exits with status 1 if any account is left
-//! undeleted (a failure), 2 if the file cannot be read or is damaged, in
-//! which case nothing is changed.
+//! deleted in the same transaction. A line whose time the database
+//! contradicts (before the account was created or last suspended there) is
+//! reported and left alone. It prints a line for each account and a count at
+//! the end, and exits with status 1 if any account is left undeleted (a
+//! failure, or a line left alone), 2 if the file cannot be read or is
+//! damaged, in which case nothing is changed.
+//!
+//! When every account in the log is deleted, it clears the mark that
+//! `scripts/restore.sh` left in the database (migration 0018), so that the
+//! api and the worker can start on it.
 
 use std::process::ExitCode;
 
@@ -55,6 +61,21 @@ async fn main() -> anyhow::Result<ExitCode> {
     .await;
     println!("{summary}");
     if summary.complete() {
+        match db::mark_replayed(&pool).await {
+            Ok(true) => println!(
+                "the database is no longer marked as waiting for this replay; the api and the \
+                 worker can start on it"
+            ),
+            Ok(false) => {}
+            Err(error) => {
+                eprintln!(
+                    "replay-deletions: every account in the log is deleted, but the database \
+                     would not clear its mark ({}); the api and the worker will not start on it",
+                    yuppers_backend::error::Redacted(&error)
+                );
+                return Ok(ExitCode::from(1));
+            }
+        }
         Ok(ExitCode::SUCCESS)
     } else {
         eprintln!(

@@ -24,14 +24,14 @@
         "tags": [
           "health"
         ],
-        "summary": "The process can reach the database.",
+        "summary": "The process can reach the database, and the database is not a restored\ncopy still waiting for its deletion log to be replayed.",
         "operationId": "ready",
         "responses": {
           "204": {
             "description": "Ready"
           },
           "503": {
-            "description": "Database unreachable",
+            "description": "Database unreachable, or a restored copy whose deletion log is still to be replayed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1933,7 +1933,7 @@
         "tags": [
           "staff"
         ],
-        "summary": "Staff only. Content hidden by review, most recently hidden first.",
+        "summary": "Staff only. Content hidden by review, most recently hidden first,\nleaving out what is hidden from the reviewer and what a report they take\npart in hid. Limited per reviewer, with the other lists.",
         "operationId": "hidden",
         "responses": {
           "200": {
@@ -1968,6 +1968,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Too many lists read in the last hour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -1977,7 +1987,7 @@
         "tags": [
           "staff"
         ],
-        "summary": "Staff only. Shows hidden content to the account again. A note is\nrequired.",
+        "summary": "Staff only. Shows hidden content to the account again. A note is\nrequired. Content hidden from the reviewer, or by a report they take part\nin, is \"not found\".",
         "operationId": "restore",
         "requestBody": {
           "content": {
@@ -2041,7 +2051,7 @@
         "tags": [
           "staff"
         ],
-        "summary": "Staff only. The open reports, oldest first, each with its age.",
+        "summary": "Staff only. The open reports, oldest first, each with its age, its\nreason and its exchange's code, and nothing of what the reporter wrote or\nwho they are: those are read by opening the report. Reports the reviewer\ntakes part in are left out. Limited per reviewer, with the other lists.",
         "operationId": "queue",
         "responses": {
           "200": {
@@ -2073,6 +2083,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Too many lists read in the last hour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -2082,7 +2102,7 @@
         "tags": [
           "staff"
         ],
-        "summary": "Staff only. Opens an open report: what it says, who it is about, the\nreported exchange's record with nothing hidden, and what review has done\nso far. Recorded in the audit history. A resolved report shows nothing\nmore.",
+        "summary": "Staff only. Opens an open report: what it says, who it is about, the\nreported exchange's record with nothing hidden, and what review has done\nso far. Recorded in the audit history. A resolved report shows nothing\nmore. A report the reviewer takes part in (they made it, it is about\nthem, or they hold or held a place in its exchange) is \"not found\".",
         "operationId": "open_report",
         "parameters": [
           {
@@ -2154,7 +2174,7 @@
         "tags": [
           "staff"
         ],
-        "summary": "Staff only. Resolves an open report, once: dismissed, the exchange's\ncontent hidden from the person reported, their account suspended, or\nboth. A note is required for every outcome but `DISMISSED`.",
+        "summary": "Staff only. Resolves an open report, once: dismissed, the exchange's\ncontent hidden from the person reported, their account suspended, or\nboth. A note is required for every outcome but `DISMISSED`. A report the\nreviewer takes part in is \"not found\"; suspending another reviewer is\nrefused (`SUBJECT_IS_REVIEWER`).",
         "operationId": "resolve",
         "parameters": [
           {
@@ -2202,7 +2222,7 @@
             }
           },
           "409": {
-            "description": "Already resolved (`REPORT_RESOLVED`), or the outcome cannot apply (`ACTION_NOT_ALLOWED`)",
+            "description": "Already resolved (`REPORT_RESOLVED`), the outcome cannot apply (`ACTION_NOT_ALLOWED`), or the person reported is a reviewer, whom only the owner can suspend (`SUBJECT_IS_REVIEWER`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2239,7 +2259,7 @@
         "tags": [
           "staff"
         ],
-        "summary": "Staff only. The suspended accounts, most recently suspended first.",
+        "summary": "Staff only. The suspended accounts, most recently suspended first,\nleaving out the reviewer's own and those a report they take part in led\nto. Limited per reviewer, with the other lists.",
         "operationId": "suspensions",
         "responses": {
           "200": {
@@ -2274,6 +2294,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Too many lists read in the last hour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -2283,7 +2313,7 @@
         "tags": [
           "staff"
         ],
-        "summary": "Staff only. Lifts a suspension; the account can sign in again. A note is\nrequired.",
+        "summary": "Staff only. Lifts a suspension; the account can sign in again. A note is\nrequired. The reviewer's own suspension, and one that a report they take\npart in led to, is \"not found\"; a reviewer's is the owner's to lift\n(`SUBJECT_IS_REVIEWER`).",
         "operationId": "lift",
         "parameters": [
           {
@@ -2322,6 +2352,16 @@
           },
           "404": {
             "description": "Not a reviewer, or no such suspended account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The account is a reviewer's (`SUBJECT_IS_REVIEWER`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3145,6 +3185,7 @@
           "SESSION_TOO_OLD",
           "CONTENT_HIDDEN",
           "REPORT_RESOLVED",
+          "SUBJECT_IS_REVIEWER",
           "NOT_FOUND",
           "SERVICE_UNAVAILABLE",
           "INTERNAL"
@@ -3643,6 +3684,74 @@
           }
         }
       },
+      "OpenedReport": {
+        "type": "object",
+        "description": "A report as its page shows it, once opened.",
+        "required": [
+          "id",
+          "created_at",
+          "age_seconds",
+          "overdue",
+          "reason"
+        ],
+        "properties": {
+          "age_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Seconds since it was made, when the answer was given."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "display_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exchange_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "overdue": {
+            "type": "boolean",
+            "description": "Older than the time a report is to be reviewed within."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ReportReason"
+          },
+          "reporter_account_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Who made it. Every report made now has one; it is absent only for a\nreport made through an invitation link without signing in, before\nreporting needed an account."
+          },
+          "subject_account_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The person reported."
+          }
+        }
+      },
       "OutcomeDto": {
         "type": "string",
         "enum": [
@@ -3722,13 +3831,14 @@
       },
       "QueuedReport": {
         "type": "object",
-        "description": "An open report, as the queue lists it.",
+        "description": "An open report, as the queue lists it: enough to choose what to open\nnext, and nothing of what the reporter wrote or who they are. Those are\nread by opening the report, which is recorded and limited.",
         "required": [
           "id",
           "created_at",
           "age_seconds",
           "overdue",
-          "reason"
+          "reason",
+          "has_reporter"
         ],
         "properties": {
           "age_seconds": {
@@ -3740,24 +3850,15 @@
             "type": "string",
             "description": "RFC 3339."
           },
-          "details": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "display_code": {
             "type": [
               "string",
               "null"
             ]
           },
-          "exchange_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid"
+          "has_reporter": {
+            "type": "boolean",
+            "description": "Whether an account made it. Every report made now has one; it is\nfalse only for a report made through an invitation link without\nsigning in, before reporting needed an account."
           },
           "id": {
             "type": "string",
@@ -3769,22 +3870,6 @@
           },
           "reason": {
             "$ref": "#/components/schemas/ReportReason"
-          },
-          "reporter_account_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid",
-            "description": "Who made it. Every report made now has one; it is absent only for a\nreport made through an invitation link without signing in, before\nreporting needed an account."
-          },
-          "subject_account_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid",
-            "description": "The person reported."
           }
         }
       },
@@ -4158,7 +4243,6 @@
           "expires_at",
           "standing",
           "content_hash",
-          "signed",
           "signatures"
         ],
         "properties": {
@@ -4195,6 +4279,17 @@
             ],
             "description": "The message sent with it. Not part of what is signed."
           },
+          "redacted": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SignedDocument",
+                "description": "Only when `signed` is left out: the signed document with every piece\nof free text (the terms, and each contribution's description,\ncompletion criteria and unit of quantity) replaced by the placeholder\nthat says it was hidden by review. Names and amounts are as signed.\nIt is not what was signed and does not hash to `content_hash`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sent_at": {
             "type": "string",
             "description": "RFC 3339, UTC."
@@ -4212,8 +4307,15 @@
             "description": "The author's, made by sending it, then the other party's if they\naccepted. Only signatures that count are here."
           },
           "signed": {
-            "$ref": "#/components/schemas/SignedDocument",
-            "description": "What the signatures cover, word for word."
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SignedDocument",
+                "description": "What the signatures cover, word for word. Left out when a reviewer\nhas hidden what was written in the exchange from the reader\n(`content_hidden`); `redacted` is there instead."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "standing": {
             "$ref": "#/components/schemas/RevisionStanding"
@@ -4328,7 +4430,7 @@
             ]
           },
           "report": {
-            "$ref": "#/components/schemas/QueuedReport"
+            "$ref": "#/components/schemas/OpenedReport"
           },
           "reporter": {
             "oneOf": [

@@ -28,7 +28,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The process can reach the database. */
+        /**
+         * The process can reach the database, and the database is not a restored
+         *     copy still waiting for its deletion log to be replayed.
+         */
         get: operations["ready"];
         put?: never;
         post?: never;
@@ -627,7 +630,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Staff only. Content hidden by review, most recently hidden first. */
+        /**
+         * Staff only. Content hidden by review, most recently hidden first,
+         *     leaving out what is hidden from the reviewer and what a report they take
+         *     part in hid. Limited per reviewer, with the other lists.
+         */
         get: operations["hidden"];
         put?: never;
         post?: never;
@@ -648,7 +655,8 @@ export interface paths {
         put?: never;
         /**
          * Staff only. Shows hidden content to the account again. A note is
-         *     required.
+         *     required. Content hidden from the reviewer, or by a report they take part
+         *     in, is "not found".
          */
         post: operations["restore"];
         delete?: never;
@@ -664,7 +672,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Staff only. The open reports, oldest first, each with its age. */
+        /**
+         * Staff only. The open reports, oldest first, each with its age, its
+         *     reason and its exchange's code, and nothing of what the reporter wrote or
+         *     who they are: those are read by opening the report. Reports the reviewer
+         *     takes part in are left out. Limited per reviewer, with the other lists.
+         */
         get: operations["queue"];
         put?: never;
         post?: never;
@@ -685,7 +698,8 @@ export interface paths {
          * Staff only. Opens an open report: what it says, who it is about, the
          *     reported exchange's record with nothing hidden, and what review has done
          *     so far. Recorded in the audit history. A resolved report shows nothing
-         *     more.
+         *     more. A report the reviewer takes part in (they made it, it is about
+         *     them, or they hold or held a place in its exchange) is "not found".
          */
         get: operations["open_report"];
         put?: never;
@@ -708,7 +722,9 @@ export interface paths {
         /**
          * Staff only. Resolves an open report, once: dismissed, the exchange's
          *     content hidden from the person reported, their account suspended, or
-         *     both. A note is required for every outcome but `DISMISSED`.
+         *     both. A note is required for every outcome but `DISMISSED`. A report the
+         *     reviewer takes part in is "not found"; suspending another reviewer is
+         *     refused (`SUBJECT_IS_REVIEWER`).
          */
         post: operations["resolve"];
         delete?: never;
@@ -724,7 +740,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Staff only. The suspended accounts, most recently suspended first. */
+        /**
+         * Staff only. The suspended accounts, most recently suspended first,
+         *     leaving out the reviewer's own and those a report they take part in led
+         *     to. Limited per reviewer, with the other lists.
+         */
         get: operations["suspensions"];
         put?: never;
         post?: never;
@@ -745,7 +765,9 @@ export interface paths {
         put?: never;
         /**
          * Staff only. Lifts a suspension; the account can sign in again. A note is
-         *     required.
+         *     required. The reviewer's own suspension, and one that a report they take
+         *     part in led to, is "not found"; a reviewer's is the owner's to lift
+         *     (`SUBJECT_IS_REVIEWER`).
          */
         post: operations["lift"];
         delete?: never;
@@ -1039,7 +1061,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "SUBJECT_IS_REVIEWER" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -1231,6 +1253,37 @@ export interface components {
             /** @description That what the parties recorded about delivery is theirs alone. */
             statements: string;
         };
+        /** @description A report as its page shows it, once opened. */
+        OpenedReport: {
+            /**
+             * Format: int64
+             * @description Seconds since it was made, when the answer was given.
+             */
+            age_seconds: number;
+            /** @description RFC 3339. */
+            created_at: string;
+            details?: string | null;
+            display_code?: string | null;
+            /** Format: uuid */
+            exchange_id?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description Older than the time a report is to be reviewed within. */
+            overdue: boolean;
+            reason: components["schemas"]["ReportReason"];
+            /**
+             * Format: uuid
+             * @description Who made it. Every report made now has one; it is absent only for a
+             *     report made through an invitation link without signing in, before
+             *     reporting needed an account.
+             */
+            reporter_account_id?: string | null;
+            /**
+             * Format: uuid
+             * @description The person reported.
+             */
+            subject_account_id?: string | null;
+        };
         /** @enum {string} */
         OutcomeDto: "NOT_AGREED" | "COMPLETED" | "ENDED_BY_AGREEMENT" | "UNRESOLVED";
         /** @description Which stretch of the record a document holds. */
@@ -1260,7 +1313,11 @@ export interface components {
             amount: string;
             unit?: string | null;
         };
-        /** @description An open report, as the queue lists it. */
+        /**
+         * @description An open report, as the queue lists it: enough to choose what to open
+         *     next, and nothing of what the reporter wrote or who they are. Those are
+         *     read by opening the report, which is recorded and limited.
+         */
         QueuedReport: {
             /**
              * Format: int64
@@ -1269,27 +1326,18 @@ export interface components {
             age_seconds: number;
             /** @description RFC 3339. */
             created_at: string;
-            details?: string | null;
             display_code?: string | null;
-            /** Format: uuid */
-            exchange_id?: string | null;
+            /**
+             * @description Whether an account made it. Every report made now has one; it is
+             *     false only for a report made through an invitation link without
+             *     signing in, before reporting needed an account.
+             */
+            has_reporter: boolean;
             /** Format: uuid */
             id: string;
             /** @description Older than the time a report is to be reviewed within. */
             overdue: boolean;
             reason: components["schemas"]["ReportReason"];
-            /**
-             * Format: uuid
-             * @description Who made it. Every report made now has one; it is absent only for a
-             *     report made through an invitation link without signing in, before
-             *     reporting needed an account.
-             */
-            reporter_account_id?: string | null;
-            /**
-             * Format: uuid
-             * @description The person reported.
-             */
-            subject_account_id?: string | null;
         };
         /** @description Where a contribution of the agreement stands. */
         RecordContribution: {
@@ -1441,6 +1489,7 @@ export interface components {
             id: string;
             /** @description The message sent with it. Not part of what is signed. */
             note?: string | null;
+            redacted?: components["schemas"]["SignedDocument"] | null;
             /** @description RFC 3339, UTC. */
             sent_at: string;
             /**
@@ -1453,8 +1502,7 @@ export interface components {
              *     accepted. Only signatures that count are here.
              */
             signatures: components["schemas"]["Signature"][];
-            /** @description What the signatures cover, word for word. */
-            signed: components["schemas"]["SignedDocument"];
+            signed?: components["schemas"]["SignedDocument"] | null;
             standing: components["schemas"]["RevisionStanding"];
             /**
              * @description Signatures that do not count and never will, kept apart so that
@@ -1501,7 +1549,7 @@ export interface components {
             /** @description The other reports about the same exchange, oldest first. */
             other_reports: components["schemas"]["RelatedReport"][];
             record?: components["schemas"]["ReviewRecord"] | null;
-            report: components["schemas"]["QueuedReport"];
+            report: components["schemas"]["OpenedReport"];
             reporter?: components["schemas"]["ReviewedAccount"] | null;
             subject?: components["schemas"]["ReviewedAccount"] | null;
         };
@@ -1887,7 +1935,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Database unreachable */
+            /** @description Database unreachable, or a restored copy whose deletion log is still to be replayed */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3489,6 +3537,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description Too many lists read in the last hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     restore: {
@@ -3578,6 +3635,15 @@ export interface operations {
             };
             /** @description Not a reviewer */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many lists read in the last hour */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3687,7 +3753,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Already resolved (`REPORT_RESOLVED`), or the outcome cannot apply (`ACTION_NOT_ALLOWED`) */
+            /** @description Already resolved (`REPORT_RESOLVED`), the outcome cannot apply (`ACTION_NOT_ALLOWED`), or the person reported is a reviewer, whom only the owner can suspend (`SUBJECT_IS_REVIEWER`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3752,6 +3818,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description Too many lists read in the last hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     lift: {
@@ -3788,6 +3863,15 @@ export interface operations {
             };
             /** @description Not a reviewer, or no such suspended account */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The account is a reviewer's (`SUBJECT_IS_REVIEWER`) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

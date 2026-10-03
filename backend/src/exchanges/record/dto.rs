@@ -433,9 +433,20 @@ pub struct RecordRevision {
     pub standing: RevisionStanding,
     /// SHA-256 of `signed` as canonical JSON (RFC 8785), in hex.
     pub content_hash: String,
-    /// What the signatures cover, word for word.
-    #[schema(value_type = SignedDocument)]
-    pub signed: serde_json::Value,
+    /// What the signatures cover, word for word. Left out when a reviewer
+    /// has hidden what was written in the exchange from the reader
+    /// (`content_hidden`); `redacted` is there instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<SignedDocument>)]
+    pub signed: Option<serde_json::Value>,
+    /// Only when `signed` is left out: the signed document with every piece
+    /// of free text (the terms, and each contribution's description,
+    /// completion criteria and unit of quantity) replaced by the placeholder
+    /// that says it was hidden by review. Names and amounts are as signed.
+    /// It is not what was signed and does not hash to `content_hash`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<SignedDocument>)]
+    pub redacted: Option<serde_json::Value>,
     /// The author's, made by sending it, then the other party's if they
     /// accepted. Only signatures that count are here.
     pub signatures: Vec<Signature>,

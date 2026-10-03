@@ -14,6 +14,7 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 use yuppers_backend::auth::{CodeMessage, CodeSender, SendFuture};
 use yuppers_backend::domain::Rules;
+use yuppers_backend::error::ErrorCode;
 use yuppers_backend::metrics::{self, Text};
 use yuppers_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_due};
 use yuppers_backend::notifications::wording::Wording;
@@ -302,19 +303,59 @@ async fn the_queue_lists_open_reports_oldest_first_with_their_age() {
 
     let old = &reports[at(old)];
     assert_eq!(old["reason"], "SCAM");
-    assert_eq!(old["reporter_account_id"], Value::Null, "through the link");
+    assert_eq!(old["has_reporter"], false, "through the link");
     assert_eq!(old["overdue"], true);
     assert!(old["age_seconds"].as_i64().unwrap() >= 2 * 24 * 3600);
 
+    let fresh_id = fresh;
     let fresh = &reports[at(fresh)];
     assert_eq!(fresh["reason"], "HARASSMENT");
-    assert_eq!(fresh["details"], "She sent threats in the notes.");
-    assert_eq!(fresh["reporter_account_id"], deal.ben.id.to_string());
-    assert_eq!(fresh["subject_account_id"], deal.ana.id.to_string());
-    assert_eq!(fresh["exchange_id"], deal.exchange);
+    assert_eq!(fresh["has_reporter"], true);
     assert!(fresh["display_code"].as_str().unwrap().len() >= 4);
     assert_eq!(fresh["overdue"], false);
     assert!(fresh["age_seconds"].as_i64().unwrap() < 600);
+    // What the reporter wrote, and who anyone is, is read only by opening
+    // the report, which is recorded and limited.
+    let fields: Vec<&str> = fresh
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        fields,
+        [
+            "age_seconds",
+            "created_at",
+            "display_code",
+            "has_reporter",
+            "id",
+            "overdue",
+            "reason"
+        ]
+    );
+    assert!(!queue.to_string().contains("She sent threats"), "{queue}");
+    assert!(
+        audit(&app, fresh_id).await.is_empty(),
+        "listing is not opening"
+    );
+    let detail = app
+        .get(&staff, &format!("/v1/staff/reports/{fresh_id}"))
+        .await
+        .ok();
+    assert_eq!(
+        detail["report"]["details"],
+        "She sent threats in the notes."
+    );
+    assert_eq!(
+        detail["report"]["reporter_account_id"],
+        deal.ben.id.to_string()
+    );
+    assert_eq!(
+        detail["report"]["subject_account_id"],
+        deal.ana.id.to_string()
+    );
+    assert_eq!(detail["report"]["exchange_id"], deal.exchange);
 }
 
 #[tokio::test]
@@ -955,7 +996,7 @@ async fn a_suspended_account_is_signed_out_and_kept_out_until_lifted() {
 }
 
 #[tokio::test]
-async fn a_reviewer_cannot_suspend_themselves_and_both_outcomes_do_both() {
+async fn a_reviewer_cannot_suspend_another_reviewer_and_both_outcomes_do_both() {
     let app = app().await;
     let staff = reviewer(&app).await;
     let other = reviewer(&app).await;
@@ -964,10 +1005,21 @@ async fn a_reviewer_cannot_suspend_themselves_and_both_outcomes_do_both() {
     let deal = app.active_between(staff.clone(), ben).await;
     let report = ben_reports(&app, &deal).await;
 
+    // To the reviewer reported, there is no such report.
     resolve(&app, &staff, report, "ACCOUNT_SUSPENDED", Some("Not me."))
         .await
-        .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+        .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
     assert!(audit(&app, report).await.is_empty(), "nothing was done");
+
+    // Another reviewer cannot suspend them either: the owner can, by taking
+    // the role away first.
+    for outcome in ["ACCOUNT_SUSPENDED", "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED"] {
+        resolve(&app, &other, report, outcome, Some("Threats."))
+            .await
+            .refused(StatusCode::CONFLICT, "SUBJECT_IS_REVIEWER");
+    }
+    assert!(audit(&app, report).await.is_empty(), "nothing was done");
+    assert!(review::revoke(&app.owner, &staff.email).await.unwrap());
 
     let reply = resolve(
         &app,
@@ -990,7 +1042,7 @@ async fn a_reviewer_cannot_suspend_themselves_and_both_outcomes_do_both() {
         .await
         .unwrap();
     assert_eq!(status, "SUSPENDED");
-    // A suspended reviewer is signed out, so is no reviewer any more.
+    // Signed out, and no reviewer any more.
     app.get(&staff, "/v1/staff/reports")
         .await
         .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
@@ -1123,4 +1175,762 @@ async fn the_metrics_say_how_many_reports_wait_and_for_how_long() {
     assert!(value("yuppers_reports_open") >= 1.0);
     assert!(value("yuppers_reports_oldest_open_age_seconds") >= 30.0 * 24.0 * 3600.0);
     assert!(text.contains("# TYPE yuppers_reports_open gauge"), "{text}");
+}
+
+// ---- A reviewer and the reports they take part in ---------------------------
+
+/// Whether a report is in the reviewer's queue.
+async fn queued(app: &App, staff: &User, report: Uuid) -> bool {
+    app.get(staff, "/v1/staff/reports").await.ok()["reports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["id"] == report.to_string())
+}
+
+/// Everything a reviewer could ask about `report`, answered as `staff`:
+/// opening it and each outcome, as (status, body).
+async fn asked_about(app: &App, staff: &User, report: Uuid) -> Vec<(StatusCode, Value)> {
+    let mut answers = Vec::new();
+    let reply = app.get(staff, &format!("/v1/staff/reports/{report}")).await;
+    answers.push((reply.status, reply.body));
+    for outcome in [
+        "DISMISSED",
+        "CONTENT_HIDDEN",
+        "ACCOUNT_SUSPENDED",
+        "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED",
+    ] {
+        let reply = resolve(app, staff, report, outcome, Some("Decided.")).await;
+        answers.push((reply.status, reply.body));
+    }
+    answers
+}
+
+/// A reviewer is never shown, and never decides, a report they take part in:
+/// one about them, one they made, or one about an exchange in which they
+/// hold or once held a place. To them it is not in the queue, and every
+/// request about it is answered exactly as about a report that does not
+/// exist, with nothing read or recorded.
+#[tokio::test]
+async fn a_reviewer_never_sees_or_decides_a_report_they_take_part_in() {
+    let app = app().await;
+    let other = reviewer(&app).await;
+
+    // About them: Rita, a reviewer, is Ana's side of an agreement that Ben
+    // reports.
+    let rita = reviewer(&app).await;
+    let ben = app.user("Ben").await;
+    let about_rita = app.active_between(rita.clone(), ben).await;
+    let about_her = ben_reports(&app, &about_rita).await;
+
+    // Made by them: Rob, a reviewer, is Ben, and reports Ana.
+    let rob = reviewer(&app).await;
+    let ana = app.user("Ana").await;
+    let by_rob = app.active_between(ana, rob.clone()).await;
+    let his = ben_reports(&app, &by_rob).await;
+
+    // About an exchange they once held a place in: Rhea, a reviewer, opened
+    // Ana's link and left before Ana confirmed her; Carl took the place
+    // through a new link, and Ana reports him.
+    let rhea = reviewer(&app).await;
+    let deal = app.negotiating().await;
+    app.post(
+        &rhea,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation }),
+    )
+    .await
+    .ok();
+    let left = app
+        .post(
+            &rhea,
+            &format!("/v1/exchanges/{}/leave", deal.exchange),
+            json!({}),
+        )
+        .await;
+    assert_eq!(left.status, StatusCode::NO_CONTENT, "{}", left.body);
+    let link = app
+        .post(
+            &deal.ana,
+            &format!("/v1/exchanges/{}/invitation", deal.exchange),
+            json!({}),
+        )
+        .await
+        .ok();
+    let carl = app.user("Carl").await;
+    app.post(
+        &carl,
+        "/v1/invitations/claim",
+        json!({ "token": link["invitation_token"] }),
+    )
+    .await
+    .ok();
+    let reply = app
+        .post(
+            &deal.ana,
+            &format!("/v1/exchanges/{}/reports", deal.exchange),
+            json!({ "reason": "SCAM", "details": "He asked for a deposit." }),
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+    let once_held: Uuid = sqlx::query_scalar(
+        "SELECT id FROM report WHERE subject_exchange_id = $1::uuid AND subject_account_id = $2",
+    )
+    .bind(&deal.exchange)
+    .bind(carl.id)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+
+    let missing = Uuid::new_v4();
+    for (staff, report) in [(&rita, about_her), (&rob, his), (&rhea, once_held)] {
+        // Not in their queue; in another reviewer's.
+        assert!(!queued(&app, staff, report).await);
+        assert!(queued(&app, &other, report).await);
+        // Every request looks exactly like one about a report that does not
+        // exist, and nothing was read or recorded.
+        let answers = asked_about(&app, staff, report).await;
+        assert_eq!(answers, asked_about(&app, staff, missing).await);
+        assert!(
+            answers
+                .iter()
+                .all(|(status, body)| *status == StatusCode::NOT_FOUND
+                    && *body == json!({ "code": "NOT_FOUND" })),
+            "{answers:?}"
+        );
+        assert!(audit(&app, report).await.is_empty());
+        let status: String = sqlx::query_scalar("SELECT status FROM report WHERE id = $1")
+            .bind(report)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
+        assert_eq!(status, "OPEN");
+    }
+
+    // Once another reviewer has resolved it, it is still "not found" to them,
+    // not "already resolved".
+    let reply = resolve(&app, &other, about_her, "DISMISSED", None).await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+    app.get(&rita, &format!("/v1/staff/reports/{about_her}"))
+        .await
+        .refused(StatusCode::NOT_FOUND, "NOT_FOUND");
+    app.get(&other, &format!("/v1/staff/reports/{about_her}"))
+        .await
+        .refused(StatusCode::CONFLICT, "REPORT_RESOLVED");
+}
+
+/// The suspensions and the hidden content that a report led to are, to a
+/// reviewer who takes part in that report, not there: not listed, not
+/// lifted, not shown again. Nor is their own, and a reviewer's suspension is
+/// the owner's to lift.
+#[tokio::test]
+async fn a_reviewer_cannot_undo_what_was_decided_about_a_report_they_take_part_in() {
+    let app = app().await;
+    let other = reviewer(&app).await;
+    // Rita, a reviewer, is Ben: she reports Ana, and another reviewer hides
+    // the yup from Ana and suspends her.
+    let rita = reviewer(&app).await;
+    let ana = app.user("Ana").await;
+    let deal = app.active_between(ana, rita.clone()).await;
+    let report = ben_reports(&app, &deal).await;
+    let reply = resolve(
+        &app,
+        &other,
+        report,
+        "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED",
+        Some("Threats."),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+
+    let ana_id = deal.ana.id.to_string();
+    let listed = |list: Value| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["account_id"] == ana_id)
+    };
+    assert!(!listed(app.get(&rita, "/v1/staff/suspensions").await.ok()));
+    assert!(!listed(app.get(&rita, "/v1/staff/hidden").await.ok()));
+    assert!(listed(app.get(&other, "/v1/staff/suspensions").await.ok()));
+    assert!(listed(app.get(&other, "/v1/staff/hidden").await.ok()));
+
+    let lift = format!("/v1/staff/suspensions/{}/lift", deal.ana.id);
+    let restore = json!({
+        "exchange_id": deal.exchange, "account_id": deal.ana.id, "note": "Mistaken."
+    });
+    let nobody = Uuid::new_v4();
+    let not_there = (
+        app.post(
+            &rita,
+            &format!("/v1/staff/suspensions/{nobody}/lift"),
+            json!({ "note": "x" }),
+        )
+        .await
+        .body,
+        app.post(
+            &rita,
+            "/v1/staff/hidden/restore",
+            json!({ "exchange_id": nobody, "account_id": nobody, "note": "x" }),
+        )
+        .await
+        .body,
+    );
+    let lifted = app.post(&rita, &lift, json!({ "note": "Appeal." })).await;
+    let shown = app
+        .post(&rita, "/v1/staff/hidden/restore", restore.clone())
+        .await;
+    assert_eq!(
+        (lifted.status, shown.status),
+        (StatusCode::NOT_FOUND, StatusCode::NOT_FOUND)
+    );
+    assert_eq!((lifted.body, shown.body), not_there);
+    let actions: Vec<String> = audit(&app, report)
+        .await
+        .into_iter()
+        .map(|(action, ..)| action)
+        .collect();
+    assert_eq!(
+        actions,
+        ["CONTENT_HIDDEN", "ACCOUNT_SUSPENDED"],
+        "nothing more"
+    );
+
+    // Another reviewer can.
+    let reply = app
+        .post(&other, &lift, json!({ "note": "Appeal upheld." }))
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+    let reply = app.post(&other, "/v1/staff/hidden/restore", restore).await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+
+    // A reviewer's own suspension, made by the owner, is not theirs to lift,
+    // nor another reviewer's: the owner lifts it, or revokes the role first.
+    sqlx::query("UPDATE account SET status = 'SUSPENDED' WHERE id = $1")
+        .bind(rita.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    let own = review::lift(
+        &app.db,
+        rita.id,
+        rita.id,
+        review::StaffNote {
+            note: "Mine.".into(),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(own.code, ErrorCode::NotFound);
+    assert!(
+        !app.get(&other, "/v1/staff/suspensions")
+            .await
+            .ok()
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    app.post(
+        &other,
+        &format!("/v1/staff/suspensions/{}/lift", rita.id),
+        json!({ "note": "Colleague." }),
+    )
+    .await
+    .refused(StatusCode::CONFLICT, "SUBJECT_IS_REVIEWER");
+}
+
+// ---- Suspension ends what could bind the person ------------------------------
+
+/// The open revision of an exchange as `user` sees it, if any.
+async fn open_revision(app: &App, user: &User, exchange: &str) -> Value {
+    app.view(user, exchange).await["open_revision"].clone()
+}
+
+/// A suspension leaves nothing through which the suspended person could be
+/// made party to a new agreement: their unclaimed links stop working, and
+/// stay dead after the suspension is lifted; what they sent and is waiting
+/// to be signed is withdrawn in their name; where they had opened someone's
+/// link and were not yet confirmed, they leave. What was sent to them is
+/// left to lapse. The other party sees ordinary steps, nothing about a
+/// suspension.
+#[tokio::test]
+async fn a_suspension_ends_everything_that_could_bind_the_suspended_person() {
+    let app = app().await;
+    let staff = reviewer(&app).await;
+    // Ana, about to be suspended, has an agreement with Ben ...
+    let deal = app.active().await;
+    let (ana, ben) = (&deal.ana, &deal.ben);
+    // ... and has sent him an amendment he has not answered.
+    let mut amended = fence_job(deal.repair, deal.payment);
+    amended["terms"] = json!("Repair the back fence by Friday.");
+    let amendment = app.send(ana, &deal.exchange, amended).await.ok();
+    let amendment = amendment["exchange"]["open_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // A proposal of hers that nobody has opened yet.
+    let open = app
+        .negotiating_between(ana.clone(), app.user("Dan").await)
+        .await;
+    // Carl's proposal, whose link she opened and signed, unconfirmed.
+    let carl = app.user("Carl").await;
+    let carls = app.negotiating_between(carl.clone(), ana.clone()).await;
+    app.post(
+        ana,
+        "/v1/invitations/claim",
+        json!({ "token": carls.invitation }),
+    )
+    .await
+    .ok();
+    app.command(ana, &carls.exchange, accept(&carls.revision))
+        .await
+        .ok();
+    // Eve's proposal to her, through a link she took and Eve confirmed: sent
+    // to her, so left to lapse.
+    let eve = app.user("Eve").await;
+    let eves = app.negotiating_between(eve.clone(), ana.clone()).await;
+    app.post(
+        ana,
+        "/v1/invitations/claim",
+        json!({ "token": eves.invitation }),
+    )
+    .await
+    .ok();
+    app.command(
+        &eve,
+        &eves.exchange,
+        json!({ "type": "CONFIRM_COUNTERPARTY" }),
+    )
+    .await
+    .ok();
+
+    let report = ben_reports(&app, &deal).await;
+    let reply = resolve(&app, &staff, report, "ACCOUNT_SUSPENDED", Some("Threats.")).await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+
+    // The amendment is withdrawn: Ben cannot sign it.
+    assert_eq!(open_revision(&app, ben, &deal.exchange).await, Value::Null);
+    let view = app.view(ben, &deal.exchange).await;
+    assert_eq!(view["state"], "ACTIVE");
+    assert_ne!(
+        app.command(ben, &deal.exchange, accept(&amendment))
+            .await
+            .status,
+        StatusCode::OK
+    );
+    // Her proposal nobody had opened is withdrawn, and its link is dead.
+    let state: String = sqlx::query_scalar("SELECT state FROM exchange WHERE id = $1::uuid")
+        .bind(&open.exchange)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(state, "CLOSED");
+    let dan = &open.ben;
+    for path in ["/v1/invitations/preview", "/v1/invitations/claim"] {
+        app.post(dan, path, json!({ "token": open.invitation }))
+            .await
+            .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    }
+    // In Carl's proposal she has left: Carl cannot confirm her, and her
+    // signature is void.
+    let view = app.view(&carl, &carls.exchange).await;
+    assert_eq!(view["state"], "NEGOTIATING");
+    assert_eq!(view["claimant"], Value::Null);
+    assert_ne!(
+        app.command(
+            &carl,
+            &carls.exchange,
+            json!({ "type": "CONFIRM_COUNTERPARTY" })
+        )
+        .await
+        .status,
+        StatusCode::OK
+    );
+    // Eve's proposal to her is left as it was.
+    assert_eq!(
+        open_revision(&app, &eve, &eves.exchange).await["id"],
+        eves.revision.as_str()
+    );
+
+    // What the others were told is an ordinary withdrawal or departure.
+    let kinds: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT type FROM exchange_event
+         WHERE exchange_id IN ($1::uuid, $2::uuid, $3::uuid) AND occurred_at > now() - interval '1 minute'",
+    )
+    .bind(&deal.exchange)
+    .bind(&open.exchange)
+    .bind(&carls.exchange)
+    .fetch_all(&app.owner)
+    .await
+    .unwrap();
+    assert!(
+        kinds.iter().all(|kind| !kind.contains("SUSPEND")),
+        "{kinds:?}"
+    );
+
+    // Lifted: she can sign in again, and nothing the suspension ended comes
+    // back, the dead link included.
+    let lift = format!("/v1/staff/suspensions/{}/lift", ana.id);
+    let reply = app
+        .post(&staff, &lift, json!({ "note": "Appeal upheld." }))
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+    app.post(
+        dan,
+        "/v1/invitations/preview",
+        json!({ "token": open.invitation }),
+    )
+    .await
+    .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+}
+
+/// However an account comes to be suspended, its links are dead links while
+/// it is, and an offer it left open cannot be signed: the check is on the
+/// initiator and the author, not only on what a reviewer's suspension does.
+#[tokio::test]
+async fn a_link_or_offer_from_an_account_suspended_any_other_way_binds_nobody() {
+    let app = app().await;
+    let deal = app.negotiating().await;
+    let carla = app.user("Carla").await;
+    sqlx::query("UPDATE account SET status = 'SUSPENDED' WHERE id = $1")
+        .bind(deal.ana.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    for (path, body) in [
+        (
+            "/v1/invitations/preview",
+            json!({ "token": deal.invitation }),
+        ),
+        ("/v1/invitations/claim", json!({ "token": deal.invitation })),
+        (
+            "/v1/invitations/claim",
+            json!({ "token": deal.invitation, "only_if_yours": true }),
+        ),
+        (
+            "/v1/invitations/report",
+            json!({ "token": deal.invitation, "reason": "SCAM" }),
+        ),
+    ] {
+        let reply = app.post(&carla, path, body).await;
+        reply.refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    }
+
+    // An offer Ana sent before, to someone already in the exchange, cannot
+    // be signed while she is suspended.
+    sqlx::query("UPDATE account SET status = 'ACTIVE' WHERE id = $1")
+        .bind(deal.ana.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    app.post(
+        &deal.ben,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation }),
+    )
+    .await
+    .ok();
+    app.command(
+        &deal.ana,
+        &deal.exchange,
+        json!({ "type": "CONFIRM_COUNTERPARTY" }),
+    )
+    .await
+    .ok();
+    // Already in the place: a lookup by the link works while she is active.
+    app.post(
+        &deal.ben,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation, "only_if_yours": true }),
+    )
+    .await
+    .ok();
+    sqlx::query("UPDATE account SET status = 'SUSPENDED' WHERE id = $1")
+        .bind(deal.ana.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    app.command(&deal.ben, &deal.exchange, accept(&deal.revision))
+        .await
+        .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+    // And her link is dead even to the person who used it.
+    app.post(
+        &deal.ben,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation, "only_if_yours": true }),
+    )
+    .await
+    .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    // Ben can still decline it, and so end the exchange.
+    app.command(
+        &deal.ben,
+        &deal.exchange,
+        json!({ "type": "DECLINE", "revision": deal.revision }),
+    )
+    .await
+    .ok();
+}
+
+// ---- Every piece of free text is hidden ---------------------------------------
+
+/// Hidden content leaves no piece of free text in front of the person
+/// reported: the terms, each contribution's description, completion criteria
+/// and unit of quantity, the message sent with a revision, and every note in
+/// the history. Their copy of the record does not show the signed document
+/// altered as if it were signed: it leaves it out and gives a redacted copy
+/// under another name.
+#[tokio::test]
+async fn hidden_content_hides_every_piece_of_free_text_and_leaves_the_signed_document_out() {
+    const MARK: &str = "SECRET-12-Elm-Street";
+    let app = app().await;
+    let staff = reviewer(&app).await;
+    let ana = app.user("Ana").await;
+    let ben = app.user("Ben").await;
+    let exchange = app.draft(&ana).await;
+    let (item, payment) = (Uuid::new_v4(), Uuid::new_v4());
+    let terms = json!({
+        "party_a_name": "Ana Ruiz",
+        "party_b_name": "Ben Ortiz",
+        "terms": format!("Terms: {MARK}"),
+        "contributions": [
+            {
+                "id": item, "from": "A", "type": "ITEM",
+                "description": format!("Firewood from {MARK}"),
+                "quantity": { "amount": "2", "unit": format!("cords from {MARK}") },
+                "due": { "kind": "ON_AGREEMENT" },
+                "completion_criteria": format!("Stacked at {MARK}"),
+                "required": true, "amount_minor": null,
+            },
+            {
+                "id": payment, "from": "B", "type": "MONEY",
+                "description": format!("Paid at {MARK}"),
+                "quantity": null,
+                "due": { "kind": "AFTER_CONTRIBUTION", "contribution": item },
+                "completion_criteria": null, "required": true, "amount_minor": 40000,
+            },
+        ],
+    });
+    let sent = app
+        .post(
+            &ana,
+            &format!("/v1/exchanges/{exchange}/revisions"),
+            json!({
+                "expected_version": 0, "terms": terms, "consent": common::consent(),
+                "note": format!("Message: {MARK}"),
+            }),
+        )
+        .await
+        .ok();
+    let revision = sent["exchange"]["open_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let token = sent["invitation_token"].as_str().unwrap().to_owned();
+    app.post(&ben, "/v1/invitations/claim", json!({ "token": token }))
+        .await
+        .ok();
+    app.command(&ana, &exchange, json!({ "type": "CONFIRM_COUNTERPARTY" }))
+        .await
+        .ok();
+    app.command(&ben, &exchange, accept(&revision)).await.ok();
+    app.command(
+        &ana,
+        &exchange,
+        json!({ "type": "CONTRIBUTION", "contribution": item, "action": "CLAIM",
+                "note": format!("Claim: {MARK}") }),
+    )
+    .await
+    .ok();
+    app.command(
+        &ben,
+        &exchange,
+        json!({ "type": "REQUEST_CLOSE", "note": format!("Statement: {MARK}") }),
+    )
+    .await
+    .ok();
+    let deal = Deal {
+        ana: ana.clone(),
+        ben: ben.clone(),
+        exchange: exchange.clone(),
+        repair: item,
+        payment,
+        revision,
+        invitation: token,
+    };
+    let report = ben_reports(&app, &deal).await;
+    let reply = resolve(&app, &staff, report, "CONTENT_HIDDEN", Some("Hide it.")).await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+
+    let view = app.view(&ana, &exchange).await;
+    let history = app
+        .get(&ana, &format!("/v1/exchanges/{exchange}/history"))
+        .await
+        .ok();
+    let record = app
+        .get(&ana, &format!("/v1/exchanges/{exchange}/record"))
+        .await
+        .ok();
+    for (what, shown) in [("view", &view), ("history", &history), ("record", &record)] {
+        let text = shown.to_string();
+        assert!(!text.contains(MARK), "{what}: {text}");
+    }
+    let unit = &view["in_force_revision"]["terms"]["contributions"][0]["quantity"];
+    assert_eq!(unit["unit"], "Hidden by review");
+    assert_eq!(unit["amount"], "2");
+
+    // The record leaves the signed document out, and says it has.
+    assert_eq!(record["content_hidden"], true);
+    let first = &record["revisions"][0];
+    assert_eq!(first.get("signed"), None, "{first}");
+    let redacted = &first["redacted"];
+    assert_eq!(redacted["terms"], "Hidden by review");
+    assert_eq!(redacted["parties"]["A"], "Ana Ruiz");
+    assert_eq!(redacted["contributions"][1]["amount_minor"], 40000);
+    assert!(first["content_hash"].as_str().unwrap().len() == 64);
+
+    // Ben, who reported, has the signed document as signed.
+    let record = app
+        .get(&ben, &format!("/v1/exchanges/{exchange}/record"))
+        .await
+        .ok();
+    assert_eq!(record["revisions"][0].get("redacted"), None);
+    assert!(record["revisions"][0]["signed"].to_string().contains(MARK));
+}
+
+// ---- Limits ---------------------------------------------------------------------
+
+/// Reading the queue, the suspended accounts and the hidden content is
+/// limited per reviewer and hour, together.
+#[tokio::test]
+async fn reading_the_lists_is_limited_per_reviewer_per_hour() {
+    let app = app().await;
+    let staff = reviewer(&app).await;
+    let other = reviewer(&app).await;
+    sqlx::query(
+        "INSERT INTO staff_list_limit (staff_account_id, window_start, count)
+         VALUES ($1, date_trunc('hour', now()), $2)",
+    )
+    .bind(staff.id)
+    .bind(review::LISTS_PER_HOUR as i32 - 1)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(
+        app.get(&staff, "/v1/staff/hidden").await.status,
+        StatusCode::OK
+    );
+    for path in [
+        "/v1/staff/reports",
+        "/v1/staff/suspensions",
+        "/v1/staff/hidden",
+    ] {
+        app.get(&staff, path)
+            .await
+            .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+        assert_eq!(app.get(&other, path).await.status, StatusCode::OK, "{path}");
+    }
+}
+
+/// Requests made at the same moment cannot together go past a limit: each
+/// waits for the one before to count and record.
+#[tokio::test]
+async fn a_limit_holds_against_requests_made_at_the_same_moment() {
+    let app = app().await;
+    let staff = reviewer(&app).await;
+    let deal = app.active().await;
+    let report = ben_reports(&app, &deal).await;
+    sqlx::query(
+        "INSERT INTO review_event (staff_account_id, action, report_id)
+         SELECT $1, 'REPORT_VIEWED', $2 FROM generate_series(1, $3)",
+    )
+    .bind(staff.id)
+    .bind(report)
+    .bind(review::VIEWS_PER_HOUR as i32 - 1)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+
+    let path = format!("/v1/staff/reports/{report}");
+    let requests = (0..8).map(|_| app.get(&staff, &path));
+    let replies = futures_join_all(requests).await;
+    let opened = replies
+        .iter()
+        .filter(|reply| reply.status == StatusCode::OK)
+        .count();
+    let refused = replies
+        .iter()
+        .filter(|reply| reply.status == StatusCode::TOO_MANY_REQUESTS)
+        .count();
+    assert_eq!((opened, refused), (1, 7));
+    let views: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM review_event WHERE staff_account_id = $1 AND action = 'REPORT_VIEWED'",
+    )
+    .bind(staff.id)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(views, review::VIEWS_PER_HOUR);
+}
+
+/// Runs the futures at the same time and gives their outputs in order.
+async fn futures_join_all<F: std::future::Future>(
+    futures: impl Iterator<Item = F>,
+) -> Vec<F::Output> {
+    let handles: Vec<_> = futures.map(Box::pin).collect();
+    let mut outputs: Vec<Option<F::Output>> = handles.iter().map(|_| None).collect();
+    let mut handles: Vec<_> = handles.into_iter().map(Some).collect();
+    std::future::poll_fn(|context| {
+        let mut pending = false;
+        for (handle, output) in handles.iter_mut().zip(outputs.iter_mut()) {
+            if let Some(future) = handle {
+                match future.as_mut().poll(context) {
+                    std::task::Poll::Ready(value) => {
+                        *output = Some(value);
+                        *handle = None;
+                    }
+                    std::task::Poll::Pending => pending = true,
+                }
+            }
+        }
+        if pending {
+            std::task::Poll::Pending
+        } else {
+            std::task::Poll::Ready(())
+        }
+    })
+    .await;
+    outputs.into_iter().map(Option::unwrap).collect()
+}
+
+// ---- Paths ---------------------------------------------------------------------
+
+/// Under `/v1/staff`, a path that does not exist and a method a path does not
+/// take answer the same JSON "not found" as every staff path answers anyone
+/// who is not a reviewer.
+#[tokio::test]
+async fn every_request_under_staff_is_the_same_not_found_to_anyone_but_a_reviewer() {
+    let app = app().await;
+    let stranger = app.user("Stranger").await;
+    let staff = reviewer(&app).await;
+    let requests = [
+        (Method::GET, "/v1/staff"),
+        (Method::GET, "/v1/staff/"),
+        (Method::GET, "/v1/staff/nothing"),
+        (Method::GET, "/v1/staff/reports/x/y/z"),
+        (Method::DELETE, "/v1/staff/reports"),
+        (Method::PUT, "/v1/staff/hidden"),
+        (Method::GET, "/v1/staff/hidden/restore"),
+        (Method::PATCH, "/v1/staff/suspensions"),
+        (Method::POST, "/v1/staff/reports"),
+    ];
+    for user in [None, Some(&stranger), Some(&staff)] {
+        for (method, path) in &requests {
+            let reply = app.call(user, method.clone(), path, None, &[]).await;
+            assert_eq!(
+                (reply.status, reply.body),
+                (StatusCode::NOT_FOUND, json!({ "code": "NOT_FOUND" })),
+                "{method} {path}"
+            );
+        }
+    }
 }
