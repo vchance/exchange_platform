@@ -742,7 +742,7 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
     done(&deleted);
     let cleared = deleted.headers[SET_COOKIE].to_str().unwrap();
     assert!(
-        cleared.starts_with("exchange_session=;") && cleared.contains("Max-Age=0"),
+        cleared.starts_with("yuppers_session=;") && cleared.contains("Max-Age=0"),
         "{cleared}"
     );
 

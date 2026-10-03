@@ -14,7 +14,7 @@ use super::AppState;
 use crate::auth::token_hash;
 use crate::error::{ApiError, ErrorCode};
 
-pub const SESSION_COOKIE: &str = "exchange_session";
+pub const SESSION_COOKIE: &str = "yuppers_session";
 
 /// Reads a JSON request body into `T`, refusing what the service cannot
 /// store or should not accept, with an error code the clients understand.
