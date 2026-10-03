@@ -1,9 +1,11 @@
 import { createApiClient } from '@exchange/api-client';
 import { createExchangeApi, type ClientIdentity } from '@exchange/shared';
+import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 
+import { clientIdentity } from './client-identity';
 import { API_URL } from './config';
 import { recordSharer } from './record-sharer';
 import { tokenStore } from './token-store';
@@ -19,12 +21,13 @@ let token: string | null = null;
 /**
  * Which client this is and which build, named to the service on every
  * request so a build too old to act can be told so (`CLIENT_TOO_OLD`). The
- * browser test harness is neither app and names itself as neither.
+ * browser test harness is neither app and names itself as neither, and a
+ * build that cannot read its own version names none (`client-identity.ts`).
  */
-export const CLIENT: ClientIdentity | undefined =
-  Platform.OS === 'ios' || Platform.OS === 'android'
-    ? { name: Platform.OS, version: Constants.expoConfig?.version ?? '0.0.0' }
-    : undefined;
+export const CLIENT: ClientIdentity | undefined = clientIdentity(Platform.OS, {
+  native: Application.nativeApplicationVersion,
+  config: Constants.expoConfig?.version,
+});
 
 /** The calls the screens make: the same ones as the web app, with a token session. */
 export const api = createExchangeApi({

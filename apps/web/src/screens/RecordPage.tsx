@@ -116,7 +116,7 @@ function Record({ record }: { record: RecordDocument }) {
               ),
           )}
         </ul>
-        {reason && reason in w.closedReasons && <p>{w.closedReasons[reason as ClosedReason]}</p>}
+        {reason && Object.hasOwn(w.closedReasons, reason) && <p>{w.closedReasons[reason as ClosedReason]}</p>}
         <p>
           {fmt(w.started, { date: when(exchange.created_at) })}
           {exchange.closed_at && (

@@ -152,7 +152,7 @@ function Record({ record, failure, reload }: RecordProps) {
       {(['A', 'B'] as const).map((slot) =>
         parties[slot] ? <Written key={slot}>{parties[slot]}</Written> : null,
       )}
-      {reason && reason in w.closedReasons ? (
+      {reason && Object.hasOwn(w.closedReasons, reason) ? (
         <P>{w.closedReasons[reason as ClosedReason]}</P>
       ) : null}
       <Lines>

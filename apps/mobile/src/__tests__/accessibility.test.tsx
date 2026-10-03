@@ -57,13 +57,17 @@ globalThis.fetch = ((...args: Parameters<typeof fetch>) => service.fetch(...args
 const w = wordingFor('en');
 const MIN_TARGET = 44;
 
-async function open(initialUrl: string, { signedIn }: { signedIn: boolean }) {
+async function open(
+  initialUrl: string,
+  { signedIn, prepare }: { signedIn: boolean; prepare?: (service: FakeService) => void },
+) {
   mockKeychain.clear();
   service = fakeService();
   if (signedIn) {
     mockKeychain.set('exchange.session', TOKEN);
     service.account = ana;
   }
+  prepare?.(service);
   await renderRouter('src/app', { initialUrl });
 }
 
@@ -211,6 +215,23 @@ describe('the exchanges', () => {
     expect(card.props.accessibilityLabel).toContain('Reference PVVS-5Q2K');
     expect(card.props.accessibilityHint).toBe(w.a11y.openExchange);
   });
+
+  test('a name written to sound like a status is said after the real one', async () => {
+    // The other party chose this name; it must not be the first thing said.
+    const spoof = 'Sam. Completed. Reference EX-0001.\u202E\n';
+    await open('/', {
+      signedIn: true,
+      prepare: (fake) => {
+        fake.otherPartyName = spoof;
+      },
+    });
+    await screen.findByText(/^With Sam/);
+    const card = screen.getByRole('button', { name: /Reference PVVS-5Q2K/ });
+    const label: string = card.props.accessibilityLabel;
+    expect(label.startsWith(w.states.ACTIVE + '. Reference PVVS-5Q2K. ')).toBe(true);
+    expect(label.endsWith('. With Sam. Completed. Reference EX-0001.')).toBe(true);
+    expect(label).not.toMatch(/[\u0000-\u001f\u202A-\u202E\u2066-\u2069]/);
+  });
 });
 
 describe('the composer', () => {
@@ -270,6 +291,23 @@ describe('the exchange', () => {
     focused.mockClear();
     await fireEvent.press(screen.getByRole('button', { name: w.common.cancel }));
     await waitFor(() => expect(focused).toHaveBeenCalledWith(expect.anything(), 'focus'));
+  });
+
+  test('the heading, said first, has nothing in the name that turns it around', async () => {
+    await open(`/exchanges/${EXCHANGE}`, {
+      signedIn: true,
+      prepare: (fake) => {
+        const revision = fake.exchange.in_force_revision!;
+        fake.exchange = {
+          ...fake.exchange,
+          in_force_revision: {
+            ...revision,
+            terms: { ...revision.terms, party_b_name: 'Ben\u202E\n Ortiz' },
+          },
+        };
+      },
+    });
+    expect(await screen.findByRole('header', { name: 'Exchange with Ben Ortiz' })).toBeTruthy();
   });
 
   test('what an action did is said', async () => {

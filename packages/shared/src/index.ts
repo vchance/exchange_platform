@@ -3,6 +3,7 @@ export type { Language, LanguageInfo } from './language'
 export type { ClosedReason, Wording } from './wording/types'
 export { CONSENT_VERSION, consentShown } from './consent'
 export { formatMessage } from './message'
+export { labelText } from './label'
 export type { MessageValues } from './message'
 export {
   eventMessage,

@@ -67,9 +67,11 @@ export function eventMessage(
   // Done from the invited party's place by someone who was later removed
   // from it, or left (DESIGN.md §8). The record gives that place a name, and
   // it is not theirs; nor are they the reader, even if the reader is in that
-  // place now. Checked with `in`: an exchange older than the rule could hold
-  // something else of theirs, which is then said the ordinary way.
-  if (event.by_removed_claimant && event.type in words.formerClaimant) {
+  // place now. Checked against the wording's own keys: an exchange older
+  // than the rule could hold something else of theirs, which is then said
+  // the ordinary way. (`in` would also find what every object inherits,
+  // such as `toString`.)
+  if (event.by_removed_claimant && Object.hasOwn(words.formerClaimant, event.type)) {
     return { message: words.formerClaimant[event.type as FormerClaimantEventType], values }
   }
   const type = event.type as PartyEventType
@@ -77,7 +79,7 @@ export function eventMessage(
     event.contribution !== undefined &&
     event.contribution !== null &&
     money?.has(event.contribution.id) === true &&
-    type in words.moneyNamed
+    Object.hasOwn(words.moneyNamed, type)
   if (event.actor !== 'SYSTEM' && event.actor === reader) {
     return {
       message: aboutMoney ? words.moneyYou[type as ContributionEventType] : words.you[type],

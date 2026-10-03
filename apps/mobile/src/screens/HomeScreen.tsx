@@ -1,5 +1,5 @@
 import type { ErrorCode, ExchangeSummary } from '@exchange/api-client';
-import { failureCode, groupExchanges } from '@exchange/shared';
+import { failureCode, groupExchanges, labelText } from '@exchange/shared';
 import { getCalendars } from 'expo-localization';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -155,13 +155,20 @@ function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
       : w.noParty;
     const reference = fmt(w.reference, { code: exchange.display_code });
     const updated = fmt(w.updated, { date: moment(exchange.updated_at) });
+    // The name is the other party's own words, and could be written to read
+    // like a state or a reference. In the spoken label the product's facts
+    // come first and the name last, on one line and without characters that
+    // change the direction of text.
+    const spokenTitle = exchange.other_party_name
+      ? fmt(w.withParty, { name: labelText(exchange.other_party_name) })
+      : w.noParty;
     return (
-      // One button per exchange, read as one: who it is with, where it
-      // stands, its reference and when it changed, then that it opens.
+      // One button per exchange, read as one: where it stands, its reference
+      // and when it changed, then who it is with, then that it opens.
       <Pressable
         key={exchange.id}
         accessibilityRole="button"
-        accessibilityLabel={[title, state, reference, updated].join('. ')}
+        accessibilityLabel={[state, reference, updated, spokenTitle].join('. ')}
         accessibilityHint={wording.a11y.openExchange}
         onPress={() => router.push(`/exchanges/${exchange.id}`)}
         style={({ pressed }) => [styles.row, pressed && styles.pressed]}>

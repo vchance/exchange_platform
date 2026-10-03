@@ -273,3 +273,26 @@ test('the copy to keep is the record itself as a JSON file, nothing added or lef
   expect(file.text.startsWith('{\n  "format": "exchange-record"')).toBe(true)
   expect(file.text.endsWith('}\n')).toBe(true)
 })
+
+test('only the wording’s own sentences are looked up, never what every object inherits', () => {
+  // Wording whose special cases are empty, but would be found through the
+  // prototype by an `in` check.
+  const inherited = {
+    ...words,
+    formerClaimant: Object.create({ REVISION_SENT: 'inherited' }),
+    moneyNamed: Object.create({ CONTRIBUTION_CLAIMED: 'inherited' }),
+  } as typeof words
+  const sentence = (found: RecordEvent) => {
+    const { message, values } = eventMessage(found, inherited, 'A', parties, new Set(['m']))
+    return formatMessage(message, values, 'en')
+  }
+  const sent = event({ type: 'REVISION_SENT', actor: 'B', revision })
+  expect(sentence({ ...sent, by_removed_claimant: true })).toBe(say(sent, 'A'))
+  const claimed = event({
+    type: 'CONTRIBUTION_CLAIMED',
+    actor: 'B',
+    contribution: { id: 'm', description: 'Pay' } as RecordEvent['contribution'],
+  })
+  expect(sentence(claimed)).toBe(say(claimed, 'A'))
+  expect(sentence(claimed)).not.toBe('inherited')
+})

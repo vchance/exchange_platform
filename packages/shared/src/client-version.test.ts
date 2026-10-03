@@ -1,5 +1,8 @@
 import { expect, test } from 'vitest'
 
+import type { ApiClient } from '@exchange/api-client'
+
+import { createExchangeApi } from './api'
 import { clientHeader, compareVersions, isClientTooOld, parseVersion } from './client-version'
 
 test('a client names itself as kind and version', () => {
@@ -25,4 +28,22 @@ test('a client is too old only below a minimum the service names for its kind', 
   // Nothing is required unless said, and what cannot be read is not refused.
   expect(isClientTooOld({ web: null, ios: null, android: null }, { name: 'web', version: '0' })).toBe(false)
   expect(isClientTooOld(minimums, { name: 'ios', version: 'dev' })).toBe(false)
+})
+
+test('a client names its build on every request, unless it cannot read its version', async () => {
+  const sent: (Record<string, string> | undefined)[] = []
+  const call = async (_path: string, init: { headers?: Record<string, string> } = {}) => {
+    sent.push(init.headers)
+    return { data: {}, response: { ok: true, status: 200 } }
+  }
+  const client = { GET: call } as unknown as ApiClient
+  const session = { delivery: 'TOKEN', token: () => null } as const
+  const header = async (identity?: { name: 'ios'; version: string }) => {
+    await createExchangeApi({ client, session, identity }).meta()
+    return sent.at(-1)?.['X-Client-Version']
+  }
+  expect(await header({ name: 'ios', version: '1.4.0' })).toBe('ios/1.4.0')
+  expect(await header({ name: 'ios', version: '' })).toBeUndefined()
+  expect(await header({ name: 'ios', version: 'unknown' })).toBeUndefined()
+  expect(await header(undefined)).toBeUndefined()
 })
