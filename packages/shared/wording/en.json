@@ -813,5 +813,11 @@
     "NOT_FOUND": "We couldn’t find that.",
     "SERVICE_UNAVAILABLE": "The service is temporarily unavailable. Try again shortly.",
     "INTERNAL": "Something went wrong on our side. Try again."
+  },
+  "a11y": {
+    "openExchange": "Opens this exchange.",
+    "required": "Required.",
+    "signNeedsAgreement": "Available once you confirm, above, that you have read these terms and sign them.",
+    "earlierAdded": "{count, plural, one {# earlier entry added to the history.} other {# earlier entries added to the history.}}"
   }
 }

@@ -1,6 +1,6 @@
 import type { ExchangeView } from '@exchange/api-client'
 import { NOTE_MAX_CHARS } from '@exchange/shared'
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
 import { Panel } from '../components/Panel'
@@ -201,12 +201,15 @@ function StatementPanel(props: StatementPanelProps) {
   const { actions } = props
   const [note, setNote] = useState('')
   const [missing, setMissing] = useState(false)
+  const noteId = useId()
 
   function submit(event: FormEvent) {
     event.preventDefault()
     const written = note.trim()
     if (props.required && written === '') {
       setMissing(true)
+      // Back to the statement, whose error is read with it.
+      document.getElementById(noteId)?.focus()
       return
     }
     void props.onSubmit(written === '' ? null : written)
@@ -219,6 +222,8 @@ function StatementPanel(props: StatementPanelProps) {
         <Field
           label={props.label}
           hint={wording.exchange.noteRecord}
+          id={noteId}
+          required={props.required}
           error={missing ? wording.exchange.noteRequired : null}
         >
           {(control) => (

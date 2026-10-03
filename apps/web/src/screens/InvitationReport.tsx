@@ -27,18 +27,12 @@ export function InvitationReport({ token }: { token: string }) {
   return (
     <section aria-label={w.reportProposal}>
       {sent && (
-        <p className="notice" role="status" tabIndex={-1} ref={announced}>
+        <p className="notice" tabIndex={-1} ref={announced}>
           {w.reportSent}
         </p>
       )}
       <div className="actions">
-        <button
-          type="button"
-          className="link"
-          aria-expanded={open}
-          ref={opener}
-          onClick={begin}
-        >
+        <button type="button" className="link" aria-expanded={open} ref={opener} onClick={begin}>
           {w.reportProposal}
         </button>
       </div>

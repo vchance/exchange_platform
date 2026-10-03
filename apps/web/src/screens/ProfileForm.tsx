@@ -36,7 +36,13 @@ export function ProfileForm({ account, first }: { account: Account; first: boole
     event.preventDefault()
     setChecked(true)
     setSaved(false)
-    if (nameMissing || adultMissing) return
+    if (nameMissing || adultMissing) {
+      // The keyboard goes to the first thing to fix, once it has been marked;
+      // its error is read with it.
+      const first = nameMissing ? 'profile-name' : 'profile-adult'
+      window.setTimeout(() => document.getElementById(first)?.focus())
+      return
+    }
     setBusy(true)
     setFailure(null)
     try {
@@ -60,6 +66,8 @@ export function ProfileForm({ account, first }: { account: Account; first: boole
       <Field
         label={w.nameLabel}
         hint={w.nameHint}
+        id="profile-name"
+        required
         error={checked && nameMissing ? w.nameRequired : null}
       >
         {(control) => (
@@ -97,6 +105,8 @@ export function ProfileForm({ account, first }: { account: Account; first: boole
           <label className="check">
             <input
               type="checkbox"
+              id="profile-adult"
+              required
               checked={adult}
               aria-invalid={checked && adultMissing ? true : undefined}
               aria-describedby={checked && adultMissing ? 'adult-error' : undefined}

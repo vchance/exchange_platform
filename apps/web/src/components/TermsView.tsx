@@ -20,6 +20,11 @@ interface Props {
   statuses?: ReadonlyMap<string, Status>
   /** Shown under a contribution: its status and what can be done about it. */
   footer?: (contribution: Contribution) => ReactNode
+  /**
+   * The level of its headings: 3 under a section's own heading, 2 where the
+   * terms are the main thing on the page and nothing heads them.
+   */
+  level?: 2 | 3
 }
 
 /**
@@ -28,7 +33,8 @@ interface Props {
  * read, so a proposal looks the same before signing as the agreement does
  * after.
  */
-export function TermsView({ terms, currency, timezone, you, statuses, footer }: Props) {
+export function TermsView({ terms, currency, timezone, you, statuses, footer, level = 3 }: Props) {
+  const H = level === 2 ? 'h2' : 'h3'
   const { wording, fmt, day, money } = useI18n()
   const w = wording.terms
   const today = timezone ? todayIn(timezone) : null
@@ -46,7 +52,7 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
     <div className="terms">
       <p className="hint">{w.ownWords}</p>
 
-      <h3>{w.partiesHeading}</h3>
+      <H>{w.partiesHeading}</H>
       <ul className="plain">
         {(['A', 'B'] as const).map((slot) => (
           <li key={slot}>
@@ -59,7 +65,7 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
 
       {terms.terms.trim() !== '' && (
         <>
-          <h3>{w.termsHeading}</h3>
+          <H>{w.termsHeading}</H>
           <Written>{terms.terms}</Written>
         </>
       )}
@@ -68,7 +74,7 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
         const provided = terms.contributions.filter((contribution) => contribution.from === slot)
         return (
           <section key={slot}>
-            <h3>{slot === you ? w.youProvide : fmt(w.otherProvides, { name: nameOf(slot) })}</h3>
+            <H>{slot === you ? w.youProvide : fmt(w.otherProvides, { name: nameOf(slot) })}</H>
             {provided.length === 0 && <p>{w.nothing}</p>}
             <ul className="plain contributions" hidden={provided.length === 0}>
               {provided.map((contribution) => {

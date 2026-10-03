@@ -1,7 +1,6 @@
 import type { ErrorCode } from '@exchange/api-client';
-import { useEffect, useRef, type ReactNode, type Ref } from 'react';
+import { createContext, useContext, useEffect, useRef, type ReactNode, type Ref } from 'react';
 import {
-  AccessibilityInfo,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -19,28 +18,26 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { announce, focusOn, notePressed } from '../lib/accessibility';
 import { useI18n } from '../lib/context';
 import { space, TOUCH_TARGET, type, useColors } from '../lib/theme';
 
 /*
  * The app's few building blocks: React Native's own components with the
  * system font and the platform's controls, and no UI kit. Each carries its
- * accessibility role and label, and nothing interactive is smaller than a
- * comfortable touch target.
+ * accessibility role, label and state, and nothing interactive is smaller
+ * than a comfortable touch target. Text follows the size the person has
+ * chosen for their device, with no upper limit, and every row wraps.
+ *
+ * The product's own words are marked with the language they are in, so a
+ * screen reader reads them with the right voice when the app's language is
+ * not the device's (iOS; Android reads with the system's). What people wrote
+ * is not marked: its language is whatever they wrote it in.
  *
  * Nothing is positioned on the assumption that text runs left to right
  * (DESIGN.md §4.2): spacing and borders use `start` and `end`, and rows
  * follow the layout direction.
  */
-
-/** Says something to a screen reader without moving its focus. */
-function announce(text: string) {
-  try {
-    AccessibilityInfo.announceForAccessibility(text);
-  } catch {
-    // Not every platform can; what was to be announced is on screen regardless.
-  }
-}
 
 interface ScreenProps {
   children: ReactNode;
@@ -90,10 +87,12 @@ export function Screen({ children, onRefresh, refreshing = false, scroll }: Scre
 /** A heading, announced as one. Level 1 names the screen. */
 export function Heading({ children, level = 1 }: { children: string; level?: 1 | 2 | 3 }) {
   const colors = useColors();
+  const { language } = useI18n();
   const size = level === 1 ? type.title : level === 2 ? type.heading : type.subheading;
   return (
     <Text
       accessibilityRole="header"
+      accessibilityLanguage={language}
       aria-level={level}
       style={[size, styles.heading, { color: colors.text }]}>
       {children}
@@ -104,19 +103,36 @@ export function Heading({ children, level = 1 }: { children: string; level?: 1 |
 /** A paragraph of the product's own words. */
 export function P({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
   const colors = useColors();
-  return <Text style={[type.body, { color: colors.text }, style]}>{children}</Text>;
+  const { language } = useI18n();
+  return (
+    <Text accessibilityLanguage={language} style={[type.body, { color: colors.text }, style]}>
+      {children}
+    </Text>
+  );
 }
 
 /** Secondary text: a hint under a label, a reference, a date. */
 export function Hint({ children }: { children: ReactNode }) {
   const colors = useColors();
-  return <Text style={[type.hint, { color: colors.muted }]}>{children}</Text>;
+  const { language } = useI18n();
+  return (
+    <Text accessibilityLanguage={language} style={[type.hint, { color: colors.muted }]}>
+      {children}
+    </Text>
+  );
 }
 
 /** A small label over something, such as "Done when". */
 export function Label({ children }: { children: string }) {
   const colors = useColors();
-  return <Text style={[type.body, styles.label, { color: colors.text }]}>{children}</Text>;
+  const { language } = useI18n();
+  return (
+    <Text
+      accessibilityLanguage={language}
+      style={[type.body, styles.label, { color: colors.text }]}>
+      {children}
+    </Text>
+  );
 }
 
 interface ButtonProps {
@@ -127,6 +143,8 @@ interface ButtonProps {
   /** For a button that opens a panel under it: whether the panel is open. */
   expanded?: boolean;
   accessibilityLabel?: string;
+  /** Said after the label, when the label alone does not say what pressing does. */
+  hint?: string;
   testID?: string;
 }
 
@@ -137,22 +155,32 @@ export function Button({
   disabled = false,
   expanded,
   accessibilityLabel,
+  hint,
   testID,
 }: ButtonProps) {
   const colors = useColors();
+  const { language } = useI18n();
+  const control = useRef<View>(null);
   const primary = variant === 'primary';
   const link = variant === 'link';
   return (
     <Pressable
+      ref={control}
       testID={testID}
       accessibilityRole={link ? 'link' : 'button'}
       accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityHint={hint}
+      accessibilityLanguage={language}
       // Said both ways: the first is what the platforms read, the second what a browser does.
       accessibilityState={{ disabled, expanded }}
       aria-disabled={disabled || undefined}
       aria-expanded={expanded}
       disabled={disabled}
-      onPress={onPress}
+      onPress={() => {
+        // Kept so that a panel this opens can give the focus back to it.
+        notePressed(control.current);
+        onPress();
+      }}
       style={({ pressed }) => [
         styles.button,
         link
@@ -192,13 +220,14 @@ interface NoteProps {
 function Note({ children, tone = 'info', spoken }: NoteProps) {
   const colors = useColors();
   const error = tone === 'error';
+  // Said by announcing it, on both platforms. It is not also a live region:
+  // Android would then say it twice, and say the quiet ones too.
   useEffect(() => {
     if (spoken) announce(spoken);
   }, [spoken]);
   return (
     <View
       accessibilityRole={error ? 'alert' : undefined}
-      accessibilityLiveRegion={error ? 'assertive' : 'polite'}
       style={[
         styles.note,
         {
@@ -249,6 +278,31 @@ export function Notice({
   );
 }
 
+/**
+ * Whether a field's error is announced when it appears. A form that sums up
+ * its problems in one announcement turns this off, so the summary is not
+ * talked over by each field in turn; each error is still read with its field.
+ */
+export const FieldErrorsAnnounced = createContext(true);
+
+/** A field's error, in the danger colour and in words, said when it appears. */
+function FieldError({ children }: { children: string }) {
+  const colors = useColors();
+  const { language } = useI18n();
+  const announced = useContext(FieldErrorsAnnounced);
+  useEffect(() => {
+    if (announced) announce(children);
+  }, [announced, children]);
+  return (
+    <Text
+      accessibilityRole="alert"
+      accessibilityLanguage={language}
+      style={[type.hint, styles.fieldError, { color: colors.danger }]}>
+      {children}
+    </Text>
+  );
+}
+
 interface FieldProps {
   label: string;
   hint?: string;
@@ -264,21 +318,19 @@ interface FieldProps {
 /** A label, its hint and its error around a control. */
 export function Field({ label, hint, error, labelled = false, children }: FieldProps) {
   const colors = useColors();
+  const { language } = useI18n();
   return (
     <View style={styles.field}>
       <View aria-hidden={labelled || undefined}>
-        <Text style={[type.body, styles.label, { color: colors.text }]}>{label}</Text>
+        <Text
+          accessibilityLanguage={language}
+          style={[type.body, styles.label, { color: colors.text }]}>
+          {label}
+        </Text>
         {hint ? <Hint>{hint}</Hint> : null}
       </View>
       {children}
-      {error ? (
-        <Text
-          accessibilityRole="alert"
-          accessibilityLiveRegion="polite"
-          style={[type.hint, styles.fieldError, { color: colors.danger }]}>
-          {error}
-        </Text>
-      ) : null}
+      {error ? <FieldError>{error}</FieldError> : null}
     </View>
   );
 }
@@ -288,19 +340,40 @@ interface TextFieldProps extends Omit<TextInputProps, 'style' | 'editable'> {
   hint?: string;
   error?: string | null;
   disabled?: boolean;
+  /**
+   * Has to be filled in. Neither platform has a "required" state for a text
+   * field, so a screen reader is told in the hint.
+   */
+  required?: boolean;
   input?: Ref<TextInput>;
 }
 
 /** A labelled text input. Text is laid out in whichever direction its own script runs. */
-export function TextField({ label, hint, error, disabled, input, ...rest }: TextFieldProps) {
+export function TextField({
+  label,
+  hint,
+  error,
+  disabled,
+  required,
+  input,
+  ...rest
+}: TextFieldProps) {
   const colors = useColors();
+  const { wording, language } = useI18n();
   return (
     <Field label={label} hint={hint} error={error} labelled>
       <TextInput
         ref={input}
         accessibilityLabel={label}
-        accessibilityHint={[hint, error].filter(Boolean).join(' ') || undefined}
+        accessibilityLanguage={language}
+        // The error first: it is what the person needs to hear on coming back.
+        accessibilityHint={
+          [error, required ? wording.a11y.required : null, hint].filter(Boolean).join(' ') ||
+          undefined
+        }
+        accessibilityState={{ disabled: !!disabled }}
         aria-invalid={error ? true : undefined}
+        aria-required={required || undefined}
         editable={!disabled}
         placeholderTextColor={colors.muted}
         {...rest}
@@ -341,6 +414,7 @@ export function Choice<T extends string>({
   disabled = false,
 }: ChoiceProps<T>) {
   const colors = useColors();
+  const { language } = useI18n();
   return (
     <Field label={label} hint={hint} error={error}>
       <View accessibilityRole="radiogroup" accessibilityLabel={label} style={styles.choice}>
@@ -351,6 +425,7 @@ export function Choice<T extends string>({
               key={option.value}
               accessibilityRole="radio"
               accessibilityLabel={option.label}
+              accessibilityLanguage={language}
               accessibilityState={{ checked: selected, disabled }}
               aria-checked={selected}
               aria-disabled={disabled || undefined}
@@ -378,20 +453,34 @@ interface CheckProps {
   value: boolean;
   onChange(value: boolean): void;
   error?: string | null;
+  /** Said after the label, where the label alone is not enough. */
+  hint?: string;
   disabled?: boolean;
   testID?: string;
 }
 
 /** A yes-or-no answer, as the platform's own switch. It is off until the person turns it on. */
-export function Check({ label, value, onChange, error, disabled, testID }: CheckProps) {
+export function Check({
+  label,
+  value,
+  onChange,
+  error,
+  hint,
+  disabled,
+  testID,
+}: CheckProps) {
   const colors = useColors();
+  const { language } = useI18n();
   return (
     <View style={styles.field}>
       <View style={styles.check}>
         <Switch
           testID={testID}
+          accessibilityRole="switch"
           accessibilityLabel={label}
-          accessibilityHint={error ?? undefined}
+          accessibilityLanguage={language}
+          accessibilityHint={[error, hint].filter(Boolean).join(' ') || undefined}
+          accessibilityState={{ checked: value, disabled: !!disabled }}
           value={value}
           onValueChange={onChange}
           disabled={disabled}
@@ -406,14 +495,7 @@ export function Check({ label, value, onChange, error, disabled, testID }: Check
           {label}
         </Text>
       </View>
-      {error ? (
-        <Text
-          accessibilityRole="alert"
-          accessibilityLiveRegion="polite"
-          style={[type.hint, styles.fieldError, { color: colors.danger }]}>
-          {error}
-        </Text>
-      ) : null}
+      {error ? <FieldError>{error}</FieldError> : null}
     </View>
   );
 }
@@ -458,15 +540,11 @@ export function Tag({ children, alert }: { children: string; alert?: boolean }) 
  */
 export function Panel({ title, children }: { title: string; children: ReactNode }) {
   const colors = useColors();
+  const { language } = useI18n();
   const heading = useRef<Text>(null);
 
   useEffect(() => {
-    if (Platform.OS === 'web' || !heading.current) return;
-    try {
-      AccessibilityInfo.sendAccessibilityEvent(heading.current, 'focus');
-    } catch {
-      // The panel is still there to be found.
-    }
+    focusOn(heading.current as unknown as View | null);
   }, []);
 
   return (
@@ -476,6 +554,7 @@ export function Panel({ title, children }: { title: string; children: ReactNode 
       <Text
         ref={heading}
         accessibilityRole="header"
+        accessibilityLanguage={language}
         style={[type.subheading, { color: colors.text }]}>
         {title}
       </Text>

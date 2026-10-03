@@ -2,6 +2,7 @@ import { deletedNotice, useDeletedNotice } from '@exchange/shared'
 import { useEffect } from 'react'
 
 import { useI18n, useSession } from '../app/context'
+import { useAnnouncement } from '../lib/announce'
 
 /**
  * Says, once, that the account was deleted. The page that did it is gone by
@@ -13,6 +14,7 @@ export function AccountDeleted() {
   const { account } = useSession()
   const shown = useDeletedNotice()
   const signedIn = account !== null
+  useAnnouncement(shown && !signedIn ? wording.deletion.deleted : null)
 
   useEffect(() => {
     if (signedIn) deletedNotice.dismiss()
@@ -20,7 +22,7 @@ export function AccountDeleted() {
 
   if (!shown || signedIn) return null
   return (
-    <p className="notice" role="status">
+    <p className="notice">
       {wording.deletion.deleted}{' '}
       <button type="button" onClick={deletedNotice.dismiss}>
         {wording.deletion.dismiss}

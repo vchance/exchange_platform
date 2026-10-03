@@ -21,7 +21,9 @@ import { OtherPartyLeft } from '../components/OtherPartyLeft'
 import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
 import { Failure, Notice, PageHeading, Written } from '../components/ui'
-import { useActions, type Actions } from '../lib/actions'
+import { restoreFocus, useActions, type Actions } from '../lib/actions'
+import { useAnnouncement } from '../lib/announce'
+import { focusLost } from '../lib/focus'
 import { api, failureCode, type RevisionView } from '../lib/api'
 import { ClaimantWaiting, ConfirmClaimant } from './Claimant'
 import { Ending } from './Ending'
@@ -112,6 +114,18 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
     if (refused) refusal.current?.scrollIntoView({ block: 'center' })
   }, [refused])
 
+  // After an action has taken effect its panel is gone, and often the button
+  // that opened it too. The keyboard goes back to that button if it is still
+  // there, and otherwise to the notice that says the exchange changed.
+  const updated = useRef<HTMLParagraphElement>(null)
+  const done = actions.done
+  useEffect(() => {
+    if (!done || !focusLost()) return
+    if (!restoreFocus()) updated.current?.focus()
+  }, [done])
+  useAnnouncement(newer ? w.newer : null)
+  useAnnouncement((actions.done || refreshed) && !newer ? w.updated : null)
+
   const statuses = statusesOf(exchange)
   const since = new Map(exchange.contributions.map((item) => [item.id, item.since ?? null]))
   const remaining = remainingRequired(exchange)
@@ -134,9 +148,13 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       <div ref={refusal}>
         <Failure code={refused} />
       </div>
-      {(actions.done || refreshed) && !newer && <Notice>{w.updated}</Notice>}
+      {(actions.done || refreshed) && !newer && (
+        <p className="notice" tabIndex={-1} ref={updated}>
+          {w.updated}
+        </p>
+      )}
       {newer && (
-        <div className="notice" role="status">
+        <div className="notice">
           <p>{w.newer}</p>
           <button
             type="button"

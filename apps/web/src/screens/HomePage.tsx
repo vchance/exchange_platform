@@ -6,7 +6,7 @@ import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
-import { Failure, PageHeading, Written } from '../components/ui'
+import { ErrorNote, Failure, PageHeading, Written } from '../components/ui'
 import { api, failureCode } from '../lib/api'
 
 /**
@@ -69,11 +69,7 @@ export default function HomePage() {
         </button>
       </div>
       <Failure code={failure} />
-      {tooMany && (
-        <p className="notice notice-error" role="alert">
-          {w.tooManyToday}
-        </p>
-      )}
+      {tooMany && <ErrorNote>{w.tooManyToday}</ErrorNote>}
 
       {!exchanges && !failure && <p>{wording.common.loading}</p>}
       {exchanges?.length === 0 && <p>{w.empty}</p>}

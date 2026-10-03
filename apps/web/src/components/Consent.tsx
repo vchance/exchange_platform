@@ -12,6 +12,8 @@ interface Props {
   onSign(): void
   onCancel(): void
   cancelLabel?: string
+  /** Its heading's level: 3 inside a panel under a section, 2 where it follows the page's terms. */
+  level?: 2 | 3
 }
 
 /**
@@ -23,7 +25,16 @@ interface Props {
  * The wording is a placeholder until counsel approves the real text, and says
  * so on the screen.
  */
-export function Consent({ signLabel, busy, failure, onSign, onCancel, cancelLabel }: Props) {
+export function Consent({
+  signLabel,
+  busy,
+  failure,
+  onSign,
+  onCancel,
+  cancelLabel,
+  level = 3,
+}: Props) {
+  const H = level === 2 ? 'h2' : 'h3'
   const { wording } = useI18n()
   const w = wording.consent
   const [agreed, setAgreed] = useState(false)
@@ -31,7 +42,7 @@ export function Consent({ signLabel, busy, failure, onSign, onCancel, cancelLabe
 
   return (
     <section className="consent" aria-labelledby={`${id}-heading`}>
-      <h3 id={`${id}-heading`}>{w.heading}</h3>
+      <H id={`${id}-heading`}>{w.heading}</H>
       <p className="notice notice-warning">{w.pendingReview}</p>
       <p>{w.binding}</p>
       <p>{w.electronic}</p>
@@ -39,14 +50,26 @@ export function Consent({ signLabel, busy, failure, onSign, onCancel, cancelLabe
       <label className="check">
         <input
           type="checkbox"
+          required
           checked={agreed}
           onChange={(event) => setAgreed(event.target.checked)}
         />
         <span>{w.agree}</span>
       </label>
       <Failure code={failure} />
+      <span hidden id={`${id}-why`}>
+        {wording.a11y.signNeedsAgreement}
+      </span>
       <div className="actions">
-        <button type="button" className="primary" disabled={!agreed || busy} onClick={onSign}>
+        <button
+          type="button"
+          className="primary"
+          disabled={!agreed || busy}
+          // A disabled button is still read in a screen reader's reading
+          // mode; this says why it cannot be pressed yet.
+          aria-describedby={agreed ? undefined : `${id}-why`}
+          onClick={onSign}
+        >
           {signLabel}
         </button>
         <button type="button" disabled={busy} onClick={onCancel}>

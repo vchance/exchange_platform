@@ -57,6 +57,7 @@ export function ReportForm({ intro, busy, failure, onSend, onCancel }: Props) {
       <TextField
         label={reportNeedsDetails(reason) ? w.detailsRequiredLabel : w.detailsLabel}
         hint={w.detailsHint}
+        required={reportNeedsDetails(reason)}
         error={detailsMissing ? w.detailsRequired : null}
         multiline
         maxLength={REPORT_DETAILS_MAX_CHARS}
