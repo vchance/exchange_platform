@@ -26,6 +26,7 @@ pub mod account;
 pub mod auth;
 pub mod client_address;
 pub mod deletion;
+pub mod devices;
 pub mod exchanges;
 pub mod extract;
 pub mod health;
@@ -53,6 +54,9 @@ pub struct Settings {
     /// Which apps may open the web origin's invitation links
     /// (`web::AppLinks`). None unless configured.
     pub app_links: AppLinks,
+    /// Whether push notifications are sent (`PUSH_DELIVERY`), so that the
+    /// apps offer them only when they will arrive.
+    pub push_notifications: bool,
 }
 
 #[derive(Clone)]
@@ -216,6 +220,8 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
         deletion::deletion_preview,
         deletion::request_deletion_code,
         deletion::delete_account,
+        devices::register_device,
+        devices::remove_device,
         exchanges::create,
         exchanges::list,
         exchanges::get,

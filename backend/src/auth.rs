@@ -73,6 +73,13 @@ pub struct AuthRules {
     pub code_requests_per_address_per_hour: i64,
     /// Deletion codes one account may ask for per hour. A placeholder.
     pub deletion_codes_per_hour: i64,
+    /// Codes the whole service may send by text message per hour, whoever
+    /// asks: each costs money, and the limits above are per requester and
+    /// per number, which many requesters and many numbers get round. Past
+    /// it, a code for a phone number is refused with `TOO_MANY_REQUESTS`
+    /// until the hour turns. A placeholder; a deployment may set it
+    /// (`SMS_MAX_PER_HOUR`).
+    pub sms_codes_per_hour: i64,
     /// How long a session lasts. A placeholder.
     pub session_ttl: Duration,
 }
@@ -88,6 +95,7 @@ impl Default for AuthRules {
             failed_deletion_guesses_per_day: 20,
             code_requests_per_address_per_hour: 10,
             deletion_codes_per_hour: 5,
+            sms_codes_per_hour: 50,
             session_ttl: Duration::days(30),
         }
     }
@@ -162,17 +170,31 @@ pub struct CodeMessage<'a> {
 /// Delivers a one-time code by email or SMS.
 pub trait CodeSender: Send + Sync {
     fn send<'a>(&'a self, message: CodeMessage<'a>) -> SendFuture<'a>;
+
+    /// Whether a code to `to` costs a message's price, as a text message
+    /// does: such codes are also counted against the service's hourly cap
+    /// ([`AuthRules::sms_codes_per_hour`]).
+    fn charged_per_message(&self, _to: &Identifier) -> bool {
+        false
+    }
 }
 
 /// Development delivery: writes the code to the service log. Never configured
 /// in production, where anyone who can read logs could sign in as anyone.
+/// A phone number is written masked, as everywhere else; the code, and an
+/// email address, in full, since reading them there is how a developer signs
+/// in (the end-to-end tests find codes by address).
 pub struct LogSender;
 
 impl CodeSender for LogSender {
     fn send<'a>(&'a self, message: CodeMessage<'a>) -> SendFuture<'a> {
         Box::pin(async move {
+            let to = match message.to {
+                Identifier::Email(email) => email.clone(),
+                phone @ Identifier::Phone(_) => phone.masked(),
+            };
             tracing::info!(
-                to = message.to.as_str(),
+                to,
                 code = message.code,
                 purpose = message.purpose.as_str(),
                 language = message.language,
@@ -263,6 +285,15 @@ pub fn token_hash(token: &str) -> [u8; 32] {
 
 // ---- Limits -----------------------------------------------------------------
 
+/// The `sign_in_limit` scopes that count text messages for the whole
+/// service, per hour. The metrics read them back (`crate::metrics`).
+pub const SMS_SENT: &str = "sms-sent";
+pub const SMS_REFUSED: &str = "sms-refused";
+pub const SMS_FAILED: &str = "sms-failed";
+
+/// What every SMS count is counted under: one subject, the whole service.
+const EVERYONE: &str = "the whole service";
+
 /// What `sign_in_limit` counts. Each is counted in fixed windows: the hour,
 /// or the UTC day.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -271,6 +302,12 @@ enum Counted {
     FailedGuessesByIdentifier,
     CodeRequestsByAccount,
     FailedGuessesByAccount,
+    /// Codes handed to the SMS provider, by the whole service.
+    SmsSent,
+    /// Codes not sent by SMS because the hourly cap was reached.
+    SmsRefused,
+    /// Codes the SMS provider did not take.
+    SmsFailed,
 }
 
 impl Counted {
@@ -280,6 +317,9 @@ impl Counted {
             Counted::FailedGuessesByIdentifier => "failed-guesses-by-identifier",
             Counted::CodeRequestsByAccount => "code-requests-by-account",
             Counted::FailedGuessesByAccount => "failed-guesses-by-account",
+            Counted::SmsSent => SMS_SENT,
+            Counted::SmsRefused => SMS_REFUSED,
+            Counted::SmsFailed => SMS_FAILED,
         }
     }
 
@@ -401,10 +441,12 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
 ///
 /// Refused with `TOO_MANY_REQUESTS` when the requester's address has asked
 /// for too many sign-in codes this hour, when the identifier has been sent
-/// too many, or, for deletion, when the account has asked for too many; and
-/// with `TOO_MANY_GUESSES` while the identifier has used up its wrong
-/// sign-in guesses for the day, or, for deletion, the account its wrong
-/// deletion guesses, since no code sent then could work.
+/// too many, or, for deletion, when the account has asked for too many, or,
+/// for a code that would go by text message, when the service has sent its
+/// hourly cap of them ([`AuthRules::sms_codes_per_hour`]); and with
+/// `TOO_MANY_GUESSES` while the identifier has used up its wrong sign-in
+/// guesses for the day, or, for deletion, the account its wrong deletion
+/// guesses, since no code sent then could work.
 pub async fn request_code(
     db: &PgPool,
     secret: &[u8],
@@ -481,6 +523,28 @@ pub async fn request_code(
         }
     }
 
+    // A text message costs money whoever asks for it, so the service as a
+    // whole sends only so many an hour. Last of the limits, so that only a
+    // code that would otherwise go is counted against it. The count's row
+    // stays locked until the code is stored, which makes the cap exact
+    // across every copy of the API.
+    let charged = sender.charged_per_message(identifier);
+    if charged {
+        let sent = Counter::new(secret, Counted::SmsSent, EVERYONE);
+        if sent.hold(&mut tx).await? >= rules.sms_codes_per_hour {
+            Counter::new(secret, Counted::SmsRefused, EVERYONE)
+                .add(&mut tx, 1)
+                .await?;
+            tx.commit().await?;
+            tracing::warn!(
+                cap = rules.sms_codes_per_hour,
+                "a code was not sent by SMS: the service's hourly cap is reached"
+            );
+            return Err(ErrorCode::TooManyRequests.into());
+        }
+        sent.add(&mut tx, 1).await?;
+    }
+
     let code = generate_code();
     // The clock, not the transaction's start: requests for one identifier
     // are ordered by the lock above, and so are their codes.
@@ -512,18 +576,28 @@ pub async fn request_code(
     .await?;
     tx.commit().await?;
 
-    sender
+    let sent = sender
         .send(CodeMessage {
             to: identifier,
             code: &code,
             purpose,
             language,
         })
-        .await
-        .map_err(|error| {
-            tracing::error!(%error, "one-time code could not be delivered");
-            ApiError::from(ErrorCode::ServiceUnavailable)
-        })
+        .await;
+    if let Err(error) = sent {
+        // The error names no address or number and quotes no provider's
+        // text (each sender sees to it).
+        tracing::error!(%error, "one-time code could not be delivered");
+        // Counted for the metrics; a failure to count is not the person's
+        // problem.
+        if charged && let Ok(mut conn) = db.acquire().await {
+            let _ = Counter::new(secret, Counted::SmsFailed, EVERYONE)
+                .add(&mut conn, 1)
+                .await;
+        }
+        return Err(ErrorCode::ServiceUnavailable.into());
+    }
+    Ok(())
 }
 
 /// Checks a code against every live code for the identifier and purpose,

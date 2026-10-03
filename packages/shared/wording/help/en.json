@@ -110,7 +110,11 @@
         { "p": "While a request to close is open, the person who made it can take it back, either of you can add a statement to the record, and you can still settle what is outstanding or end by agreement instead. If every required item is confirmed or waived in that time, the agreement is complete." },
         { "p": "You can also propose a change to the agreement, which takes effect only once you have both signed it." },
         { "h": "If nothing happens for a long time" },
-        { "p": "If neither of you does anything on an agreement for {inactivityPromptDays} days, counted from the last due date if that is later, we ask you both whether it is still under way. If nothing happens in the {inactivityCloseDays} days after that, it closes as unresolved, and each item keeps the status it has. Anything either of you does restarts the count." }
+        { "p": "If neither of you does anything on an agreement for {inactivityPromptDays} days, counted from the last due date if that is later, we ask you both whether it is still under way. If nothing happens in the {inactivityCloseDays} days after that, it closes as unresolved, and each item keeps the status it has. Anything either of you does restarts the count." },
+        { "h": "How we tell you" },
+        { "p": "When the other person does something in a yup, or an item is due soon or overdue, we send you an email. Emails never include the terms; sign in to see them." },
+        { "p": "If the app on your phone offers notifications, you can turn them on from your account page. They say only that a yup has an update, never the terms, names or amounts, and tapping one opens the yup. You still get the emails." },
+        { "p": "Text messages are used only for sign-in codes. If your account has only a phone number, we can’t email you, so the app’s notifications are the only way we tell you about your yups. Without them, check your yups in the app or on the web." }
       ]
     },
     "changing": {

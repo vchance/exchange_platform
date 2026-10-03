@@ -1512,6 +1512,92 @@
         }
       }
     },
+    "/v1/me/devices": {
+      "put": {
+        "tags": [
+          "devices"
+        ],
+        "summary": "Registers this device for push notifications, under the session making\nthe request, or updates it if it is registered already. A token is one\ndevice: registered by another account before, it now belongs to this one.",
+        "operationId": "register_device",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDevice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The device, registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRegistered"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not an Expo push token, a platform, a version or a language",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/devices/{id}": {
+      "delete": {
+        "tags": [
+          "devices"
+        ],
+        "summary": "Stops sending push notifications to a device of the caller's. Answers\nthe same whether or not there was such a device, so a request repeated,\nor one about a device already removed, is fine.",
+        "operationId": "remove_device",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Device ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Not registered any more"
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me/identifiers": {
       "post": {
         "tags": [
@@ -2265,6 +2351,26 @@
           "TOKEN"
         ]
       },
+      "DevicePlatform": {
+        "type": "string",
+        "description": "The platform a device runs.",
+        "enum": [
+          "ios",
+          "android"
+        ]
+      },
+      "DeviceRegistered": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The device's ID, for removing it again."
+          }
+        }
+      },
       "DueDto": {
         "oneOf": [
           {
@@ -2695,12 +2801,17 @@
         "required": [
           "service",
           "version",
-          "minimum_client_versions"
+          "minimum_client_versions",
+          "push_notifications"
         ],
         "properties": {
           "minimum_client_versions": {
             "$ref": "#/components/schemas/MinimumClientVersions",
             "description": "The oldest build of each client that may still change anything. A\nclient below its minimum shows that it must be updated; its changes\nare refused with `CLIENT_TOO_OLD`. Absent for a client with no minimum."
+          },
+          "push_notifications": {
+            "type": "boolean",
+            "description": "Whether the service sends push notifications. An app offers them, and\nregisters its device (`PUT /v1/me/devices`), only when it does."
           },
           "service": {
             "type": "string"
@@ -3304,6 +3415,32 @@
               "$ref": "#/components/schemas/VoidSignature"
             },
             "description": "Signatures that do not count and never will, kept apart so that\nnobody reading `signatures` takes one for the other party's."
+          }
+        }
+      },
+      "RegisterDevice": {
+        "type": "object",
+        "required": [
+          "token",
+          "platform",
+          "app_version",
+          "language"
+        ],
+        "properties": {
+          "app_version": {
+            "type": "string",
+            "description": "The app's version, such as `0.1.0`."
+          },
+          "language": {
+            "type": "string",
+            "description": "The language the app is showing, as a language tag. Notifications are\nwritten in the account's language, like every email."
+          },
+          "platform": {
+            "$ref": "#/components/schemas/DevicePlatform"
+          },
+          "token": {
+            "type": "string",
+            "description": "The Expo push token the app was given, `ExponentPushToken[…]`."
           }
         }
       },

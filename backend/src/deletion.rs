@@ -14,9 +14,10 @@
 //! no agreement. It keeps when it was created and when its holder confirmed
 //! being an adult: the second is what the signatures it gave rest on.
 //!
-//! **Its working data** is removed: every session, on every device; codes
-//! sent to its identifiers; unsent working copies of terms; idempotency keys;
-//! queued notifications to it; the blocks it made. Invitation links it issued
+//! **Its working data** is removed: every session, on every device; the
+//! devices registered for its push notifications; codes sent to its
+//! identifiers; unsent working copies of terms; idempotency keys; queued
+//! notifications to it; the blocks it made. Invitation links it issued
 //! that nobody took are revoked, and forget whom they were for. A block
 //! someone else made against it stays theirs to remove. Reports stay, both
 //! those it made and those about it: leaving must not erase a complaint.
@@ -312,6 +313,12 @@ async fn attempt(
     .execute(&mut *tx)
     .await?;
 
+    // Its devices first: nothing more is pushed to them. (Removing the
+    // sessions would take them too; this says so.)
+    sqlx::query("DELETE FROM device WHERE account_id = $1")
+        .bind(account)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("DELETE FROM account_session WHERE account_id = $1")
         .bind(account)
         .execute(&mut *tx)

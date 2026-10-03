@@ -463,6 +463,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Registers this device for push notifications, under the session making
+         *     the request, or updates it if it is registered already. A token is one
+         *     device: registered by another account before, it now belongs to this one.
+         */
+        put: operations["register_device"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stops sending push notifications to a device of the caller's. Answers
+         *     the same whether or not there was such a device, so a request repeated,
+         *     or one about a device already removed, is fine.
+         */
+        delete: operations["remove_device"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/identifiers": {
         parameters: {
             query?: never;
@@ -748,6 +790,15 @@ export interface components {
          * @enum {string}
          */
         Delivery: "COOKIE" | "TOKEN";
+        /**
+         * @description The platform a device runs.
+         * @enum {string}
+         */
+        DevicePlatform: "ios" | "android";
+        DeviceRegistered: {
+            /** @description The device's ID, for removing it again. */
+            id: string;
+        };
         /** @description When a contribution falls due. */
         DueDto: {
             date: string;
@@ -884,6 +935,11 @@ export interface components {
              *     are refused with `CLIENT_TOO_OLD`. Absent for a client with no minimum.
              */
             minimum_client_versions: components["schemas"]["MinimumClientVersions"];
+            /**
+             * @description Whether the service sends push notifications. An app offers them, and
+             *     registers its device (`PUT /v1/me/devices`), only when it does.
+             */
+            push_notifications: boolean;
             service: string;
             version: string;
         };
@@ -1110,6 +1166,18 @@ export interface components {
              *     nobody reading `signatures` takes one for the other party's.
              */
             void_signatures?: components["schemas"]["VoidSignature"][];
+        };
+        RegisterDevice: {
+            /** @description The app's version, such as `0.1.0`. */
+            app_version: string;
+            /**
+             * @description The language the app is showing, as a language tag. Notifications are
+             *     written in the account's language, like every email.
+             */
+            language: string;
+            platform: components["schemas"]["DevicePlatform"];
+            /** @description The Expo push token the app was given, `ExponentPushToken[…]`. */
+            token: string;
         };
         /**
          * @description Why an exchange is being reported. A fixed list, so that a reviewer can
@@ -2579,6 +2647,78 @@ export interface operations {
             };
             /** @description Too many deletion codes requested by this account */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    register_device: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterDevice"];
+            };
+        };
+        responses: {
+            /** @description The device, registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceRegistered"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not an Expo push token, a platform, a version or a language */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_device: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Device ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not registered any more */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

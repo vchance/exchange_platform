@@ -165,6 +165,13 @@
       }
     }
   },
+  "push": {
+    "body": "Tu yup tiene novedades."
+  },
+  "sms": {
+    "signIn": "{code} es tu código de {productName} para entrar. No se lo des a nadie.",
+    "deleteAccount": "{code}: código para eliminar tu cuenta de {productName}. No lo compartas."
+  },
   "common": {
     "loading": "Cargando…",
     "cancel": "Cancelar",
@@ -546,6 +553,21 @@
     "invited": {
       "heading": "¿Te enviaron un yup?",
       "intro": "Puedes leer una propuesta antes de iniciar sesión. Abre el enlace que te enviaron o pégalo aquí."
+    },
+    "notifications": {
+      "heading": "Notificaciones",
+      "switch": "Notificaciones en este teléfono",
+      "switchHint": "Un aviso en este teléfono cuando pasa algo en uno de tus yups. Nunca muestra los términos, los nombres ni los importes.",
+      "blocked": "Las notificaciones de esta app están desactivadas en los ajustes de tu teléfono. Actívalas allí primero.",
+      "openSettings": "Abrir ajustes",
+      "failed": "No se pudieron cambiar las notificaciones. Inténtalo de nuevo.",
+      "askHeading": "Entérate cuando pase algo",
+      "askBody": "Activa las notificaciones para saber en este teléfono cuando la otra persona responda o algo esté por vencer. Nunca muestran los términos, los nombres ni los importes.",
+      "turnOn": "Activar notificaciones",
+      "notNow": "Ahora no",
+      "channel": "Novedades de tus yups",
+      "phoneOnly": "Los mensajes de texto solo llevan códigos para iniciar sesión, y tu cuenta no tiene correo electrónico, así que las notificaciones en este teléfono son la única forma de avisarte sobre tus yups.",
+      "phoneOnlyNoPush": "Los mensajes de texto solo llevan códigos para iniciar sesión, y tu cuenta no tiene correo electrónico, así que nada te avisa cuando cambia uno de tus yups. Revísalos aquí."
     }
   },
   "exchange": {

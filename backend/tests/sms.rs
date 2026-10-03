@@ -1,0 +1,453 @@
+//! One-time codes by text message: routed by identifier, written in one
+//! segment in the reader's language, sent to Twilio's Messages API in the
+//! shape it takes (against a stand-in in this process), capped per hour for
+//! the whole service, and never logged with a whole phone number.
+//!
+//! The cap counts every text message the database has seen this hour, so
+//! the tests here take turns, and each starts with the counts cleared.
+
+mod common;
+
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use axum::Router;
+use axum::body::Bytes;
+use axum::extract::State;
+use axum::http::{HeaderMap, Method, StatusCode, Uri};
+use common::App;
+use serde_json::{Value, json};
+use tokio::sync::MutexGuard;
+use tracing_subscriber::EnvFilter;
+use uuid::Uuid;
+use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, LogSender, Purpose, SendFuture};
+use yuppers_backend::domain::identity::Identifier;
+use yuppers_backend::metrics::{self, Text};
+use yuppers_backend::notifications::sms::{
+    CodeRouter, LogSmsSender, Sms, SmsSender, TwilioSmsSender, encoding,
+};
+use yuppers_backend::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
+use yuppers_backend::notifications::wording::Wording;
+use yuppers_backend::telemetry::{self, LogFormat};
+
+const DATABASE: &str = "yuppers_test_sms";
+
+static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// A number nobody else in these tests uses.
+fn number() -> String {
+    format!("+1999{:07}", Uuid::new_v4().as_u128() % 10_000_000)
+}
+
+/// Rules with the per-address limit out of the way (every test request
+/// comes from one address) and the given cap on text messages.
+fn rules(cap: i64) -> AuthRules {
+    AuthRules {
+        code_requests_per_address_per_hour: 1_000_000,
+        sms_codes_per_hour: cap,
+        ..AuthRules::default()
+    }
+}
+
+async fn start(cap: i64, sender: Arc<dyn CodeSender>) -> (App, MutexGuard<'static, ()>) {
+    let turn = TURN.lock().await;
+    (open(cap, sender).await, turn)
+}
+
+/// [`start`] for a test that already holds its turn.
+async fn open(cap: i64, sender: Arc<dyn CodeSender>) -> App {
+    let app = App::start_messaging(DATABASE, rules(cap), sender, false).await;
+    sqlx::query("DELETE FROM sign_in_limit WHERE scope LIKE 'sms-%'")
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    app
+}
+
+async fn ask(app: &App, identifier: &str, language: &str) -> common::Reply {
+    app.call(
+        None,
+        Method::POST,
+        "/v1/auth/codes",
+        Some(json!({ "identifier": identifier })),
+        &[("accept-language", language)],
+    )
+    .await
+}
+
+/// Keeps the text messages it is handed.
+#[derive(Default)]
+struct Phone(Mutex<Vec<(String, String)>>);
+
+impl SmsSender for Phone {
+    fn send<'a>(&'a self, sms: Sms<'a>) -> SendFuture<'a> {
+        Box::pin(async move {
+            self.0
+                .lock()
+                .unwrap()
+                .push((sms.to.to_owned(), sms.text.to_owned()));
+            Ok(())
+        })
+    }
+}
+
+/// Keeps the email codes it is handed.
+#[derive(Default)]
+struct Mailbox(Mutex<Vec<String>>);
+
+impl CodeSender for Mailbox {
+    fn send<'a>(&'a self, message: CodeMessage<'a>) -> SendFuture<'a> {
+        Box::pin(async move {
+            self.0.lock().unwrap().push(message.to.as_str().to_owned());
+            Ok(())
+        })
+    }
+}
+
+fn router(phone: &Arc<Phone>, mailbox: &Arc<Mailbox>) -> Arc<CodeRouter> {
+    Arc::new(CodeRouter::new(
+        mailbox.clone(),
+        phone.clone(),
+        Wording::embedded().unwrap(),
+    ))
+}
+
+/// The SMS counts for this hour, as the API's metrics show them.
+async fn counted(app: &App, cap: i64) -> String {
+    let mut text = Text::new();
+    metrics::render_sms(&mut text, &app.db, cap).await;
+    text.finish()
+}
+
+#[tokio::test]
+async fn a_phone_number_gets_its_code_by_sms_in_its_language_and_an_email_address_by_email() {
+    let (phone, mailbox) = (Arc::new(Phone::default()), Arc::new(Mailbox::default()));
+    let (app, _turn) = start(50, router(&phone, &mailbox)).await;
+    let (es, en) = (number(), number());
+
+    assert_eq!(
+        ask(&app, &es, "es-MX,es;q=0.9").await.status,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(ask(&app, &en, "en").await.status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        ask(&app, "ana@example.test", "en").await.status,
+        StatusCode::NO_CONTENT
+    );
+
+    let sent = phone.0.lock().unwrap().clone();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(sent[0].0, es);
+    assert_eq!(sent[1].0, en);
+    let (spanish, english) = (&sent[0].1, &sent[1].1);
+    let code = |text: &str| text[..6].to_owned();
+    assert_eq!(
+        *spanish,
+        format!(
+            "{} es tu código de Yuppers para entrar. No se lo des a nadie.",
+            code(spanish)
+        )
+    );
+    assert_eq!(
+        *english,
+        format!(
+            "{} is your Yuppers sign-in code. Do not share it with anyone.",
+            code(english)
+        )
+    );
+    for text in [spanish, english] {
+        assert!(encoding(text).fits_one_segment(), "{text}");
+    }
+    assert_eq!(*mailbox.0.lock().unwrap(), ["ana@example.test"]);
+    assert!(
+        counted(&app, 50)
+            .await
+            .contains("yuppers_sms_codes_this_hour{result=\"sent\"} 2")
+    );
+}
+
+#[tokio::test]
+async fn the_service_sends_no_more_than_its_hourly_cap_of_text_messages() {
+    let (phone, mailbox) = (Arc::new(Phone::default()), Arc::new(Mailbox::default()));
+    let (app, _turn) = start(2, router(&phone, &mailbox)).await;
+
+    for _ in 0..2 {
+        assert_eq!(
+            ask(&app, &number(), "en").await.status,
+            StatusCode::NO_CONTENT
+        );
+    }
+    // A third number, a fourth: the cap is the whole service's, not one
+    // number's or one requester's.
+    for _ in 0..2 {
+        ask(&app, &number(), "en")
+            .await
+            .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+    }
+    assert_eq!(phone.0.lock().unwrap().len(), 2);
+    // Email is not text messages, and not capped by them.
+    assert_eq!(
+        ask(&app, "ben@example.test", "en").await.status,
+        StatusCode::NO_CONTENT
+    );
+
+    let page = counted(&app, 2).await;
+    for line in [
+        "yuppers_sms_codes_hourly_cap 2",
+        "yuppers_sms_codes_this_hour{result=\"sent\"} 2",
+        "yuppers_sms_codes_this_hour{result=\"refused\"} 2",
+        "yuppers_sms_codes_this_hour{result=\"failed\"} 0",
+    ] {
+        assert!(page.contains(line), "{line} in\n{page}");
+    }
+}
+
+#[tokio::test]
+async fn with_sms_off_a_code_for_a_phone_number_is_refused_as_before_and_costs_nothing() {
+    // CODE_DELIVERY=smtp and SMS_DELIVERY=off: the SMTP sender alone. It
+    // refuses a phone number before it would connect anywhere.
+    let smtp = SmtpSender::new(
+        SmtpSettings {
+            host: "127.0.0.1".to_owned(),
+            port: 9,
+            tls: TlsMode::None,
+            credentials: None,
+            from: "no-reply@example.test".to_owned(),
+            timeout: Duration::from_secs(1),
+        },
+        Wording::embedded().unwrap(),
+    )
+    .unwrap();
+    let (app, _turn) = start(50, Arc::new(smtp)).await;
+    ask(&app, &number(), "en")
+        .await
+        .refused(StatusCode::SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE");
+    assert!(
+        counted(&app, 50)
+            .await
+            .contains("yuppers_sms_codes_this_hour{result=\"sent\"} 0")
+    );
+}
+
+// ---- Twilio, against a stand-in ---------------------------------------------
+
+/// One request the stand-in received.
+#[derive(Clone, Debug)]
+struct Received {
+    path: String,
+    headers: HeaderMap,
+    body: String,
+}
+
+#[derive(Clone)]
+struct Twilio {
+    received: Arc<Mutex<Vec<Received>>>,
+    answer: (StatusCode, Value),
+}
+
+impl Twilio {
+    async fn start(status: StatusCode, body: Value) -> (Self, SocketAddr) {
+        let twilio = Self {
+            received: Arc::default(),
+            answer: (status, body),
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = Router::new().fallback(answer).with_state(twilio.clone());
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        (twilio, addr)
+    }
+}
+
+async fn answer(
+    State(twilio): State<Twilio>,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> (StatusCode, String) {
+    twilio.received.lock().unwrap().push(Received {
+        path: uri.path().to_owned(),
+        headers,
+        body: String::from_utf8(body.to_vec()).unwrap(),
+    });
+    (twilio.answer.0, twilio.answer.1.to_string())
+}
+
+fn twilio(addr: SocketAddr, from: &str) -> TwilioSmsSender {
+    TwilioSmsSender::new(
+        &format!("http://{addr}"),
+        "AC0123456789abcdef".to_owned(),
+        Secret::new("auth-token-not-for-logs".to_owned()),
+        from.to_owned(),
+        Duration::from_secs(5),
+    )
+}
+
+#[tokio::test]
+async fn twilio_is_sent_the_message_in_the_shape_its_api_takes() {
+    let (stand_in, addr) = Twilio::start(
+        StatusCode::CREATED,
+        json!({ "sid": "SM0123", "status": "queued" }),
+    )
+    .await;
+    let sender = twilio(addr, "+15550000000");
+    let text = "123456 es tu código de Yuppers para entrar. No se lo des a nadie.";
+    sender
+        .send(Sms {
+            to: "+15551234567",
+            text,
+        })
+        .await
+        .unwrap();
+
+    let received = stand_in.received.lock().unwrap().clone();
+    assert_eq!(received.len(), 1);
+    let request = &received[0];
+    assert_eq!(
+        request.path,
+        "/2010-04-01/Accounts/AC0123456789abcdef/Messages.json"
+    );
+    // HTTP Basic, the account SID and the auth token.
+    assert_eq!(
+        request.headers["authorization"],
+        "Basic QUMwMTIzNDU2Nzg5YWJjZGVmOmF1dGgtdG9rZW4tbm90LWZvci1sb2dz"
+    );
+    assert_eq!(
+        request.headers["content-type"],
+        "application/x-www-form-urlencoded"
+    );
+    let form: Vec<(String, String)> = form_urlencoded::parse(request.body.as_bytes())
+        .into_owned()
+        .collect();
+    assert_eq!(
+        form,
+        [
+            ("To".to_owned(), "+15551234567".to_owned()),
+            ("From".to_owned(), "+15550000000".to_owned()),
+            ("Body".to_owned(), text.to_owned()),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_refusal_from_twilio_is_described_by_its_code_without_the_number() {
+    let (_stand_in, addr) = Twilio::start(
+        StatusCode::BAD_REQUEST,
+        json!({
+            "code": 21211,
+            "message": "The 'To' number +15551234567 is not a valid phone number.",
+            "status": 400,
+        }),
+    )
+    .await;
+    let error = twilio(addr, "MG0123")
+        .send(Sms {
+            to: "+15551234567",
+            text: "123456",
+        })
+        .await
+        .unwrap_err();
+    let error = format!("{error:#}");
+    assert_eq!(
+        error,
+        "the SMS provider refused the message (HTTP 400, error 21211)"
+    );
+    assert!(!error.contains("5551234567"));
+}
+
+// ---- Logs -------------------------------------------------------------------
+
+/// Everything logged, as bytes.
+#[derive(Clone, Default)]
+struct Log(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Log {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Log {
+    fn text(&self) -> String {
+        String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+    }
+}
+
+#[tokio::test]
+async fn no_log_holds_a_whole_phone_number_and_only_the_development_delivery_holds_the_code() {
+    let turn = TURN.lock().await;
+    let log = Log::default();
+    let writer = log.clone();
+    let subscriber =
+        telemetry::subscriber(LogFormat::Text, EnvFilter::new("trace"), false, move || {
+            writer.clone()
+        });
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let _turn = turn;
+
+    let number = "+15551234567";
+    let digits = "5551234567";
+
+    // The development deliveries: the code is there to be read, the number
+    // masked, for SMS and for the code sender as before.
+    LogSmsSender
+        .send(Sms {
+            to: number,
+            text: "111111 is your Yuppers sign-in code. Do not share it with anyone.",
+        })
+        .await
+        .unwrap();
+    let phone = Identifier::parse(number).unwrap();
+    CodeSender::send(
+        &LogSender,
+        CodeMessage {
+            to: &phone,
+            code: "222222",
+            purpose: Purpose::SignIn,
+            language: "en",
+        },
+    )
+    .await
+    .unwrap();
+    let development = log.text();
+    assert!(development.contains("111111") && development.contains("222222"));
+    assert!(development.contains("+1••••••••67"), "{development}");
+    assert!(!development.contains(digits), "{development}");
+
+    // A real provider refusing, through the API: neither the number nor the
+    // code is logged, nor the provider's message.
+    log.0.lock().unwrap().clear();
+    let (_stand_in, addr) = Twilio::start(
+        StatusCode::BAD_REQUEST,
+        json!({ "code": 21614, "message": format!("{number} is not a mobile number") }),
+    )
+    .await;
+    let mailbox = Arc::new(Mailbox::default());
+    let sender = Arc::new(CodeRouter::new(
+        mailbox,
+        Arc::new(twilio(addr, "+15550000000")),
+        Wording::embedded().unwrap(),
+    ));
+    let app = open(50, sender).await;
+    ask(&app, number, "en")
+        .await
+        .refused(StatusCode::SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE");
+    let refused = log.text();
+    assert!(refused.contains("error 21614"), "{refused}");
+    assert!(!refused.contains(digits), "{refused}");
+    assert!(!refused.contains("not a mobile number"), "{refused}");
+    assert!(!refused.contains("auth-token-not-for-logs"), "{refused}");
+    assert!(
+        counted(&app, 50)
+            .await
+            .contains("yuppers_sms_codes_this_hour{result=\"failed\"} 1")
+    );
+}

@@ -209,6 +209,12 @@ pub async fn delete_session(
     State(state): State<AppState>,
     session: Session,
 ) -> Result<Response, ApiError> {
+    // The device signed in with this session stops getting notifications
+    // for the account (`devices`).
+    sqlx::query("DELETE FROM device WHERE session_id = $1")
+        .bind(session.id)
+        .execute(&state.db)
+        .await?;
     sqlx::query("UPDATE account_session SET revoked_at = now() WHERE id = $1")
         .bind(session.id)
         .execute(&state.db)

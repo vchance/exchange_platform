@@ -24,6 +24,25 @@ struct File {
     #[serde(rename = "productName")]
     product_name: String,
     notifications: Notifications,
+    /// The push notification's text (DESIGN.md §12): generic, the same for
+    /// every notice, because a lock screen is read by whoever holds the
+    /// phone.
+    push: PushWording,
+    /// The text message that carries a one-time code, one per purpose.
+    sms: SmsWording,
+}
+
+#[derive(Deserialize)]
+struct PushWording {
+    body: String,
+}
+
+#[derive(Deserialize)]
+struct SmsWording {
+    #[serde(rename = "signIn")]
+    sign_in: String,
+    #[serde(rename = "deleteAccount")]
+    delete_account: String,
 }
 
 #[derive(Deserialize)]
@@ -245,6 +264,44 @@ impl Wording {
             body,
             html,
         }
+    }
+
+    /// The file for `language` where it has wording, and the default
+    /// language's otherwise.
+    fn file_for(&self, language: &str) -> &File {
+        languages::resolve_among(self.supported, language)
+            .and_then(|language| self.languages.get(language))
+            .or_else(|| self.languages.get(self.default))
+            .expect("the default language has wording; checked when loading")
+    }
+
+    /// The text of a push notification, in `language` where that language
+    /// has wording and in the default language otherwise. The same for
+    /// every notice and every exchange: it names no exchange, no party and
+    /// nothing agreed, since anyone holding the phone can read a lock screen
+    /// (DESIGN.md §12). Opening it shows the rest, after signing in.
+    pub fn push(&self, language: &str) -> String {
+        let file = self.file_for(language);
+        fill(
+            &file.push.body,
+            &[("productName", file.product_name.as_str())],
+        )
+    }
+
+    /// The text message that carries a one-time code, in `language` where
+    /// that language has wording and in the default language otherwise. It
+    /// names the product, says what the code is for and warns not to share
+    /// it, within one SMS segment (`super::sms`).
+    pub fn code_sms(&self, language: &str, purpose: Purpose, code: &str) -> String {
+        let file = self.file_for(language);
+        let template = match purpose {
+            Purpose::SignIn => &file.sms.sign_in,
+            Purpose::DeleteAccount => &file.sms.delete_account,
+        };
+        fill(
+            template,
+            &[("productName", file.product_name.as_str()), ("code", code)],
+        )
     }
 
     /// The email that carries a one-time code, in `language` where that
@@ -498,6 +555,8 @@ mod tests {
                 "email": { "layout": "{body} {link}", "messages": messages },
                 "oneTimeCode": { "signIn": code("sign-in"), "deleteAccount": code("delete") },
             },
+            "push": { "body": format!("{product} news") },
+            "sms": { "signIn": "{code} in", "deleteAccount": "{code} out" },
         })
         .to_string()
     }

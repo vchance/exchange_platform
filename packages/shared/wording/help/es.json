@@ -110,7 +110,11 @@
         { "p": "Mientras haya una solicitud de cierre abierta, quien la hizo puede retirarla, cualquiera de los dos puede agregar una declaración al registro, y todavía pueden resolver lo pendiente o terminar de común acuerdo. Si en ese tiempo cada elemento obligatorio queda confirmado o dispensado, el acuerdo se completa." },
         { "p": "También pueden proponer un cambio al acuerdo, que solo entra en vigor cuando ambos lo firman." },
         { "h": "Si no pasa nada durante mucho tiempo" },
-        { "p": "Si ninguno de los dos hace nada en un acuerdo durante {inactivityPromptDays} días, contados desde la última fecha de vencimiento si es posterior, les preguntamos a ambos si sigue en marcha. Si no pasa nada en los {inactivityCloseDays} días siguientes, se cierra sin resolver, y cada elemento conserva el estado que tenga. Cualquier cosa que haga cualquiera de los dos reinicia la cuenta." }
+        { "p": "Si ninguno de los dos hace nada en un acuerdo durante {inactivityPromptDays} días, contados desde la última fecha de vencimiento si es posterior, les preguntamos a ambos si sigue en marcha. Si no pasa nada en los {inactivityCloseDays} días siguientes, se cierra sin resolver, y cada elemento conserva el estado que tenga. Cualquier cosa que haga cualquiera de los dos reinicia la cuenta." },
+        { "h": "Cómo te avisamos" },
+        { "p": "Cuando la otra persona hace algo en un yup, o un elemento vence pronto o está atrasado, te enviamos un correo. Los correos nunca incluyen los términos; inicia sesión para verlos." },
+        { "p": "Si la app de tu teléfono ofrece notificaciones, puedes activarlas en la página de tu cuenta. Solo dicen que un yup tiene novedades, nunca los términos, los nombres ni los importes, y al tocar una se abre el yup. Los correos te siguen llegando." },
+        { "p": "Los mensajes de texto se usan solo para los códigos de inicio de sesión. Si tu cuenta tiene solo un número de teléfono, no podemos enviarte correos, así que las notificaciones de la app son la única forma de avisarte sobre tus yups. Sin ellas, revisa tus yups en la app o en la web." }
       ]
     },
     "changing": {

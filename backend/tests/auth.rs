@@ -119,6 +119,7 @@ impl App {
                 proxies: TrustedProxies::none(),
                 min_client_versions: Default::default(),
                 app_links: Default::default(),
+                push_notifications: false,
             }),
             code_sender: outbox.clone(),
             metrics: Default::default(),

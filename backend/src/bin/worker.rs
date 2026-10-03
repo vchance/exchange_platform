@@ -16,6 +16,7 @@ use yuppers_backend::exchanges::reminders::run_reminders;
 use yuppers_backend::exchanges::service::{purge_network_metadata, run_timers};
 use yuppers_backend::metrics::{self, Text, WorkerMetrics};
 use yuppers_backend::notifications::outbox::{self, Delivery, DeliveryRules};
+use yuppers_backend::notifications::push::{self, PushDelivery, ReceiptRules};
 use yuppers_backend::notifications::wording::Wording;
 use yuppers_backend::{db, shutdown, telemetry};
 
@@ -35,6 +36,15 @@ async fn main() -> anyhow::Result<()> {
         web_origin: config.web_origin,
         rules: DeliveryRules::default(),
     };
+    let push_delivery = PushDelivery {
+        sender: config.push_sender,
+        wording: Wording::embedded()?,
+        rules: DeliveryRules::default(),
+    };
+    let receipt_rules = ReceiptRules::default();
+    if push_delivery.sender.is_none() {
+        tracing::info!("push notifications are off (PUSH_DELIVERY)");
+    }
 
     // On a listener of its own, and only when asked for (docs/operations.md).
     let metrics = Arc::new(WorkerMetrics::default());
@@ -131,6 +141,58 @@ async fn main() -> anyhow::Result<()> {
                         }
                     }
                     Err(error) => tracing::error!(error = %Redacted(&error), "notification delivery failed"),
+                }
+                // The same notices by push, to those with the app.
+                let pushed = push::deliver_push_due_until(
+                    &db,
+                    &push_delivery,
+                    OffsetDateTime::now_utc(),
+                    || stopping.load(Ordering::Relaxed),
+                )
+                .await;
+                if let Ok(pushed) = &pushed {
+                    metrics.pushed(pushed);
+                }
+                match pushed {
+                    Ok(pushed) if pushed.rows.is_empty() => {}
+                    Ok(pushed) => {
+                        tracing::info!(
+                            sent = pushed.rows.sent,
+                            failed = pushed.rows.failed,
+                            given_up = pushed.rows.given_up,
+                            dropped = pushed.rows.dropped,
+                            devices_removed = pushed.devices_removed,
+                            "push notifications delivered"
+                        );
+                        if pushed.rows.handled() >= push_delivery.rules.batch || pushed.rows.cut_short {
+                            ticker.reset_immediately();
+                        }
+                    }
+                    Err(error) => tracing::error!(error = %Redacted(&error), "push delivery failed"),
+                }
+                if let Some(sender) = &push_delivery.sender {
+                    let read = push::check_receipts(
+                        &db,
+                        sender.as_ref(),
+                        &receipt_rules,
+                        OffsetDateTime::now_utc(),
+                    )
+                    .await;
+                    metrics.receipts(&read);
+                    match read {
+                        Ok(read) if read.devices_removed > 0 => tracing::info!(
+                            devices_removed = read.devices_removed,
+                            "push receipts read"
+                        ),
+                        Ok(_) => {}
+                        // The service's own words are never in it.
+                        Err(error) => tracing::warn!(%error, "push receipts could not be read"),
+                    }
+                }
+                match push::purge_devices(&db).await {
+                    Ok(0) => {}
+                    Ok(removed) => tracing::info!(removed, "devices of ended sessions removed"),
+                    Err(error) => tracing::error!(error = %Redacted(&error), "device purge failed"),
                 }
                 let now = OffsetDateTime::now_utc().unix_timestamp();
                 metrics.pass_finished(u64::try_from(now).unwrap_or(0));

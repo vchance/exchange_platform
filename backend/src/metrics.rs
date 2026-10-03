@@ -28,7 +28,9 @@ use axum::http::{Method, StatusCode};
 use axum::routing::get;
 use sqlx::PgPool;
 
+use crate::auth::{SMS_FAILED, SMS_REFUSED, SMS_SENT};
 use crate::notifications::outbox::Delivered;
+use crate::notifications::push::{PushDelivered, ReceiptsError, ReceiptsRead};
 
 /// The media type of the text format, version 0.0.4.
 pub const TEXT_FORMAT: &str = "text/plain; version=0.0.4; charset=utf-8";
@@ -361,6 +363,52 @@ pub async fn render_outbox(text: &mut Text, pool: &PgPool, max_attempts: i32) {
     }
 }
 
+// ---- Text messages ---------------------------------------------------------
+
+/// The one-time codes sent by text message in the current hour, by the whole
+/// service, against the hourly cap (`SMS_MAX_PER_HOUR`): read from the counts
+/// the API keeps in the database, so they are right however many copies of
+/// the API there are. Served by the API when SMS delivery is on.
+pub async fn render_sms(text: &mut Text, pool: &PgPool, cap: i64) {
+    let counts: Result<Vec<(String, i64)>, sqlx::Error> = sqlx::query_as(
+        "SELECT scope, sum(count)::bigint FROM sign_in_limit
+         WHERE scope IN ($1, $2, $3) AND window_start = date_trunc('hour', now(), 'UTC')
+         GROUP BY scope",
+    )
+    .bind(SMS_SENT)
+    .bind(SMS_REFUSED)
+    .bind(SMS_FAILED)
+    .fetch_all(pool)
+    .await;
+    text.single(
+        "yuppers_sms_codes_hourly_cap",
+        Kind::Gauge,
+        "Codes the service may send by text message per hour (SMS_MAX_PER_HOUR).",
+        cap as f64,
+    );
+    let Ok(counts) = counts else {
+        tracing::warn!("metrics could not read the text message counts");
+        return;
+    };
+    let name = "yuppers_sms_codes_this_hour";
+    text.family(
+        name,
+        Kind::Gauge,
+        "One-time codes for phone numbers this hour (UTC), by the whole service: sent (handed to the SMS provider, each a message paid for), refused (the hourly cap was reached; the person was told to wait), failed (the provider did not take it; also counted in sent).",
+    );
+    for (result, scope) in [
+        ("sent", SMS_SENT),
+        ("refused", SMS_REFUSED),
+        ("failed", SMS_FAILED),
+    ] {
+        let count = counts
+            .iter()
+            .find(|(found, _)| found == scope)
+            .map_or(0, |(_, count)| *count);
+        text.sample(name, &[("result", result)], count as f64);
+    }
+}
+
 // ---- The worker ------------------------------------------------------------
 
 /// What this worker process has done since it started.
@@ -370,6 +418,13 @@ pub struct WorkerMetrics {
     failed: AtomicU64,
     given_up: AtomicU64,
     dropped: AtomicU64,
+    push_sent: AtomicU64,
+    push_failed: AtomicU64,
+    push_given_up: AtomicU64,
+    push_dropped: AtomicU64,
+    push_devices_removed: AtomicU64,
+    receipt_checks_ok: AtomicU64,
+    receipt_checks_failed: AtomicU64,
     timer_runs_ok: AtomicU64,
     timer_runs_failed: AtomicU64,
     timer_changes: AtomicU64,
@@ -415,6 +470,27 @@ impl WorkerMetrics {
         add(&self.dropped, delivered.dropped);
     }
 
+    pub fn pushed(&self, pushed: &PushDelivered) {
+        add(&self.push_sent, pushed.rows.sent);
+        add(&self.push_failed, pushed.rows.failed);
+        add(&self.push_given_up, pushed.rows.given_up);
+        add(&self.push_dropped, pushed.rows.dropped);
+        add(&self.push_devices_removed, pushed.devices_removed);
+    }
+
+    pub fn receipts(&self, result: &Result<ReceiptsRead, ReceiptsError>) {
+        match result {
+            Ok(read) => {
+                // A look with nothing old enough to ask about asks nothing.
+                if read.asked {
+                    add(&self.receipt_checks_ok, 1);
+                }
+                add(&self.push_devices_removed, read.devices_removed);
+            }
+            Err(_) => add(&self.receipt_checks_failed, 1),
+        }
+    }
+
     /// A pass over every job has finished, at `unix_seconds`.
     pub fn pass_finished(&self, unix_seconds: u64) {
         self.last_pass.store(unix_seconds, Ordering::Relaxed);
@@ -432,6 +508,39 @@ impl WorkerMetrics {
             ("failed", &self.failed),
             ("given_up", &self.given_up),
             ("dropped", &self.dropped),
+        ] {
+            text.sample(name, &[("result", result)], read(counter));
+        }
+
+        let name = "yuppers_push_deliveries_total";
+        text.family(
+            name,
+            Kind::Counter,
+            "Push notifications handled by this worker since it started, one per person and notice: sent (taken by the push service for at least one device), failed (every failed try), given_up (the last try failed), dropped (closed unsent: no device left, account closed, reminder no longer true, or push off).",
+        );
+        for (result, counter) in [
+            ("sent", &self.push_sent),
+            ("failed", &self.push_failed),
+            ("given_up", &self.push_given_up),
+            ("dropped", &self.push_dropped),
+        ] {
+            text.sample(name, &[("result", result)], read(counter));
+        }
+        text.single(
+            "yuppers_push_devices_removed_total",
+            Kind::Counter,
+            "Devices removed because the push service said their token is no longer registered, when sending or in a receipt.",
+            read(&self.push_devices_removed),
+        );
+        let name = "yuppers_push_receipt_checks_total";
+        text.family(
+            name,
+            Kind::Counter,
+            "Requests for push receipts, by whether the push service answered.",
+        );
+        for (result, counter) in [
+            ("ok", &self.receipt_checks_ok),
+            ("error", &self.receipt_checks_failed),
         ] {
             text.sample(name, &[("result", result)], read(counter));
         }
@@ -597,6 +706,42 @@ mod tests {
         assert!(page.contains(r#"yuppers_http_request_duration_seconds_bucket{route="unmatched",method="OTHER",status="5xx",le="10"} 0"#));
         assert!(page.contains(r#"yuppers_http_request_duration_seconds_bucket{route="unmatched",method="OTHER",status="5xx",le="+Inf"} 1"#));
         assert_eq!(page.matches("# TYPE").count(), 2);
+    }
+
+    #[test]
+    fn the_worker_counts_its_push_notifications_apart_from_its_emails() {
+        let metrics = WorkerMetrics::default();
+        metrics.pushed(&PushDelivered {
+            rows: Delivered {
+                sent: 3,
+                failed: 1,
+                dropped: 2,
+                ..Delivered::default()
+            },
+            devices_removed: 1,
+        });
+        metrics.receipts(&Ok(ReceiptsRead {
+            asked: true,
+            settled: 4,
+            devices_removed: 2,
+        }));
+        metrics.receipts(&Ok(ReceiptsRead::default()));
+        metrics.receipts(&Err(ReceiptsError::Service(anyhow::anyhow!("down"))));
+        let mut text = Text::new();
+        metrics.render(&mut text);
+        let page = text.finish();
+        for line in [
+            r#"yuppers_push_deliveries_total{result="sent"} 3"#,
+            r#"yuppers_push_deliveries_total{result="failed"} 1"#,
+            r#"yuppers_push_deliveries_total{result="given_up"} 0"#,
+            r#"yuppers_push_deliveries_total{result="dropped"} 2"#,
+            "yuppers_push_devices_removed_total 3",
+            r#"yuppers_push_receipt_checks_total{result="ok"} 1"#,
+            r#"yuppers_push_receipt_checks_total{result="error"} 1"#,
+            r#"yuppers_outbox_deliveries_total{result="sent"} 0"#,
+        ] {
+            assert!(page.contains(line), "{line} in\n{page}");
+        }
     }
 
     #[test]

@@ -2,13 +2,19 @@
 //!
 //! A change to an exchange queues its messages in the outbox, in the same
 //! transaction as the events that caused them, so a message exists exactly
-//! when its event does. The worker delivers them ([`outbox`]). Which change
-//! calls for which message is a rule, and lives in `domain::notification`.
+//! when its event does. The worker delivers them: by email ([`outbox`],
+//! [`smtp`]) and, to those with the app, by push ([`push`], [`expo`]).
+//! Which change calls for which message is a rule, and lives in
+//! `domain::notification`. One-time codes go by email, or by text message
+//! to a phone number ([`sms`]).
 
 use crate::auth::SendFuture;
 
+pub mod expo;
 mod html;
 pub mod outbox;
+pub mod push;
+pub mod sms;
 pub mod smtp;
 pub mod wording;
 

@@ -1222,3 +1222,121 @@ async fn sign_in_limits_are_counted_by_keyed_hash_and_the_service_can_forget_the
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn a_device_belongs_to_a_session_and_its_token_is_one_device() {
+    let mut tx = app().await;
+    let account = account(&mut tx).await;
+    let session: Uuid = sqlx::query_scalar(
+        "INSERT INTO account_session (account_id, token_hash, auth_method, authenticated_at, expires_at)
+         VALUES ($1, $2, 'EMAIL_OTP', now(), now() + interval '1 day')
+         RETURNING id",
+    )
+    .bind(account)
+    .bind(Uuid::new_v4().as_bytes().repeat(2))
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    let token = format!("ExponentPushToken[{}]", Uuid::new_v4().simple());
+    let device = |token: String, platform: &'static str, language: &'static str| {
+        sqlx::query(
+            "INSERT INTO device (account_id, session_id, service, token, platform, app_version, language)
+             VALUES ($1, $2, 'EXPO', $3, $4, '0.1.0', $5)",
+        )
+        .bind(account)
+        .bind(session)
+        .bind(token)
+        .bind(platform)
+        .bind(language)
+    };
+
+    device(token.clone(), "ios", "en")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    // One token is one device.
+    refused!(tx, UNIQUE, device(token.clone(), "android", "es"));
+    refused!(tx, CHECK, device(format!("{token}-web"), "web", "en"));
+    refused!(tx, CHECK, device(format!("{token}-lang"), "ios", "English"));
+    refused!(tx, CHECK, device("x".repeat(257), "ios", "en"));
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "INSERT INTO device (account_id, session_id, service, token, platform, app_version, language)
+             VALUES ($1, $2, 'APNS', 'abc', 'ios', '0.1.0', 'en')",
+        )
+        .bind(account)
+        .bind(session)
+    );
+
+    // A ticket waits on its device, and goes with it.
+    let id: Uuid = sqlx::query_scalar("SELECT id FROM device WHERE token = $1")
+        .bind(&token)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    let ticket = format!("ticket-{}", Uuid::new_v4());
+    sqlx::query("INSERT INTO push_ticket (id, device_id) VALUES ($1, $2)")
+        .bind(&ticket)
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    refused!(
+        tx,
+        FOREIGN_KEY,
+        sqlx::query("INSERT INTO push_ticket (id, device_id) VALUES ($1, $2)")
+            .bind(format!("ticket-{}", Uuid::new_v4()))
+            .bind(Uuid::new_v4())
+    );
+
+    // The service may change and remove both; removing the session removes
+    // its devices and their tickets.
+    sqlx::query("UPDATE device SET app_version = '0.2.0', updated_at = now() WHERE id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM account_session WHERE id = $1")
+        .bind(session)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let left: (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM device WHERE id = $1),
+                (SELECT count(*) FROM push_ticket WHERE id = $2)",
+    )
+    .bind(id)
+    .bind(&ticket)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    assert_eq!(left, (0, 0));
+}
+
+#[tokio::test]
+async fn text_messages_are_counted_for_the_whole_service_by_keyed_hash() {
+    let mut tx = app().await;
+    let subject = Uuid::new_v4().as_bytes().repeat(2);
+    for scope in ["sms-sent", "sms-refused", "sms-failed"] {
+        sqlx::query(
+            "INSERT INTO sign_in_limit (scope, subject, window_start, count)
+             VALUES ($1, $2, date_trunc('hour', now()), 1)",
+        )
+        .bind(scope)
+        .bind(subject.clone())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    }
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "INSERT INTO sign_in_limit (scope, subject, window_start, count)
+             VALUES ('sms', $1, date_trunc('hour', now()), 1)",
+        )
+        .bind(subject)
+    );
+}

@@ -16,8 +16,14 @@ use axum::http::HeaderName;
 
 use crate::auth::{AuthRules, CodeSender, LogSender};
 use crate::client_version::{MinimumClientVersions, parse_version};
+use crate::domain::identity::Identifier;
 use crate::http::web::DEFAULT_ANDROID_PACKAGE;
 use crate::http::{AppLinks, TrustedProxies};
+use crate::notifications::expo::{EXPO_ORIGIN, ExpoPushSender};
+use crate::notifications::push::{LogPushSender, PushSender};
+use crate::notifications::sms::{
+    CodeRouter, LogSmsSender, SmsSender, TWILIO_ORIGIN, TwilioSmsSender,
+};
 use crate::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
 use crate::notifications::wording::Wording;
 use crate::notifications::{EmailSender, LogEmailSender};
@@ -140,13 +146,93 @@ fn email_sender(get: Lookup<'_>) -> anyhow::Result<Arc<dyn EmailSender>> {
     }
 }
 
-/// The sender named by `CODE_DELIVERY`.
+/// The sender of one-time codes: `CODE_DELIVERY` for email addresses, and
+/// for phone numbers too while `SMS_DELIVERY` is off (as before SMS was
+/// built: `log` writes them to the log, `smtp` refuses them); with
+/// `SMS_DELIVERY` on, phone numbers get their codes by text message.
 fn code_sender(get: Lookup<'_>) -> anyhow::Result<Arc<dyn CodeSender>> {
-    match required(get, "CODE_DELIVERY")?.as_str() {
-        "log" => Ok(Arc::new(LogSender)),
-        "smtp" => Ok(smtp_sender(get)?),
+    let email: Arc<dyn CodeSender> = match required(get, "CODE_DELIVERY")?.as_str() {
+        "log" => Arc::new(LogSender),
+        "smtp" => smtp_sender(get)?,
         other => bail!("CODE_DELIVERY={other} is not supported; use `smtp` or `log`"),
+    };
+    Ok(match sms_sender(get)? {
+        None => email,
+        Some(sms) => Arc::new(CodeRouter::new(email, sms, Wording::embedded()?)),
+    })
+}
+
+/// How long the SMS provider has to take a message. A person is waiting on
+/// the request that sends it.
+const SMS_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The SMS provider named by `SMS_DELIVERY`, if any. Default `off`.
+fn sms_sender(get: Lookup<'_>) -> anyhow::Result<Option<Arc<dyn SmsSender>>> {
+    match optional(get, "SMS_DELIVERY").as_deref().unwrap_or("off") {
+        "off" => Ok(None),
+        "log" => Ok(Some(Arc::new(LogSmsSender))),
+        "twilio" => {
+            let account_sid = required(get, "SMS_ACCOUNT_SID")?.trim().to_owned();
+            let auth_token = Secret::new(required(get, "SMS_AUTH_TOKEN")?.trim().to_owned());
+            let from = required(get, "SMS_FROM")?.trim().to_owned();
+            let number = matches!(Identifier::parse(&from), Ok(Identifier::Phone(_)));
+            if !number && !from.starts_with("MG") {
+                bail!(
+                    "SMS_FROM={from} is neither a phone number in international form \
+                     (+15551234567) nor a Messaging Service SID (MG...)"
+                );
+            }
+            Ok(Some(Arc::new(TwilioSmsSender::new(
+                TWILIO_ORIGIN,
+                account_sid,
+                auth_token,
+                from,
+                SMS_TIMEOUT,
+            ))))
+        }
+        other => bail!("SMS_DELIVERY={other} is not supported; use `off`, `log` or `twilio`"),
     }
+}
+
+/// How push notifications are sent, from `PUSH_DELIVERY`. Default off.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PushMode {
+    Off,
+    /// The worker writes each one to its log. Development only.
+    Log,
+    /// Through Expo's push service.
+    Expo,
+}
+
+fn push_mode(get: Lookup<'_>) -> anyhow::Result<PushMode> {
+    match optional(get, "PUSH_DELIVERY").as_deref().unwrap_or("off") {
+        "off" => Ok(PushMode::Off),
+        "log" => Ok(PushMode::Log),
+        "expo" => Ok(PushMode::Expo),
+        other => bail!("PUSH_DELIVERY={other} is not supported; use `off`, `log` or `expo`"),
+    }
+}
+
+/// How long the push service has to answer, within the outbox's own limit
+/// on a send.
+const PUSH_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// The push service named by `PUSH_DELIVERY`, with `EXPO_ACCESS_TOKEN` if
+/// the Expo project has push security turned on. None when off.
+fn push_sender(get: Lookup<'_>) -> anyhow::Result<Option<Arc<dyn PushSender>>> {
+    Ok(match push_mode(get)? {
+        PushMode::Off => None,
+        PushMode::Log => Some(Arc::new(LogPushSender)),
+        PushMode::Expo => {
+            let token = optional(get, "EXPO_ACCESS_TOKEN")
+                .map(|token| Secret::new(token.trim().to_owned()));
+            Some(Arc::new(ExpoPushSender::new(
+                EXPO_ORIGIN,
+                token,
+                PUSH_TIMEOUT,
+            )))
+        }
+    })
 }
 
 /// Which proxy header to believe, from `TRUSTED_PROXY_HEADER` and
@@ -251,6 +337,7 @@ fn auth_rules(get: Lookup<'_>) -> anyhow::Result<AuthRules> {
             "SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY",
             defaults.failed_guesses_per_identifier_per_day,
         )?,
+        sms_codes_per_hour: limit(get, "SMS_MAX_PER_HOUR", defaults.sms_codes_per_hour)?,
         ..defaults
     })
 }
@@ -262,6 +349,8 @@ pub struct WorkerConfig {
     /// Notifications link into the web app.
     pub web_origin: String,
     pub email_sender: Arc<dyn EmailSender>,
+    /// The push service, or none while push is off (`PUSH_DELIVERY`).
+    pub push_sender: Option<Arc<dyn PushSender>>,
     /// Where to serve the worker's metrics, if anywhere.
     pub metrics_addr: Option<SocketAddr>,
 }
@@ -274,6 +363,7 @@ impl WorkerConfig {
             database_url: required(get, "DATABASE_URL")?,
             web_origin: web_origin(get)?,
             email_sender: email_sender(get)?,
+            push_sender: push_sender(get)?,
             metrics_addr: metrics_addr(get)?,
         })
     }
@@ -353,6 +443,11 @@ pub struct ApiConfig {
     pub metrics_addr: Option<SocketAddr>,
     /// The rules for one-time codes, some of them set by the deployment.
     pub auth: AuthRules,
+    /// Whether the worker sends push notifications (`PUSH_DELIVERY`), which
+    /// the API tells the apps so they offer them only then.
+    pub push_notifications: bool,
+    /// Whether codes for phone numbers go by text message (`SMS_DELIVERY`).
+    pub sms: bool,
 }
 
 impl ApiConfig {
@@ -387,6 +482,8 @@ impl ApiConfig {
             min_client_versions: min_client_versions(get)?,
             app_links: app_links(get)?,
             auth: auth_rules(get)?,
+            push_notifications: push_mode(get)? != PushMode::Off,
+            sms: sms_sender(get)?.is_some(),
         })
     }
 }
@@ -426,6 +523,92 @@ mod tests {
         let log = table(&[("NOTIFICATION_DELIVERY", "log"), ("CODE_DELIVERY", "log")]);
         assert!(email_sender(&lookup(&log)).is_ok());
         assert!(code_sender(&lookup(&log)).is_ok());
+    }
+
+    #[test]
+    fn push_is_off_unless_named_and_must_be_a_delivery_that_exists() {
+        let read = |pairs: &[(&str, &str)]| push_mode(&lookup(&table(pairs)));
+        assert_eq!(read(&[]).unwrap(), PushMode::Off);
+        assert_eq!(read(&[("PUSH_DELIVERY", " ")]).unwrap(), PushMode::Off);
+        assert_eq!(read(&[("PUSH_DELIVERY", "off")]).unwrap(), PushMode::Off);
+        assert_eq!(read(&[("PUSH_DELIVERY", "log")]).unwrap(), PushMode::Log);
+        assert_eq!(read(&[("PUSH_DELIVERY", "expo")]).unwrap(), PushMode::Expo);
+        for wrong in ["on", "apns", "fcm", "EXPO"] {
+            assert!(read(&[("PUSH_DELIVERY", wrong)]).is_err(), "{wrong}");
+        }
+        assert!(push_sender(&lookup(&table(&[]))).unwrap().is_none());
+        // The access token is optional: only an Expo project with push
+        // security turned on asks for it.
+        for pairs in [
+            vec![("PUSH_DELIVERY", "expo")],
+            vec![("PUSH_DELIVERY", "expo"), ("EXPO_ACCESS_TOKEN", "token")],
+        ] {
+            assert!(push_sender(&lookup(&table(&pairs))).unwrap().is_some());
+        }
+    }
+
+    #[test]
+    fn sms_is_off_unless_named_and_twilio_needs_its_three_settings() {
+        let read = |pairs: &[(&str, &str)]| sms_sender(&lookup(&table(pairs)));
+        assert!(read(&[]).unwrap().is_none());
+        assert!(read(&[("SMS_DELIVERY", "off")]).unwrap().is_none());
+        assert!(read(&[("SMS_DELIVERY", "log")]).unwrap().is_some());
+        for wrong in ["on", "sns", "TWILIO", "smtp"] {
+            assert!(read(&[("SMS_DELIVERY", wrong)]).is_err(), "{wrong}");
+        }
+
+        let twilio = [
+            ("SMS_DELIVERY", "twilio"),
+            ("SMS_ACCOUNT_SID", "AC0123"),
+            ("SMS_AUTH_TOKEN", "hunter2-sms"),
+            ("SMS_FROM", "+15550000000"),
+        ];
+        assert!(read(&twilio).unwrap().is_some());
+        for missing in 1..twilio.len() {
+            let mut pairs = twilio.to_vec();
+            pairs.remove(missing);
+            let error = read(&pairs).err().expect("refused");
+            assert!(error.to_string().contains(twilio[missing].0), "{error}");
+        }
+        let service = [&twilio[..3], &[("SMS_FROM", "MG0123")]].concat();
+        assert!(read(&service).unwrap().is_some());
+        let wrong = [&twilio[..3], &[("SMS_FROM", "Yuppers")]].concat();
+        let error = format!("{:#}", read(&wrong).err().expect("refused"));
+        assert!(
+            error.contains("SMS_FROM") && !error.contains("hunter2-sms"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn codes_for_phone_numbers_go_by_sms_only_when_it_is_on() {
+        let phone = Identifier::parse("+15551234567").unwrap();
+        let email = Identifier::parse("ana@example.test").unwrap();
+        let sender = |pairs: &[(&str, &str)]| code_sender(&lookup(&table(pairs))).unwrap();
+        // Off: codes go as before, and none is charged as a text message.
+        let off = sender(&[("CODE_DELIVERY", "log")]);
+        assert!(!off.charged_per_message(&phone));
+        let on = sender(&[("CODE_DELIVERY", "log"), ("SMS_DELIVERY", "log")]);
+        assert!(on.charged_per_message(&phone));
+        assert!(!on.charged_per_message(&email));
+    }
+
+    #[test]
+    fn the_sms_cap_defaults_to_the_placeholder_and_is_a_count_of_one_or_more() {
+        let read = |pairs: &[(&str, &str)]| auth_rules(&lookup(&table(pairs)));
+        assert_eq!(
+            read(&[]).unwrap().sms_codes_per_hour,
+            AuthRules::default().sms_codes_per_hour
+        );
+        assert_eq!(
+            read(&[("SMS_MAX_PER_HOUR", "200")])
+                .unwrap()
+                .sms_codes_per_hour,
+            200
+        );
+        for wrong in ["0", "-1", "lots"] {
+            assert!(read(&[("SMS_MAX_PER_HOUR", wrong)]).is_err(), "{wrong}");
+        }
     }
 
     #[test]

@@ -5,6 +5,12 @@
 //! [`deliver_due`] is the worker's side: claim a message, send it, record how
 //! that went.
 //!
+//! Each notice is queued once per channel (DESIGN.md §12, no duplicates): an
+//! `EMAIL` row for a recipient with an email address, and a `PUSH` row for
+//! one with a device registered under a live session (`super::push` says why
+//! both, and delivers the second). The outbox's key, one row per event,
+//! person and channel, holds that even if an event is processed twice.
+//!
 //! What the columns say about a message:
 //!
 //! * `completed_at` empty and `attempts` below the limit: waiting, not before
@@ -70,7 +76,7 @@ impl Default for DeliveryRules {
 
 impl DeliveryRules {
     /// How long to wait after a failure, given the failures before it.
-    fn backoff(&self, earlier_failures: i32) -> Duration {
+    pub(crate) fn backoff(&self, earlier_failures: i32) -> Duration {
         // Past the ceiling long before the shift could overflow.
         let doublings = earlier_failures.clamp(0, 20);
         let wait: Duration = self.retry_after * (1_i32 << doublings);
@@ -100,9 +106,11 @@ pub const NO_LONGER_A_PARTY: &str = "not sent: the recipient is no longer a part
 /// text are read when it is sent, so a queued message holds nothing personal
 /// and nothing from the agreement.
 ///
-/// An account that cannot be emailed gets no row: one with only a phone
-/// number (SMS carries one-time codes and nothing else, §12), or one that is
-/// suspended or deleted.
+/// One row per channel the recipient can be reached on (DESIGN.md §12): an
+/// email for an account with an email address, and a push notification for
+/// one with a device registered under a live session. An account with only
+/// a phone number gets push or nothing, since SMS carries one-time codes and
+/// nothing else; one that is suspended or deleted gets nothing.
 pub async fn enqueue(
     conn: &mut PgConnection,
     exchange: Uuid,
@@ -123,7 +131,7 @@ pub async fn enqueue(
 /// so that the message can be checked again when it is sent, which may be
 /// after one of them was delivered.
 ///
-/// As with [`enqueue`], an account that cannot be emailed gets no row.
+/// As with [`enqueue`], one row per channel the recipient can be reached on.
 pub async fn enqueue_reminder(
     conn: &mut PgConnection,
     exchange: Uuid,
@@ -143,10 +151,20 @@ async fn insert(
     recipient: Uuid,
     payload: Value,
 ) -> Result<(), sqlx::Error> {
+    // Whether there is a device is decided now and again when it is sent:
+    // one registered later does not get what was queued before it, and one
+    // signed out of meanwhile is not sent to.
     sqlx::query(
         "INSERT INTO outbox (kind, recipient_account_id, exchange_id, event_sequence, payload)
          SELECT 'EMAIL', id, $2, $3, $4 FROM account
-         WHERE id = $1 AND status = 'ACTIVE' AND email IS NOT NULL",
+         WHERE id = $1 AND status = 'ACTIVE' AND email IS NOT NULL
+         UNION ALL
+         SELECT 'PUSH', a.id, $2, $3, $4 FROM account a
+         WHERE a.id = $1 AND a.status = 'ACTIVE'
+           AND EXISTS (SELECT 1 FROM device d
+                       JOIN account_session s ON s.id = d.session_id
+                       WHERE d.account_id = a.id
+                         AND s.revoked_at IS NULL AND s.expires_at > now())",
     )
     .bind(recipient)
     .bind(exchange)

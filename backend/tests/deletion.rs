@@ -692,8 +692,24 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
     let cookie = cookie_session.headers[SET_COOKIE].to_str().unwrap();
     let cookie = cookie.split(';').next().unwrap().to_owned();
 
-    // Working data: a draft with a working copy, an idempotency key, a block,
-    // a code asked for and not used, and a message waiting to be sent.
+    // Working data: a device registered for push, a draft with a working
+    // copy, an idempotency key, a block, a code asked for and not used, and a
+    // message waiting to be sent.
+    let device = app
+        .call(
+            Some(ana),
+            Method::PUT,
+            "/v1/me/devices",
+            Some(json!({
+                "token": format!("ExponentPushToken[{}]", Uuid::new_v4().simple()),
+                "platform": "android",
+                "app_version": "0.1.0",
+                "language": "es",
+            })),
+            &[],
+        )
+        .await;
+    assert_eq!(device.status, StatusCode::OK);
     let draft = app.draft(ana).await;
     let saved = app
         .call(
@@ -833,6 +849,10 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
         (
             "sessions",
             "SELECT count(*) FROM account_session WHERE account_id = $1",
+        ),
+        (
+            "devices for push",
+            "SELECT count(*) FROM device WHERE account_id = $1",
         ),
         (
             "working copies",

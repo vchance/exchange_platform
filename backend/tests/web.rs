@@ -77,6 +77,7 @@ fn service_with_links(web_origin: &str, web: Option<WebApp>, app_links: AppLinks
             proxies: TrustedProxies::none(),
             min_client_versions: Default::default(),
             app_links,
+            push_notifications: false,
         }),
         code_sender: Arc::new(LogSender),
         metrics: Default::default(),

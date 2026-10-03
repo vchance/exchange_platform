@@ -2,8 +2,10 @@
 //!
 //! Nearly every email provider offers SMTP, so a deployment supplies a host
 //! and credentials, not code. One sender serves both notifications
-//! ([`EmailSender`]) and one-time codes ([`CodeSender`]); codes go by email
-//! only, since SMS delivery is not built.
+//! ([`EmailSender`]) and one-time codes ([`CodeSender`]). It sends codes to
+//! email addresses only; a code for a phone number goes by SMS when
+//! `SMS_DELIVERY` is on (`super::sms::CodeRouter`), and is refused here
+//! when it is off.
 //!
 //! What this file never does: write the password anywhere, or put anything in
 //! a message that the wording did not give it.
@@ -65,6 +67,11 @@ pub struct Secret(String);
 impl Secret {
     pub fn new(value: String) -> Self {
         Self(value)
+    }
+
+    /// The value itself, for the one place it is sent.
+    pub fn expose(&self) -> &str {
+        &self.0
     }
 }
 
@@ -216,7 +223,7 @@ impl CodeSender for SmtpSender {
         Box::pin(async move {
             let Identifier::Email(to) = message.to else {
                 // Refused, not logged: the code is still a code.
-                anyhow::bail!("codes can be sent by email only; SMS delivery is not built");
+                anyhow::bail!("codes for phone numbers need SMS delivery, which is off");
             };
             let rendered = self
                 .wording

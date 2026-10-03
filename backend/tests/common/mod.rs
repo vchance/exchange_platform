@@ -198,12 +198,50 @@ impl App {
         .await
     }
 
+    /// With the given sign-in rules and code sender, and saying whether push
+    /// notifications are sent (`GET /v1/meta`).
+    pub async fn start_messaging(
+        database_name: &'static str,
+        auth: AuthRules,
+        code_sender: Arc<dyn CodeSender>,
+        push_notifications: bool,
+    ) -> Self {
+        Self::start_with_settings(
+            database_name,
+            Rules::default(),
+            code_sender,
+            TrustedProxies::none(),
+            MinimumClientVersions::default(),
+            (auth, push_notifications),
+        )
+        .await
+    }
+
     async fn start_configured(
         database_name: &'static str,
         rules: Rules,
         code_sender: Arc<dyn CodeSender>,
         proxies: TrustedProxies,
         min_client_versions: MinimumClientVersions,
+    ) -> Self {
+        Self::start_with_settings(
+            database_name,
+            rules,
+            code_sender,
+            proxies,
+            min_client_versions,
+            (AuthRules::default(), false),
+        )
+        .await
+    }
+
+    async fn start_with_settings(
+        database_name: &'static str,
+        rules: Rules,
+        code_sender: Arc<dyn CodeSender>,
+        proxies: TrustedProxies,
+        min_client_versions: MinimumClientVersions,
+        (auth, push_notifications): (AuthRules, bool),
     ) -> Self {
         let (owner_url, app_url) = database(database_name).await;
         let db = connect(app_url).await;
@@ -213,12 +251,13 @@ impl App {
             settings: Arc::new(Settings {
                 app_secret: b"test-secret-test-secret-test-secret".to_vec(),
                 web_origin: "https://app.test".to_owned(),
-                auth: AuthRules::default(),
+                auth,
                 rules: rules.clone(),
                 consent_version: CONSENT_VERSION.to_owned(),
                 proxies,
                 min_client_versions,
                 app_links: Default::default(),
+                push_notifications,
             }),
             code_sender,
             metrics: metrics.clone(),

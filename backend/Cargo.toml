@@ -6,9 +6,23 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.104"
 axum = "0.8.9"
+base64 = "0.22.1"
 dotenvy = "0.15.7"
+form_urlencoded = "1.2.2"
 getrandom = "0.4.3"
 hmac = "0.13.0"
+# HTTPS to the push and SMS providers (`crate::outbound`). hyper and
+# hyper-util are already here for axum, and rustls with ring and the webpki
+# roots for lettre and sqlx, so the only new crate is the connector between
+# them: one TLS library and one root store for every connection the service
+# makes. reqwest 0.13 has no `rustls-tls` feature any more; its `rustls`
+# feature brings aws-lc-rs, a second crypto provider built from C.
+http-body-util = "0.1.5"
+hyper = { version = "1.11.1", features = ["client", "http1"] }
+hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "tls12", "ring", "webpki-roots"] }
+hyper-util = { version = "0.1.21", features = ["client-legacy", "http1", "tokio"] }
+rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1.0.9"
 # SMTP over the tokio runtime with rustls, so the image needs no OpenSSL. No
 # connection pool: a notification is rare, and a fresh connection per send is
 # one less thing to keep healthy.
@@ -36,7 +50,6 @@ strip = "none"
 strip = "none"
 
 [dev-dependencies]
-http-body-util = "0.1.5"
 # Reads back what the test SMTP server received.
 mail-parser = "0.11.9"
 tower = { version = "0.5.3", features = ["util"] }

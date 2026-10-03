@@ -165,6 +165,13 @@
       }
     }
   },
+  "push": {
+    "body": "Your yup has an update."
+  },
+  "sms": {
+    "signIn": "{code} is your {productName} sign-in code. Do not share it with anyone.",
+    "deleteAccount": "{code} is your code to delete your {productName} account. Do not share it with anyone."
+  },
   "common": {
     "loading": "Loading…",
     "cancel": "Cancel",
@@ -546,6 +553,21 @@
     "invited": {
       "heading": "Got a yup?",
       "intro": "You can read a proposal before you sign in. Open the link you were sent, or paste it here."
+    },
+    "notifications": {
+      "heading": "Notifications",
+      "switch": "Notifications on this phone",
+      "switchHint": "A notice on this phone when something happens in one of your yups. It never shows the terms, names or amounts.",
+      "blocked": "Notifications for this app are turned off in your phone’s settings. Turn them on there first.",
+      "openSettings": "Open settings",
+      "failed": "Notifications couldn’t be changed. Try again.",
+      "askHeading": "Know when something happens",
+      "askBody": "Turn on notifications to hear on this phone when the other person answers or something is due. They never show the terms, names or amounts.",
+      "turnOn": "Turn on notifications",
+      "notNow": "Not now",
+      "channel": "Updates to your yups",
+      "phoneOnly": "Text messages carry only sign-in codes, and your account has no email address, so notifications on this phone are the only way we can tell you about your yups.",
+      "phoneOnlyNoPush": "Text messages carry only sign-in codes, and your account has no email address, so nothing tells you when one of your yups changes. Check them here."
     }
   },
   "exchange": {

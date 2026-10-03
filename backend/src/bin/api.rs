@@ -26,6 +26,14 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!(files = ?app_link_files, "serving app link association files");
     }
 
+    let (sms, sms_cap) = (config.sms, config.auth.sms_codes_per_hour);
+    if sms {
+        tracing::info!(
+            cap = sms_cap,
+            "codes for phone numbers go by text message, at most this many an hour"
+        );
+    }
+
     let state = AppState {
         db: db::pool(&config.database_url)?,
         settings: Arc::new(Settings {
@@ -39,6 +47,7 @@ async fn main() -> anyhow::Result<()> {
             proxies: config.proxies,
             min_client_versions: config.min_client_versions,
             app_links: config.app_links,
+            push_notifications: config.push_notifications,
         }),
         code_sender: config.code_sender,
         metrics: Arc::new(HttpMetrics::default()),
@@ -62,6 +71,8 @@ async fn main() -> anyhow::Result<()> {
     if let Some(addr) = config.metrics_addr {
         let (requests, db) = (state.metrics.clone(), state.db.clone());
         let max_attempts = DeliveryRules::default().max_attempts;
+        // Text messages are counted only while they are sent.
+        let sms_cap = sms.then_some(sms_cap);
         metrics::serve(addr, move || {
             let (requests, db) = (requests.clone(), db.clone());
             async move {
@@ -69,6 +80,9 @@ async fn main() -> anyhow::Result<()> {
                 requests.render(&mut text);
                 metrics::render_pool(&mut text, &db);
                 metrics::render_outbox(&mut text, &db, max_attempts).await;
+                if let Some(cap) = sms_cap {
+                    metrics::render_sms(&mut text, &db, cap).await;
+                }
                 text.finish()
             }
         })
