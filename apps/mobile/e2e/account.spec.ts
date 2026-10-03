@@ -98,6 +98,32 @@ test('a person deletes their account while an agreement is in force', async ({
   await expect(page.getByText(en.home.empty)).toBeVisible()
 })
 
+test('the account screen opened by a direct link still says the account was deleted', async ({
+  person,
+}) => {
+  const ana = await person('Ana')
+  const { page } = ana
+  await signUp(ana)
+
+  // Straight to the account screen, with nothing beneath it.
+  await page.goto('/account')
+  await expect(title(page, en.nav.account)).toBeVisible()
+  await button(page, en.deletion.open).click()
+  await expect(page.getByText(en.deletion.nothingOpen)).toBeVisible()
+  const code = await codeFrom(ana.email, 'delete-account', () =>
+    button(page, en.deletion.sendCode).click(),
+  )
+  await page.getByLabel(en.signIn.codeLabel).fill(code)
+  await button(page, en.deletion.continue).click()
+  await button(page, en.deletion.confirm).click()
+
+  // On the first screen, signed out, and told.
+  await expect(title(page, en.signIn.title)).toBeVisible()
+  await expect(page.getByText(en.deletion.deleted)).toBeVisible()
+  await button(page, en.deletion.dismiss).click()
+  await expect(page.getByText(en.deletion.deleted)).toBeHidden()
+})
+
 test('a person who has signed in is asked again after reopening the app with a dead session', async ({
   person,
 }) => {

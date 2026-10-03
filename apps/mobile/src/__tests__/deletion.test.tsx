@@ -1,4 +1,5 @@
 import { deletedNotice, formatMessage, wordingFor } from '@yuppers/shared';
+import * as SecureStore from 'expo-secure-store';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import { EXCHANGE, fakeService, TOKEN, ana, type FakeService } from './fake-service';
@@ -89,6 +90,11 @@ const fmt = (message: string, values: Record<string, string | number>) =>
 
 /** Starts the app at an address, signed in as Ana, against a service set up by `prepare`. */
 async function open(initialUrl: string, prepare: (service: FakeService) => void = () => {}) {
+  await openApp(initialUrl, prepare);
+}
+
+/** The same, handing back the router's own answers, such as where it is. */
+async function openApp(initialUrl: string, prepare: (service: FakeService) => void = () => {}) {
   mockKeychain.clear();
   deletedNotice.dismiss();
   service = fakeService();
@@ -96,7 +102,9 @@ async function open(initialUrl: string, prepare: (service: FakeService) => void 
   service.account = ana;
   preview = { drafts: 0, open_proposals: 0, agreements_in_force: 0 };
   prepare(service);
-  await renderRouter('src/app', { initialUrl });
+  const app = renderRouter('src/app', { initialUrl });
+  await app;
+  return { app };
 }
 
 const deletionCalls = () =>
@@ -168,6 +176,39 @@ test('deleting the account says what it does, takes a code and a last confirmati
   screen.getByText(w.signIn.intro);
   // The dead token was never tried again: the deletion was the last request.
   expect(service.sent.at(-1)?.path).toBe('/v1/me/deletion');
+});
+
+test('the notice that the account was deleted stays when the account screen was opened on its own', async () => {
+  // Opened by a direct link: there is no list beneath the account screen,
+  // so going back to the first screen mounts it afresh.
+  const { app } = await openApp('/account');
+  await fireEvent.press(await screen.findByText(d.open));
+  await fireEvent.press(await screen.findByText(d.sendCode));
+  await fireEvent.changeText(await screen.findByLabelText(w.signIn.codeLabel), CODE);
+  await fireEvent.press(screen.getByText(d.continue));
+  await screen.findByText(d.confirmBody);
+
+  // Forgetting the session on the device takes a moment, as secure storage
+  // does on a phone. The first screen must not appear while the account is
+  // still known, or it would take the notice for something already read.
+  let release = () => {};
+  const forgetting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  jest.mocked(SecureStore.deleteItemAsync).mockImplementationOnce(async (key: string) => {
+    await forgetting;
+    mockKeychain.delete(key);
+  });
+  const pressed = fireEvent.press(screen.getByText(d.confirm));
+  // Timers are fake in these tests: time passes only when it is told to.
+  await jest.advanceTimersByTimeAsync(50);
+  release();
+  await pressed;
+
+  await screen.findByText(w.signIn.intro);
+  await screen.findByText(d.deleted);
+  expect(app.getPathnameWithParams()).toBe('/');
+  expect(mockKeychain.has('yuppers.session')).toBe(false);
 });
 
 test('a code that is wrong goes back to asking for it, and the account and its session stay', async () => {

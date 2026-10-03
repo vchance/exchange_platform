@@ -50,11 +50,15 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
   const w = wording.deletion;
 
   const deletion = useAccountDeletion(api, account, async () => {
-    // Back to the first screen before the account goes, so what is left on
-    // screen is the way to sign in. The service has ended every session;
-    // the token this device held is taken out of its secure storage.
-    router.dismissTo('/');
+    // The service has ended every session; the token this device held is
+    // taken out of its secure storage first, and only then is it back to
+    // the first screen, where what is left is the way to sign in. In the
+    // other order, a first screen that was not already beneath this one (the
+    // account screen opened by a direct link) would appear while the account
+    // was still known and take the notice that it was deleted as read
+    // (`AccountDeleted`).
     await forget();
+    router.dismissTo('/');
   });
   const { step, preview, destination, busy } = deletion;
   const identifier = destination?.identifier ?? '';
