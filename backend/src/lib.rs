@@ -1,11 +1,13 @@
-//! Yuppers backend. One crate, several processes: `api`, `worker`, `migrate`
-//! and `openapi` under `src/bin` all build on this library (DESIGN.md §13.3).
+//! Yuppers backend. One crate, several processes: `api`, `worker`, `migrate`,
+//! `openapi` and `replay-deletions` under `src/bin` all build on this library
+//! (DESIGN.md §13.3).
 
 pub mod auth;
 pub mod client_version;
 pub mod config;
 pub mod db;
 pub mod deletion;
+pub mod deletion_log;
 pub mod domain;
 pub mod error;
 pub mod exchanges;

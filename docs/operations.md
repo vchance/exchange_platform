@@ -201,7 +201,8 @@ MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/yuppers \
 ```
 
 - With no file named it writes `yuppers-<UTC time>.dump` in the current directory. It refuses to replace a file that is already there, unless given `--force`, and refuses a directory even then. It writes the dump under a fresh name beside the target first, created with `mktemp` so that a link someone left in the directory is never followed, readable by the running user alone, and moves it into place only once `pg_restore` can read it.
-- It needs `pg_dump` and `pg_restore` of the server's major version or newer (PostgreSQL 17); the image does not contain them. Run it from a small scheduled job in the same network, for example a `postgres:17` container with the repository's `scripts/` mounted, or set `PG_BIN` to where the tools are.
+- **The deletion log beside it.** Each backup gets a companion, `<backup>.deletions`: the deletion log (which accounts were deleted, and when; nothing else), exported by `scripts/export-deletions.sh` just after the dump and under the same rules (never replacing a file without `--force`, readable by the running user alone, put in place before the dump is). Because it is taken after the dump, it holds every deletion the dump holds and perhaps a few more, which is the safe way round. Keep each with its backup and copy them together; "Restoring" says which one a restore uses.
+- It needs `pg_dump`, `pg_restore` and `psql` of the server's major version or newer (PostgreSQL 17); the image does not contain them. Run it from a small scheduled job in the same network, for example a `postgres:17` container with the repository's `scripts/` mounted, or set `PG_BIN` to where the tools are.
 - A connection string with a password in it is visible to other users of the same machine while the command runs. On a shared machine leave the password out of the URL and put it in `PGPASSWORD` or a `.pgpass` file.
 - Managed databases take their own snapshots and point-in-time recovery; keep those on. These files are the copy that does not depend on the provider, that can be restored anywhere, and that the drill below proves.
 - **What the file holds**: every account's email address and phone number, every agreement, signature and the network addresses recorded with signatures. Encrypt it at rest, keep it where access is as narrow as the database's, and never in the repository (`.gitignore` refuses `*.dump`).
@@ -218,6 +219,11 @@ psql "$ADMIN_URL" -c "CREATE ROLE exchange_app LOGIN PASSWORD '...'"   # if it d
 psql "$ADMIN_URL" -c "CREATE DATABASE yuppers_restored OWNER exchange"
 
 scripts/restore.sh -d postgres://exchange:...@db.internal:5432/yuppers_restored yuppers.dump
+
+# Then, before the api and the worker start on it: migrate, and replay the
+# newest deletion log ("Replaying deletions" below). Not optional.
+MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/yuppers_restored migrate
+scripts/replay-deletions.sh -d postgres://exchange_app:...@db.internal:5432/yuppers_restored deletions.txt
 ```
 
 - `APP_ROLE` names the application role if it is not `exchange_app`. It reaches the server only as a value psql quotes (`:'app_role'`), never pasted into a query.
@@ -226,19 +232,48 @@ scripts/restore.sh -d postgres://exchange:...@db.internal:5432/yuppers_restored 
 - **Owner**: every object belongs to the role that ran the restore, whatever the owner was called where the backup was made, so a backup moves between servers whose owner roles have different names.
 - **Triggers**: the append-only triggers come back with their tables and refuse `UPDATE`, `DELETE` and `TRUNCATE` for every role again. The restore loads rows before creating triggers, so loading history does not trip them and the stamps the database writes (slot holdings) are restored as stored, not recomputed. The script checks afterwards that all five append-only triggers exist and that `exchange_app` cannot change those tables, and fails if not.
 - **Migrations**: the backup includes `_sqlx_migrations`, so `migrate` against the restored database applies only what is newer than the backup. Restore with the release that made the backup or a newer one, never an older one.
-- **What a restore brings back**: everything as it was at the backup. Accounts deleted since then return with their contact details, sessions revoked since then are live again, and network metadata purged since then is back until the worker's next pass purges it again. After restoring a production backup, deletions made since the backup must be applied again. That list does not exist anywhere but in the lost database; how to handle that must be decided before real use (below).
+- **What a restore brings back**: everything as it was at the backup. Accounts deleted since then return with their contact details and their sessions, until the deletion log is replayed (below), which is a required step of every restore. Network metadata purged since then is back until the worker's next pass purges it again.
+
+### Replaying deletions
+
+Every deletion adds the account's ID and the time to the deletion log (`deletion_log`, migration 0015), in the transaction that deletes it (`backend/src/deletion.rs`). The log is in every backup, and also exported beside it, because the log a restore needs is the newest one there is, not the one inside the backup being restored.
+
+**Which log to replay**, in this order:
+
+1. **The live database's, if it can still be reached** (a bad migration, rows destroyed by mistake, a copy restored for a drill). Export it before restoring anything, and keep the file:
+
+   ```sh
+   scripts/export-deletions.sh -d postgres://exchange:...@db.internal:5432/yuppers deletions-$(date -u +%Y%m%dT%H%M%SZ).txt
+   ```
+
+2. **Otherwise, the `.deletions` file of the newest backup there is**, whichever backup is being restored. Restoring last week's backup because last night's is damaged still replays last night's log, which the backup next to it would be missing. The log is cumulative and never pruned, so the newest file holds every deletion of every older one.
+
+What neither can hold, when the live database is lost, is a deletion made after the newest backup. That deletion is lost with everything else written since that backup, so the gap is the time between backups. Closing it takes a log kept outside the database as deletions happen, which this build does not have (see "Decisions still open"). Two things narrow the gap without one. Where the provider's point-in-time recovery reaches past the newest backup, restore it to a scratch database and export that log. And `export-deletions.sh` is cheap enough to run hourly to storage of its own, apart from the backups.
+
+**Replaying.** Run it after `restore.sh` and `migrate`, and before the api and the worker start on the restored database, connected as the application role:
+
+```sh
+scripts/replay-deletions.sh -d postgres://exchange_app:...@db.internal:5432/yuppers_restored deletions.txt
+# in the image: DATABASE_URL=... /usr/local/bin/replay-deletions deletions.txt
+```
+
+- It deletes each account through the service's own deletion (the `replay-deletions` binary, which calls `deletion::replay`), not through SQL, so every rule runs again. Sessions end, devices, codes and working data go, the email address and phone number are freed, Wallet passes are voided, and open exchanges are left through the rules in the account's name.
+- **What it reports**: a line for each account, then a count. *deleted again* means it was live in the copy and is now deleted. *already deleted* means the backup already had it deleted. *not in this database* means it was made after the backup. *suspended here* means it is suspended in the copy and was left alone, since a suspended account is not deleted; a person must look at it. *FAILED* means the database refused or was busy. It exits non-zero if any account was left undeleted, and with status 2, changing nothing, if the file is damaged.
+- **Running it again is harmless**: every account it already deleted is *already deleted* the second time. After a failure, run the same file again.
+- **What it cannot reproduce exactly**: the events and notices of leaving an exchange carry the time of the replay, not of the deletion; the deletion log keeps the original time. The other party of an exchange the account was still in is told again that the person left, if they had been told before the database was lost.
 
 ## The restore drill
 
 A backup is only known to work once it has been restored. Do this on a schedule, monthly at least, and after any change to the schema or the database's settings, on a scratch database that is not the one the service uses:
 
 1. Take a backup with `scripts/backup.sh`, or pick last night's.
-2. Create an empty database and restore into it with `scripts/restore.sh`. Note how long it took: that, plus starting the processes, is the time to recover.
-3. `scripts/check-restore.sh SOURCE_URL RESTORED_URL` compares the two: migrations, every privilege of `exchange_app`, every trigger, each table's row count and a digest of its rows. Against the live database the counts and digests differ by what has been written since the backup; against a database restored from the same file they must match exactly.
-4. `scripts/check-restored-record.sh RESTORED_URL RESTORED_APP_URL` starts an api on the copy, reads the oldest agreement in force through the API, and checks that its stored terms still reproduce the hash that was signed. It writes a session into the copy and deletes it again when it finishes, whether it passed or not; still, never point it at the database the service uses. The session's token is never on a command line: psql reads it on standard input, and curl from a header file only the running user can read.
-5. Drop the scratch database and the backup copy you made for it.
+2. Create an empty database and restore into it with `scripts/restore.sh`. Note how long it took: that, plus replaying deletions and starting the processes, is the time to recover.
+3. Replay the newest deletion log into it with `scripts/replay-deletions.sh` ("Replaying deletions" above), and read its report.
+4. Before replaying, or on a second copy, `scripts/check-restore.sh SOURCE_URL RESTORED_URL` compares the two: migrations, every privilege of `exchange_app`, every trigger, each table's row count and a digest of its rows. Against the live database the counts and digests differ by what has been written since the backup; against a database restored from the same file they must match exactly.
+5. `scripts/check-restored-record.sh RESTORED_URL RESTORED_APP_URL` starts an api on the copy, reads the oldest agreement in force through the API, and checks that its stored terms still reproduce the hash that was signed. It writes a session into the copy and deletes it again when it finishes, whether it passed or not; still, never point it at the database the service uses. The session's token is never on a command line: psql reads it on standard input, and curl from a header file only the running user can read.
+6. Drop the scratch database and the backup copy you made for it.
 
-CI runs the same steps on every change (the `Backup and restore` job): it fills a database through the API with the load check, backs it up, checks that `backup.sh` will not replace that file without `--force`, that `restore.sh` refuses the non-empty source, restores into a new database, compares them with `check-restore.sh`, restores again with `--overwrite` and compares again, runs `backend/tests/schema.rs` against the copy, and reads a signed agreement back from it.
+CI runs the same steps on every change (the `Backup and restore` job). It fills a database through the API with the load check and backs it up. It checks that `backup.sh` will replace neither that file nor a deletion log without `--force`, and that `restore.sh` refuses the non-empty source. It restores into a new database and compares the two with `check-restore.sh`, then restores again with `--overwrite` and compares again. Then the source stands for the live database: one person deletes their account through the API, with codes read from the log, and a newer backup and the live log are exported. The earlier backup is restored into another database, where that person's account is back with its address and sessions. The newer backup's deletion log is replayed, and the account is deleted again: no address, no sessions, no devices, nobody holding the address, and the log's original time. Replaying a second time does nothing. Last, `backend/tests/schema.rs` runs against both copies, and a signed agreement is read back from each.
 
 ## Rotating `APP_SECRET`
 
@@ -263,7 +298,9 @@ Between steps 2 and 3 the old processes run against the new schema for a few min
 ## Decisions still open
 
 - How long backups are kept, and where, given the retention in `DESIGN.md` §14.
-- What happens to deletions made between a backup and a restore of it. Today they would have to be redone by hand from a record nobody keeps.
+- **Deletions after the newest backup, when the live database is lost.** The deletion log covers every deletion up to the newest backup ("Replaying deletions"); a deletion made after it is lost with the database. Closing that gap needs a log kept outside the database as deletions happen, for example the worker appending each new line of the log to object storage. Until that exists, the gap is the time between backups, narrowed by point-in-time recovery or by exporting the log hourly.
+- **How long the deletion log is kept.** It holds account IDs and times only, and is never pruned, because a restore of any backup still kept needs every deletion since. It could be pruned of deletions older than the oldest backup kept, once backup retention is decided (above).
+- **A suspended account in the log.** Replaying leaves an account that is suspended in the restored copy undeleted and reports it. Today nothing suspends accounts; once staff can, decide whether a replay should delete such an account anyway.
 - The alert thresholds above are placeholders until there is real traffic.
 - **Push through Expo, or straight to Apple and Google.** `DESIGN.md` §13.1 decides that app push goes directly from the backend to Apple's and Google's services, with no third party. This build sends through Expo's push service instead, which holds the APNs key and FCM credentials, sees each token and the generic text, and needs nothing from Apple or Google on the service. Going direct means an APNs adapter (HTTP/2, a signed JWT per hour) and an FCM v1 adapter (OAuth with a service account), and the app registering device tokens (`getDevicePushTokenAsync`) instead of Expo tokens; the `PushSender` interface and the `device.service` column are where they would go.
 - **Email and push both.** Someone with the app and an email address gets both for each notice, one per channel, as §12 reads. Sending the email only when the push was not delivered or not opened within some time would halve that, at the cost of the email's detail; the outbox could hold an email back for that time.

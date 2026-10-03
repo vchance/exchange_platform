@@ -527,7 +527,11 @@ jobs:
   # scripts/restore.sh, and proves the copy is the same: grants, triggers,
   # every table's rows, the schema test run against the copy, and a signed
   # agreement read back through the API with its hash intact
-  # (docs/operations.md, "Backups").
+  # (docs/operations.md, "Backups"). Then deletes an account through the API
+  # after the backup, restores that backup again, sees the account come back,
+  # replays the deletion log of a newer backup, and proves the account is
+  # deleted again with its identifiers free and its sessions gone
+  # (docs/operations.md, "Restoring").
   backup:
     name: Backup and restore
     runs-on: ubuntu-26.04
@@ -539,6 +543,8 @@ jobs:
       SOURCE_APP_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers
       RESTORED_URL: postgres://exchange:exchange@127.0.0.1:5432/yuppers_restored
       RESTORED_APP_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers_restored
+      REPLAYED_URL: postgres://exchange:exchange@127.0.0.1:5432/yuppers_replayed
+      REPLAYED_APP_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers_replayed
       APP_SECRET: ci-only-secret-for-the-backup-check-0123456789
     services:
       postgres:
@@ -592,7 +598,7 @@ jobs:
 
       - name: Build the backend
         working-directory: backend
-        run: cargo build --locked --bin api --bin worker --bin migrate
+        run: cargo build --locked --bin api --bin worker --bin migrate --bin replay-deletions
 
       - name: Apply the migrations
         run: MIGRATION_DATABASE_URL="$SOURCE_URL" backend/target/debug/migrate
@@ -626,7 +632,11 @@ jobs:
           sleep 2
 
       - name: Back up
-        run: scripts/backup.sh -d "$SOURCE_URL" .backup/yuppers.dump
+        run: |
+          scripts/backup.sh -d "$SOURCE_URL" .backup/yuppers.dump
+          # The deletion log beside it, readable by this user alone.
+          test "$(stat -c %a .backup/yuppers.dump.deletions)" = 600
+          head -n 1 .backup/yuppers.dump.deletions | grep --quiet '^# Yuppers deletion log'
 
       - name: An existing backup is not replaced without --force
         run: |
@@ -636,6 +646,14 @@ jobs:
             exit 1
           fi
           [ "$(cksum < .backup/yuppers.dump)" = "$before" ]
+          # Nor its deletion log, even where no backup has that name.
+          cp .backup/yuppers.dump.deletions .backup/other.dump.deletions
+          if scripts/backup.sh -d "$SOURCE_URL" .backup/other.dump; then
+            echo "::error::backup.sh replaced an existing deletion log without --force"
+            exit 1
+          fi
+          test ! -e .backup/other.dump
+          rm .backup/other.dump.deletions
           scripts/backup.sh --force -d "$SOURCE_URL" .backup/yuppers.dump
           if ls -A .backup | grep --quiet partial; then
             echo "::error::backup.sh left a partial file behind"
@@ -662,7 +680,125 @@ jobs:
           scripts/restore.sh --overwrite -d "$RESTORED_URL" .backup/yuppers.dump
           scripts/check-restore.sh "$SOURCE_URL" "$RESTORED_URL"
 
-      # backend/tests/schema.rs against the copy: the application role can
+      # From here the source stands for the live database, and changes after
+      # the backup: one person deletes their account through the API, with
+      # codes read from the log, as they would from the app. Someone with a
+      # live session, and not the initiator of the agreement that the record
+      # check below reads back.
+      - name: Delete an account through the API, after the backup
+        env:
+          DATABASE_URL: ${{ env.SOURCE_APP_URL }}
+          BIND_ADDR: 127.0.0.1:8090
+          WEB_ORIGIN: http://127.0.0.1:8090
+          CODE_DELIVERY: log
+          NOTIFICATION_DELIVERY: log
+          # The load check's sign-ins came from this machine too.
+          SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR: "1000000"
+          NO_COLOR: "1"
+        run: |
+          set -o pipefail
+          read -r id email < <("$PSQL" --no-psqlrc -At -F ' ' -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "
+            SELECT a.id, a.email FROM account a
+            WHERE a.status = 'ACTIVE' AND a.email IS NOT NULL
+              AND EXISTS (SELECT 1 FROM account_session s WHERE s.account_id = a.id)
+              AND a.id <> (SELECT created_by FROM exchange WHERE in_force_revision_id IS NOT NULL
+                           ORDER BY created_at, id LIMIT 1)
+            ORDER BY a.created_at DESC, a.id DESC LIMIT 1")
+          test -n "$id"
+          echo "DELETED_ID=$id" >> "$GITHUB_ENV"
+          echo "DELETED_EMAIL=$email" >> "$GITHUB_ENV"
+          backend/target/debug/api > .backup/api-delete.log 2>&1 &
+          echo $! > .backup/api.pid
+          for _ in $(seq 1 30); do
+            if curl --silent --fail --output /dev/null http://127.0.0.1:8090/readyz; then break; fi
+            sleep 1
+          done
+          code_for() {
+            for _ in $(seq 1 20); do
+              code=$(grep "one-time code" .backup/api-delete.log | grep -F "to=\"$email\"" \
+                | grep -F "purpose=\"$1\"" | sed -E 's/.* code="([0-9]+)".*/\1/' | tail -n 1)
+              if [ -n "$code" ]; then echo "$code"; return; fi
+              sleep 0.5
+            done
+            echo "::error::no $1 code for $email in the log" >&2
+            return 1
+          }
+          api() {
+            curl --silent --show-error --fail-with-body -H 'x-client-version: web/0.0.0' \
+              -H 'content-type: application/json' "$@"
+          }
+          base=http://127.0.0.1:8090/v1
+          api -X POST "$base/auth/codes" -d "{\"identifier\":\"$email\"}"
+          code=$(code_for sign-in)
+          token=$(api -X POST "$base/auth/sessions" \
+            -d "{\"identifier\":\"$email\",\"code\":\"$code\",\"delivery\":\"TOKEN\",\"language\":\"en\"}" \
+            | jq -r .token)
+          printf 'Authorization: Bearer %s\n' "$token" > .backup/authorization
+          api -H @.backup/authorization -X POST "$base/me/deletion/codes" -d '{"channel":"EMAIL"}'
+          code=$(code_for delete-account)
+          api -H @.backup/authorization -X POST "$base/me/deletion" \
+            -d "{\"channel\":\"EMAIL\",\"code\":\"$code\"}"
+          rm .backup/authorization
+          kill -TERM "$(cat .backup/api.pid)"
+          sleep 2
+          test "$("$PSQL" --no-psqlrc -At "$SOURCE_URL" -c "SELECT status FROM account WHERE id = '$id'")" = DELETED
+          test "$("$PSQL" --no-psqlrc -At "$SOURCE_URL" -c "SELECT count(*) FROM deletion_log WHERE account_id = '$id'")" = 1
+
+      # The newest backup's deletion log is what a restore of any older one
+      # replays (docs/operations.md, "Restoring"). The live database's own
+      # log, exported before restoring, says the same.
+      - name: A newer backup, and the live deletion log
+        run: |
+          scripts/backup.sh -d "$SOURCE_URL" .backup/newer.dump
+          scripts/export-deletions.sh -d "$SOURCE_URL" .backup/live.deletions
+          grep --quiet "^$DELETED_ID	" .backup/newer.dump.deletions
+          if grep --quiet "^$DELETED_ID	" .backup/yuppers.dump.deletions; then
+            echo "::error::the earlier backup's log already holds the deletion"
+            exit 1
+          fi
+          diff <(grep -v '^#' .backup/newer.dump.deletions) <(grep -v '^#' .backup/live.deletions)
+
+      - name: Restoring the earlier backup brings the account back
+        run: |
+          "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "CREATE DATABASE yuppers_replayed OWNER exchange"
+          scripts/restore.sh -d "$REPLAYED_URL" .backup/yuppers.dump
+          read -r status has_email sessions < <("$PSQL" --no-psqlrc -At -F ' ' -v ON_ERROR_STOP=1 "$REPLAYED_URL" -c "
+            SELECT status, email IS NOT NULL,
+                   (SELECT count(*) FROM account_session WHERE account_id = a.id)
+            FROM account a WHERE id = '$DELETED_ID'")
+          echo "restored: $status, has an email: $has_email, $sessions sessions"
+          test "$status" = ACTIVE
+          test "$has_email" = t
+          test "$sessions" -gt 0
+
+      - name: Replaying the deletion log deletes it again
+        run: |
+          set -o pipefail
+          scripts/replay-deletions.sh -d "$REPLAYED_APP_URL" .backup/newer.dump.deletions | tee .backup/replay.out
+          grep --quiet "^$DELETED_ID: deleted again" .backup/replay.out
+          read -r status email sessions devices holders < <(printf '%s\n' "
+            SELECT status, coalesce(email, '-'),
+                   (SELECT count(*) FROM account_session WHERE account_id = a.id),
+                   (SELECT count(*) FROM device WHERE account_id = a.id),
+                   (SELECT count(*) FROM account WHERE email = :'email')
+            FROM account a WHERE id = :'id'" \
+            | "$PSQL" --no-psqlrc -At -F ' ' -v ON_ERROR_STOP=1 -v id="$DELETED_ID" \
+                -v email="$DELETED_EMAIL" "$REPLAYED_URL" -f -)
+          echo "replayed: $status, email $email, $sessions sessions, $devices devices, $holders accounts with the address"
+          test "$status" = DELETED
+          test "$email" = -
+          test "$sessions" = 0
+          test "$devices" = 0
+          test "$holders" = 0
+          # The log keeps the time it first happened.
+          logged="SELECT deleted_at FROM deletion_log WHERE account_id = '$DELETED_ID'"
+          test "$("$PSQL" --no-psqlrc -At "$SOURCE_URL" -c "$logged")" = "$("$PSQL" --no-psqlrc -At "$REPLAYED_URL" -c "$logged")"
+          # Again: nothing is left to do, and nothing is done.
+          scripts/replay-deletions.sh -d "$REPLAYED_APP_URL" .backup/newer.dump.deletions | tee .backup/replay.out
+          grep --quiet "^$DELETED_ID: already deleted" .backup/replay.out
+          grep --quiet "^0 deleted again" .backup/replay.out
+
+      # backend/tests/schema.rs against the copies: the application role can
       # record an agreement and cannot rewrite history, and nor can the
       # owner. Each test rolls back what it writes.
       - name: Schema test against the copy
@@ -672,10 +808,20 @@ jobs:
           DATABASE_URL: ${{ env.RESTORED_APP_URL }}
         run: cargo test --locked --test schema
 
+      - name: Schema test against the replayed copy
+        working-directory: backend
+        env:
+          MIGRATION_DATABASE_URL: ${{ env.REPLAYED_URL }}
+          DATABASE_URL: ${{ env.REPLAYED_APP_URL }}
+        run: cargo test --locked --test schema
+
       - name: A signed agreement reads back from the copy
         run: scripts/check-restored-record.sh "$RESTORED_URL" "$RESTORED_APP_URL" "$SOURCE_URL"
+
+      - name: A signed agreement reads back from the replayed copy
+        run: scripts/check-restored-record.sh "$REPLAYED_URL" "$REPLAYED_APP_URL" "$SOURCE_URL"
 
       - name: Logs
         if: ${{ failure() }}
         run: |
-          tail -n 100 .backup/api.log .backup/worker.log || true
+          tail -n 100 .backup/api.log .backup/worker.log .backup/api-delete.log || true

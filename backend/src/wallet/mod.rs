@@ -81,12 +81,14 @@ impl WalletPlatform {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum StatusOnFace {
     /// How the agreement stands: *Waiting for you*, *Disputed*, *Overdue*,
-    /// *Due soon* or *In force*, and the next due date. The default.
-    #[default]
+    /// *Due soon* or *In force*, and the next due date. A deployment
+    /// setting for now; a per-person opt-in is planned (docs/wallet.md).
     Detailed,
     /// *In force* for every agreement in force, and no next due date, so
     /// nothing on the face says that anything is pressing (DESIGN.md §11
-    /// makes status on the lock screen opt-in).
+    /// makes status on the lock screen opt-in). The default (DESIGN.md §11,
+    /// the owner's decision of 3 October 2026).
+    #[default]
     Neutral,
 }
 
