@@ -39,7 +39,7 @@ describe('“Something isn’t working”', () => {
     const text = guide(t.open).textContent!
     // The payment Ben owes can be waived; ending together or alone are offered too.
     expect(text).toContain('Waiving releases Ben Ortiz from that one item, for good.')
-    expect(text).toContain('If Ben Ortiz agrees, the exchange ends')
+    expect(text).toContain('If Ben Ortiz agrees, the agreement ends')
     expect(text).toContain('Nobody is released. Ben Ortiz gets time to respond')
     expect(guide(t.open).querySelector('.written')?.textContent).toBe('Payment for the repair')
   })

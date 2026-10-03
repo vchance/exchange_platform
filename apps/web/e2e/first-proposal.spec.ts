@@ -121,8 +121,8 @@ async function checkRecord(reader: Person): Promise<void> {
   const { page } = reader
   await page.getByRole('link', { name: en.record.open }).click()
   const heading = page.getByRole('heading', { level: 1 })
-  await expect(heading).toHaveText(/^Record of exchange \S+$/)
-  const code = (await heading.textContent())!.replace('Record of exchange ', '')
+  await expect(heading).toHaveText(/^Record \S+$/)
+  const code = (await heading.textContent())!.replace('Record ', '')
   await expect(page.getByText(BICYCLE, { exact: true }).first()).toBeVisible()
   await expect(page.getByText(en.record.versionStatus.IN_FORCE)).toBeVisible()
 

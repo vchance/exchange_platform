@@ -18,7 +18,7 @@ export function loadWording(language: Language): Promise<Wording> {
   return files[path]()
 }
 
-const CHOICE = 'exchange.language'
+const CHOICE = 'yuppers.language'
 
 /**
  * The language to show before anyone has signed in: the one chosen in the

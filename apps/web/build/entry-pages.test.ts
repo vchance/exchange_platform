@@ -64,7 +64,7 @@ test('a language added to the wording gets its page with no change here', () => 
       { code: 'ar', direction: 'rtl' },
     ],
     (code) => ({
-      productName: 'Exchange',
+      productName: 'Yuppers',
       tagline: `tagline ${code}`,
       linkPreview: { title: `title ${code}`, description: `description ${code}` },
     }),

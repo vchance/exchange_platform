@@ -43,7 +43,7 @@ test('a deleted account is signed out, and the other party keeps the exchange an
   ).toBeVisible()
   await expect(agreedItem(ana.page, TABLE)).toBeVisible()
   await ana.page.getByRole('link', { name: en.record.open }).click()
-  await expect(ana.page.getByRole('heading', { level: 1 })).toHaveText(/^Record of exchange /)
+  await expect(ana.page.getByRole('heading', { level: 1 })).toHaveText(/^Record /)
   await expect(ana.page.getByText(TABLE, { exact: true }).first()).toBeVisible()
   await expect(
     ana.page.getByText(new RegExp(`^${fill(en.record.versionSignedBy, { name: bruno.name, date: '.+' })}$`)),
