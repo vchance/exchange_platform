@@ -1267,11 +1267,12 @@ async fn answers_about(
     answers
 }
 
-/// The property that closes DESIGN.md §18 item 13a: whatever the person
-/// blocked asks about a link from the person who blocked them, signed in or
-/// signed out, is answered exactly as the same question about a made-up
-/// link. Signed out, nobody learns anything about any link; signed in, a
-/// block between the two looks like a dead link everywhere.
+/// The property behind DESIGN.md §18 item 13a: whatever the person blocked
+/// asks about a link from the person who blocked them, signed in or signed
+/// out, is answered exactly as the same question about a made-up link.
+/// Signed out, nobody learns anything about any link; signed in, a block
+/// between the two looks like a dead link everywhere. (A second account is
+/// someone else to the service; README, "Reading an invitation".)
 #[tokio::test]
 async fn a_blocked_person_gets_the_made_up_links_answers_about_the_blockers_links() {
     let app = app().await;

@@ -159,7 +159,7 @@
             "Unblocking doesn’t bring back anything the block ended."
           ]
         },
-        { "p": "Nothing we show tells them that you blocked them. An invitation link from you stops working for them the same way a used or expired link does, whether or not they are signed in. They may still guess from what happens between you." },
+        { "p": "Nothing we show tells them that you blocked them: an invitation link from you stops working for them the same way a used or expired link does. Someone set on finding out could still work it out, for example with a second account." },
         { "p": "Your blocks are listed on your account page, under “People you’ve blocked”, where you can lift them." },
         { "h": "Reporting" },
         { "p": "Report a yup or a proposal if something is wrong, such as harassment, a scam, something illegal, someone pretending to be someone else, or someone under 18. The person you report isn’t told. A report changes nothing in the yup itself; block the person as well if you want to stop dealing with them." }

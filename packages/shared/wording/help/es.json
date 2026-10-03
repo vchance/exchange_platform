@@ -159,7 +159,7 @@
             "Desbloquear no recupera nada de lo que terminó con el bloqueo."
           ]
         },
-        { "p": "Nada de lo que mostramos le dice que la bloqueaste. Un enlace de invitación tuyo deja de funcionarle igual que un enlace ya usado o vencido, haya iniciado sesión o no. Aun así, podría suponerlo por lo que pase entre ustedes." },
+        { "p": "Nada de lo que mostramos le dice que la bloqueaste: un enlace de invitación tuyo deja de funcionarle igual que un enlace ya usado o vencido. Aun así, alguien decidido a averiguarlo podría lograrlo, por ejemplo con una segunda cuenta." },
         { "p": "Tus bloqueos aparecen en la página de tu cuenta, en “Personas que bloqueaste”, donde puedes quitarlos." },
         { "h": "Denunciar" },
         { "p": "Denuncia un yup o una propuesta si algo está mal, como acoso, una estafa, algo ilegal, alguien que se hace pasar por otra persona o alguien menor de 18 años. A la persona denunciada no se le avisa. Una denuncia no cambia nada en el yup; bloquea también a la persona si quieres dejar de tratar con ella." }
