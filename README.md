@@ -149,6 +149,8 @@ The workflow names the Rust and Node versions it uses; raise them there when the
 
 [`.github/workflows/audit.yml`](.github/workflows/audit.yml) checks the locked dependencies against the published advisories every Monday and whenever it is started by hand (Actions, "Dependency audit", "Run workflow"): `npm audit --audit-level=high` and `cargo audit`. It fails on high or critical only, and never runs on a push or a pull request, since a new advisory says nothing about the change in front of you. An npm advisory that has been looked at and accepted is named in the workflow, so it does not fail every week; each is below, and comes off the list when its fix lands.
 
+The base images in the `Dockerfile`, the PostgreSQL service image in the workflows and every action are pinned by digest or commit, with the tag or version beside it. [`.github/dependabot.yml`](.github/dependabot.yml) proposes newer digests every week, as pull requests that CI checks like any other.
+
 What remains, as of October 2026. Every package here is already at the newest version its dependents allow; npm's suggested fix for the Expo ones is a downgrade to Expo 44, which is not one. The Rust side has nothing open.
 
 | Package | Issue | Where it runs | Why it stays |

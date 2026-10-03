@@ -1,7 +1,8 @@
-# What the image build never needs. Secrets and local state first.
-.env
-.env.*
-!.env.example
+# What the image build never needs. Secrets and local state first, in any
+# directory: an app's own .env is as secret as the root one.
+**/.env
+**/.env.*
+!**/.env.example
 .git
 .github
 .claude

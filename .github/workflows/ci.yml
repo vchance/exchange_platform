@@ -37,7 +37,7 @@ jobs:
       # `exchange` is a superuser here, so it may create the throwaway
       # databases the API tests use.
       postgres:
-        image: postgres:17
+        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange
@@ -191,6 +191,10 @@ jobs:
           curl --silent --fail http://127.0.0.1:8080/en/i | grep --quiet 'lang="en"'
           curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^x-frame-options: DENY'
           curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^cache-control: no-cache'
+          curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet "^content-security-policy: default-src 'self'"
+          curl --silent --fail --head http://127.0.0.1:8080/v1/meta | grep --ignore-case --quiet '^cache-control: no-store'
+          # Never a redirect to //assets/, which a browser reads as another host.
+          check '200' '%{http_code}' --path-as-is http://127.0.0.1:8080//assets
           asset="$(curl --silent --fail http://127.0.0.1:8080/ | grep --only-matching '/assets/[^"]*\.js' | head -1)"
           test -n "$asset"
           curl --silent --fail --head "http://127.0.0.1:8080$asset" | grep --ignore-case --quiet '^cache-control: public, max-age=31536000, immutable'
@@ -226,7 +230,7 @@ jobs:
       E2E_API_LOG: ${{ github.workspace }}/apps/web/e2e/.output/api.log
     services:
       postgres:
-        image: postgres:17
+        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange

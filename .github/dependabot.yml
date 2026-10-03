@@ -1,0 +1,24 @@
+# Keeps the pinned digests current. The base images in the Dockerfile, the
+# PostgreSQL service image in the workflows and every action they use are
+# pinned by digest or commit, with the tag or version beside it. Each week
+# Dependabot opens a pull request for any that has a newer build, and CI
+# checks it like any other change.
+version: 2
+updates:
+  # The Dockerfile's base images, and its syntax frontend.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  # The `image:` lines of the workflows' service containers.
+  - package-ecosystem: docker
+    directory: /.github/workflows
+    schedule:
+      interval: weekly
+
+  # The actions the workflows use, pinned by commit.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
