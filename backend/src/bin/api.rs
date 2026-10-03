@@ -6,11 +6,13 @@ use exchange_backend::auth::AuthRules;
 use exchange_backend::config::ApiConfig;
 use exchange_backend::domain::Rules;
 use exchange_backend::http::{self, AppState, Settings, WebApp};
+use exchange_backend::metrics::{self, HttpMetrics, Text};
+use exchange_backend::notifications::outbox::DeliveryRules;
 use exchange_backend::{db, shutdown, telemetry};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    telemetry::init();
+    telemetry::init()?;
     let config = ApiConfig::from_env()?;
 
     let state = AppState {
@@ -27,6 +29,7 @@ async fn main() -> anyhow::Result<()> {
             min_client_versions: config.min_client_versions,
         }),
         code_sender: config.code_sender,
+        metrics: Arc::new(HttpMetrics::default()),
     };
 
     let web = match &config.web_dir {
@@ -42,6 +45,23 @@ async fn main() -> anyhow::Result<()> {
         }
         None => None,
     };
+
+    // On a listener of its own, and only when asked for (docs/operations.md).
+    if let Some(addr) = config.metrics_addr {
+        let (requests, db) = (state.metrics.clone(), state.db.clone());
+        let max_attempts = DeliveryRules::default().max_attempts;
+        metrics::serve(addr, move || {
+            let (requests, db) = (requests.clone(), db.clone());
+            async move {
+                let mut text = Text::new();
+                requests.render(&mut text);
+                metrics::render_pool(&mut text, &db);
+                metrics::render_outbox(&mut text, &db, max_attempts).await;
+                text.finish()
+            }
+        })
+        .await?;
+    }
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     tracing::info!(addr = %config.bind_addr, "api listening");

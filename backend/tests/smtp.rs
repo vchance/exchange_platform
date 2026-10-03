@@ -19,11 +19,13 @@ use exchange_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_d
 use exchange_backend::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
 use exchange_backend::notifications::wording::{Links, Wording};
 use exchange_backend::notifications::{Email, EmailSender};
+use exchange_backend::telemetry::{self, LogFormat};
 use mail_parser::MessageParser;
 use time::OffsetDateTime;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::MutexGuard;
+use tracing_subscriber::EnvFilter;
 
 const DATABASE: &str = "exchange_test_smtp";
 const WEB_ORIGIN: &str = "https://app.test";
@@ -68,6 +70,9 @@ enum Behavior {
     Serve,
     /// Accepts the connection and never says a word.
     Hang,
+    /// Speaks SMTP and refuses every recipient, quoting the address back
+    /// the way real servers do.
+    Reject,
 }
 
 struct Server {
@@ -90,7 +95,10 @@ impl Server {
                 tokio::spawn(async move {
                     match behavior {
                         Behavior::Serve => {
-                            let _ = converse(stream, store).await;
+                            let _ = converse(stream, store, false).await;
+                        }
+                        Behavior::Reject => {
+                            let _ = converse(stream, store, true).await;
                         }
                         Behavior::Hang => {
                             // Hold the connection open and silent.
@@ -123,7 +131,11 @@ fn angle(line: &str) -> String {
         .unwrap_or_default()
 }
 
-async fn converse(stream: TcpStream, store: Arc<Mutex<Vec<Received>>>) -> std::io::Result<()> {
+async fn converse(
+    stream: TcpStream,
+    store: Arc<Mutex<Vec<Received>>>,
+    reject: bool,
+) -> std::io::Result<()> {
     let (reader, mut writer) = stream.into_split();
     let mut lines = BufReader::new(reader).lines();
     writer.write_all(b"220 test.invalid ESMTP\r\n").await?;
@@ -139,6 +151,11 @@ async fn converse(stream: TcpStream, store: Arc<Mutex<Vec<Received>>>) -> std::i
         } else if upper.starts_with("MAIL FROM:") {
             current.from = angle(&line);
             b"250 ok\r\n"
+        } else if upper.starts_with("RCPT TO:") && reject {
+            let to = angle(&line);
+            let reply = format!("550 5.1.1 <{to}>: Recipient address rejected: {to} unknown\r\n");
+            writer.write_all(reply.as_bytes()).await?;
+            continue;
         } else if upper.starts_with("RCPT TO:") {
             current.to.push(angle(&line));
             b"250 ok\r\n"
@@ -207,7 +224,11 @@ fn email(to: &str, reference: i64) -> Email {
 
 /// The guard keeps the other outbox tests waiting until this one is done.
 async fn app() -> (App, MutexGuard<'static, ()>) {
-    let turn = TURN.lock().await;
+    app_in_turn(TURN.lock().await).await
+}
+
+/// [`app`], for a test that already has its turn.
+async fn app_in_turn(turn: MutexGuard<'static, ()>) -> (App, MutexGuard<'static, ()>) {
     let app = App::start(DATABASE).await;
     sqlx::query("DELETE FROM outbox")
         .execute(&app.db)
@@ -345,6 +366,10 @@ async fn a_notification_arrives_as_a_message_in_the_recipients_language() {
 
 #[tokio::test]
 async fn the_tls_mode_is_honored() {
+    // Every test here takes turns: one of them reads back what is logged,
+    // and a log subscriber set for one test's thread misses events while
+    // other threads are registering the same call sites.
+    let _turn = TURN.lock().await;
     let server = Server::start(Behavior::Serve).await;
     let to = "someone@example.test";
 
@@ -440,6 +465,7 @@ async fn a_send_that_hangs_is_cut_off_by_the_delivery_timeout() {
 
 #[tokio::test]
 async fn a_one_time_code_goes_by_email_in_the_language_asked_for_and_not_by_sms() {
+    let _turn = TURN.lock().await;
     let server = Server::start(Behavior::Serve).await;
     let sender = sender(server.addr, TlsMode::None);
     let wording = Wording::embedded().unwrap();
@@ -524,4 +550,82 @@ fn base64(text: &str) -> String {
         }
     }
     out
+}
+
+/// Everything logged, as bytes.
+#[derive(Clone, Default)]
+struct Log(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Log {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn a_refused_recipient_leaves_no_part_of_their_address_in_the_outbox_or_the_log() {
+    let turn = TURN.lock().await;
+    let log = Log::default();
+    let writer = log.clone();
+    let subscriber =
+        telemetry::subscriber(LogFormat::Text, EnvFilter::new("trace"), false, move || {
+            writer.clone()
+        });
+    // A test runs on one thread, so this holds for everything it does.
+    let _guard = tracing::subscriber::set_default(subscriber);
+
+    let (app, _turn) = app_in_turn(turn).await;
+    let deal = app.active().await;
+    let server = Server::start(Behavior::Reject).await;
+    let sender = sender(server.addr, TlsMode::None);
+
+    let delivered = deliver_due(
+        &app.db,
+        &delivery(sender.clone(), DeliveryRules::default()),
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .unwrap();
+    assert_eq!((delivered.sent, delivered.failed), (0, 4));
+
+    // A one-time code refused the same way.
+    let code_error = CodeSender::send(
+        &*sender,
+        CodeMessage {
+            to: &Identifier::parse(&deal.ana.email).unwrap(),
+            code: "123456",
+            purpose: Purpose::SignIn,
+            language: "en",
+        },
+    )
+    .await
+    .unwrap_err();
+    let code_error = format!("{code_error:#}");
+    assert!(code_error.contains("reply code 550"), "{code_error}");
+
+    let errors: Vec<String> = outbox(&app)
+        .await
+        .into_iter()
+        .map(|(_, error)| error.expect("the failure is recorded"))
+        .collect();
+    let log = String::from_utf8(log.0.lock().unwrap().clone()).unwrap();
+    assert!(log.contains("reply code 550"), "{log}");
+    for error in &errors {
+        assert!(error.contains("reply code 550"), "{error}");
+    }
+    for person in [&deal.ana, &deal.ben] {
+        let (local, domain) = person.email.split_once('@').unwrap();
+        for part in [person.email.as_str(), local, domain] {
+            for error in &errors {
+                assert!(!error.contains(part), "{part} in {error}");
+            }
+            assert!(!code_error.contains(part), "{part} in {code_error}");
+            assert!(!log.contains(part), "{part} in the log:\n{log}");
+        }
+    }
 }

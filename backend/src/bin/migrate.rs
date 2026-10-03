@@ -7,7 +7,7 @@ use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    telemetry::init();
+    telemetry::init()?;
     dotenvy::dotenv().ok();
 
     let url = std::env::var("MIGRATION_DATABASE_URL")

@@ -1,23 +1,26 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::Router;
-use axum::extract::Request;
-use axum::http::HeaderValue;
+use axum::extract::{MatchedPath, Request, State};
 use axum::http::header::{
     CONTENT_SECURITY_POLICY, REFERRER_POLICY, STRICT_TRANSPORT_SECURITY, X_CONTENT_TYPE_OPTIONS,
     X_FRAME_OPTIONS,
 };
+use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::get;
 use sqlx::PgPool;
-use tower_http::trace::TraceLayer;
+use tracing::Instrument;
 use utoipa::OpenApi;
+use uuid::Uuid;
 
 use crate::auth::{AuthRules, CodeSender};
 use crate::client_version::{self, MinimumClientVersions};
 use crate::domain::Rules;
 use crate::error::{ErrorBody, ErrorCode};
+use crate::metrics::HttpMetrics;
 
 pub mod account;
 pub mod auth;
@@ -54,6 +57,8 @@ pub struct AppState {
     pub db: PgPool,
     pub settings: Arc<Settings>,
     pub code_sender: Arc<dyn CodeSender>,
+    /// Request counts and latencies, served when `METRICS_ADDR` is set.
+    pub metrics: Arc<HttpMetrics>,
 }
 
 /// The whole service: the API, and the web app if there is one to serve.
@@ -78,18 +83,76 @@ pub fn router(state: AppState, web: Option<WebApp>) -> Router {
     app.layer(middleware::from_fn(move |request, next| {
         security_headers(hsts, request, next)
     }))
-    .layer(TraceLayer::new_for_http().make_span_with(request_span))
+    // Added with `Router::layer`, so it runs once routing has picked a
+    // route, and the route's template is known.
+    .layer(middleware::from_fn_with_state(state.clone(), observe))
     .with_state(state)
 }
 
-/// The span a request is handled in. The path only: a query string could
-/// carry something a person typed, and never belongs in a log.
-fn request_span(request: &Request) -> tracing::Span {
-    tracing::info_span!(
+/// The header a request's ID travels in, both ways.
+pub const REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+
+/// The longest request ID taken from a client or proxy.
+const REQUEST_ID_MAX: usize = 64;
+
+/// The request's ID: the one a proxy or client sent in `X-Request-Id`, if it
+/// is short and harmless, otherwise a new one. Harmless means 1 to 64
+/// letters, digits, `-`, `_` or `.`: enough for a UUID or any proxy's own
+/// format, and nothing that could forge a log line or carry an email
+/// address.
+pub fn request_id(headers: &HeaderMap) -> String {
+    headers
+        .get(&REQUEST_ID)
+        .and_then(|value| value.to_str().ok())
+        .filter(|id| {
+            (1..=REQUEST_ID_MAX).contains(&id.len())
+                && id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        })
+        .map(str::to_owned)
+        .unwrap_or_else(|| Uuid::new_v4().to_string())
+}
+
+/// Gives each request an ID, handles it in a span that names it, writes one
+/// line when it is answered, and counts it.
+///
+/// The span holds the method, the path and the request ID, so every line
+/// logged while the request is handled carries them. The path only: a query
+/// string could carry something a person typed, and never belongs in a log.
+/// Nor does anything else from the request or the response: no body, no
+/// other header, no token, no cookie.
+async fn observe(State(state): State<AppState>, request: Request, next: Next) -> Response {
+    let started = Instant::now();
+    let id = request_id(request.headers());
+    let method = request.method().clone();
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|path| path.as_str().to_owned());
+    let span = tracing::info_span!(
         "request",
-        method = %request.method(),
+        method = %method,
         path = request.uri().path(),
-    )
+        request_id = %id,
+    );
+
+    let mut response = next.run(request).instrument(span.clone()).await;
+
+    let elapsed = started.elapsed();
+    let status = response.status();
+    state
+        .metrics
+        .observe(&method, route.as_deref(), status, elapsed);
+    // To the microsecond: most requests take less than a millisecond.
+    let latency_ms = elapsed.as_micros() as f64 / 1000.0;
+    span.in_scope(|| {
+        tracing::info!(status = status.as_u16(), latency_ms, "request completed");
+    });
+    if let Ok(value) = HeaderValue::from_str(&id) {
+        response.headers_mut().insert(REQUEST_ID, value);
+    }
+    response
 }
 
 async fn security_headers(hsts: bool, request: Request, next: Next) -> Response {

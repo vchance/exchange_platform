@@ -161,6 +161,28 @@ impl From<sqlx::Error> for ApiError {
     }
 }
 
+/// A database error in the form that may be logged or stored: the same
+/// redaction as an API request's database error above. The server's
+/// message, which can quote a key value such as an email address, is left
+/// out; what names the failure (the SQLSTATE, the constraint and the table,
+/// or the kind of error) is kept. The worker logs its jobs' errors with it.
+pub struct Redacted<'a>(pub &'a sqlx::Error);
+
+impl std::fmt::Display for Redacted<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            sqlx::Error::Database(failure) => write!(
+                f,
+                "database error: sqlstate {}, constraint {}, table {}",
+                failure.code().as_deref().unwrap_or("?"),
+                failure.constraint().unwrap_or("-"),
+                failure.table().unwrap_or("-"),
+            ),
+            other => write!(f, "database error: {}", variant_name(other)),
+        }
+    }
+}
+
 /// The variant of an error, without its contents.
 fn variant_name(error: &sqlx::Error) -> &'static str {
     match error {

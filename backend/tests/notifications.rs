@@ -14,7 +14,9 @@ use axum::http::{Method, StatusCode};
 use common::{App, Deal, User, accept};
 use exchange_backend::auth::SendFuture;
 use exchange_backend::exchanges::service::run_timers;
-use exchange_backend::notifications::outbox::{Delivered, Delivery, DeliveryRules, deliver_due};
+use exchange_backend::notifications::outbox::{
+    Delivered, Delivery, DeliveryRules, deliver_due, deliver_due_until,
+};
 use exchange_backend::notifications::wording::Wording;
 use exchange_backend::notifications::{Email, EmailSender};
 use serde_json::{Value, json};
@@ -749,11 +751,17 @@ async fn a_failing_send_is_retried_with_longer_waits_and_then_given_up_on() {
         ..Delivered::default()
     };
     let start = soon();
-    let minutes = |n: i64| start + Duration::minutes(n);
     let state = || async {
         let (attempts, error, completed, available_at) = only_row(&app, &deal).await;
         assert!(!completed);
         (attempts, error, available_at)
+    };
+    // The wait is measured from when the send failed, which is a little
+    // after the pass started.
+    let waited = |from: OffsetDateTime, until: OffsetDateTime, minutes: i64| {
+        let wait = until - from;
+        wait >= Duration::minutes(minutes)
+            && wait < Duration::minutes(minutes) + Duration::seconds(5)
     };
 
     // The first try fails. The failure is recorded and the next try put off.
@@ -761,10 +769,10 @@ async fn a_failing_send_is_retried_with_longer_waits_and_then_given_up_on() {
         deliver_due(&app.db, &delivery, start).await.unwrap(),
         failed
     );
-    let (attempts, error, available_at) = state().await;
+    let (attempts, error, first_retry) = state().await;
     assert_eq!(attempts, 1);
     assert_eq!(error.as_deref(), Some("the provider is down"));
-    assert!(available_at > start + Duration::seconds(59) && available_at <= minutes(1));
+    assert!(waited(start, first_retry, 1), "{first_retry}");
 
     // Not before its time.
     let early = start + Duration::seconds(30);
@@ -778,14 +786,14 @@ async fn a_failing_send_is_retried_with_longer_waits_and_then_given_up_on() {
 
     // The second failure waits twice as long.
     assert_eq!(
-        deliver_due(&app.db, &delivery, minutes(1)).await.unwrap(),
+        deliver_due(&app.db, &delivery, first_retry).await.unwrap(),
         failed
     );
-    let (attempts, _, available_at) = state().await;
+    let (attempts, _, second_retry) = state().await;
     assert_eq!(attempts, 2);
-    assert!(available_at > minutes(2) && available_at <= minutes(3));
+    assert!(waited(first_retry, second_retry, 2), "{second_retry}");
     assert!(
-        deliver_due(&app.db, &delivery, minutes(2))
+        deliver_due(&app.db, &delivery, first_retry + Duration::minutes(1))
             .await
             .unwrap()
             .is_empty()
@@ -793,7 +801,7 @@ async fn a_failing_send_is_retried_with_longer_waits_and_then_given_up_on() {
 
     // The third is the last.
     assert_eq!(
-        deliver_due(&app.db, &delivery, minutes(3)).await.unwrap(),
+        deliver_due(&app.db, &delivery, second_retry).await.unwrap(),
         Delivered {
             failed: 1,
             given_up: 1,
@@ -831,7 +839,8 @@ async fn a_send_that_fails_and_then_works_is_delivered_once() {
         deliver_due(&app.db, &delivery, start).await.unwrap().failed,
         1
     );
-    let retry = start + Duration::minutes(1);
+    // The wait runs from when the send failed, a moment after `start`.
+    let retry = start + Duration::minutes(1) + Duration::seconds(5);
     assert_eq!(
         deliver_due(&app.db, &delivery, retry).await.unwrap().sent,
         1
@@ -865,4 +874,78 @@ async fn a_provider_that_does_not_answer_counts_as_a_failed_send() {
     assert_eq!((attempts, completed), (1, false));
     assert!(error.unwrap().starts_with("no answer within"));
     assert_eq!(provider.sent(), []);
+}
+
+#[tokio::test]
+async fn a_pass_takes_no_new_message_once_its_time_budget_is_spent() {
+    let (app, _turn) = app().await;
+    for _ in 0..2 {
+        app.active().await;
+    }
+    let queued = 8;
+
+    // Each send takes 100 ms and the pass may take new messages for 250 ms:
+    // it takes three, finishing the one under way, and leaves the rest.
+    let provider = Arc::new(Provider::slow(std::time::Duration::from_millis(100)));
+    let rules = DeliveryRules {
+        batch_budget: std::time::Duration::from_millis(250),
+        ..DeliveryRules::default()
+    };
+    let delivery = delivery(&provider, rules);
+    let first = deliver_due(&app.db, &delivery, soon()).await.unwrap();
+    assert!(first.cut_short, "{first:?}");
+    assert!((2..=4).contains(&first.sent), "{first:?}");
+
+    // The next pass goes on where it stopped.
+    let mut sent = first.sent;
+    while sent < queued {
+        let next = deliver_due(&app.db, &delivery, soon()).await.unwrap();
+        assert!(next.sent > 0, "{next:?}");
+        sent += next.sent;
+    }
+    assert_eq!(provider.sent().len(), queued);
+}
+
+#[tokio::test]
+async fn a_pass_stops_between_messages_when_the_worker_is_stopping() {
+    let (app, _turn) = app().await;
+    app.active().await;
+
+    let provider = Arc::new(Provider::default());
+    let delivery = delivery(&provider, DeliveryRules::default());
+    // Asked to stop once the first message is on its way.
+    let delivered = deliver_due_until(&app.db, &delivery, soon(), || provider.attempts() >= 1)
+        .await
+        .unwrap();
+    assert_eq!((delivered.sent, delivered.cut_short), (1, true));
+    assert_eq!(provider.sent().len(), 1);
+}
+
+#[tokio::test]
+async fn a_retry_waits_from_when_the_send_failed_not_from_when_the_pass_began() {
+    let (app, _turn) = app().await;
+    let deal = active(&app).await;
+    app.act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
+        .await
+        .ok();
+
+    // A send that takes a second and then fails.
+    let provider = Arc::new(Provider {
+        failures: AtomicUsize::new(usize::MAX),
+        delay: Some(std::time::Duration::from_secs(1)),
+        ..Provider::default()
+    });
+    let delivery = delivery(&provider, DeliveryRules::default());
+    let start = soon();
+    assert_eq!(
+        deliver_due(&app.db, &delivery, start).await.unwrap().failed,
+        1
+    );
+    let (_, _, _, available_at) = only_row(&app, &deal).await;
+    let wait = available_at - start;
+    assert!(
+        wait >= Duration::minutes(1) + Duration::seconds(1)
+            && wait < Duration::minutes(1) + Duration::seconds(5),
+        "{wait}"
+    );
 }

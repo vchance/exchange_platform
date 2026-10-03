@@ -24,6 +24,7 @@ use super::repo;
 use crate::domain::Rules;
 use crate::domain::reminder::{self, Kind, Reminded, Reminder};
 use crate::domain::revision::ContributionId;
+use crate::error::Redacted;
 use crate::notifications::outbox;
 
 /// The date it is at `at` in a timezone.
@@ -88,7 +89,7 @@ pub async fn run_reminders(
         let (today, exchanges) = match shortlist(db, rules, &timezone, at).await {
             Ok(found) => found,
             Err(error) => {
-                tracing::error!(%error, timezone, "reminders failed for one timezone");
+                tracing::error!(error = %Redacted(&error), timezone, "reminders failed for one timezone");
                 continue;
             }
         };
@@ -101,7 +102,7 @@ pub async fn run_reminders(
             match outcome {
                 Ok(Ok(count)) => recorded += count,
                 Ok(Err(error)) => {
-                    tracing::error!(%error, exchange = %id, "reminders failed for one exchange")
+                    tracing::error!(error = %Redacted(&error), exchange = %id, "reminders failed for one exchange")
                 }
                 Err(error) => {
                     tracing::error!(%error, exchange = %id, "reminders panicked for one exchange")

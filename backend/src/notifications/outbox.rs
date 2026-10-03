@@ -29,6 +29,7 @@ use super::{Email, EmailSender};
 use crate::domain::notification::Notice;
 use crate::domain::reminder;
 use crate::domain::revision::ContributionId;
+use crate::error::Redacted;
 use crate::exchanges::reminders;
 
 /// The numbers behind delivery. Placeholders: none of these is a recorded
@@ -46,6 +47,12 @@ pub struct DeliveryRules {
     /// Messages one pass delivers at most, so a backlog cannot keep the
     /// worker from its other jobs.
     pub batch: usize,
+    /// How long one pass may go on taking new messages. A slow or silent
+    /// server can make each send last up to `send_timeout`, and a whole
+    /// batch of those would hold up the timers and a request to stop for
+    /// most of an hour; once this is spent the pass takes no more and the
+    /// worker goes round again.
+    pub batch_budget: std::time::Duration,
 }
 
 impl Default for DeliveryRules {
@@ -56,6 +63,7 @@ impl Default for DeliveryRules {
             retry_ceiling: Duration::hours(1),
             send_timeout: std::time::Duration::from_secs(30),
             batch: 100,
+            batch_budget: std::time::Duration::from_secs(20),
         }
     }
 }
@@ -162,11 +170,15 @@ pub struct Delivered {
     /// Closed unsent: the recipient could no longer be emailed, or a
     /// reminder was no longer true.
     pub dropped: usize,
+    /// The pass stopped before its batch was done, because its time budget
+    /// was spent or the worker is stopping. More may be due.
+    pub cut_short: bool,
 }
 
 impl Delivered {
+    /// Nothing was taken.
     pub fn is_empty(&self) -> bool {
-        *self == Self::default()
+        self.handled() == 0
     }
 
     /// Messages the pass took: sent, failed or closed unsent.
@@ -185,27 +197,82 @@ enum Attempt {
 /// made before this one.
 type Claimed = (i64, Option<Uuid>, Option<Uuid>, Value, i32);
 
-/// Sends every email that is due at `at`, up to the batch size. Safe to run
-/// from several workers at once.
+/// Sends every email that is due at `at`, up to the batch size and within
+/// the batch's time budget. Safe to run from several workers at once.
 pub async fn deliver_due(
     db: &PgPool,
     delivery: &Delivery,
     at: OffsetDateTime,
 ) -> Result<Delivered, sqlx::Error> {
+    deliver_due_until(db, delivery, at, || false).await
+}
+
+/// [`deliver_due`], stopping between two messages once `stopping` says so:
+/// the worker's way of heeding a request to stop without waiting for the
+/// rest of a batch.
+///
+/// The clock runs on from `at` while the pass does: each message is taken,
+/// and a failed one put off, as of `at` plus the time the pass has taken so
+/// far, so a long pass does not shorten the wait before a retry.
+pub async fn deliver_due_until(
+    db: &PgPool,
+    delivery: &Delivery,
+    at: OffsetDateTime,
+    stopping: impl Fn() -> bool,
+) -> Result<Delivered, sqlx::Error> {
+    let started = std::time::Instant::now();
+    let clock = Clock { at, started };
     let mut delivered = Delivered::default();
     for _ in 0..delivery.rules.batch {
-        if !deliver_next(db, delivery, at, &mut delivered).await? {
+        if started.elapsed() >= delivery.rules.batch_budget || stopping() {
+            delivered.cut_short = true;
+            break;
+        }
+        if !deliver_next(db, delivery, &clock, &mut delivered).await? {
             break;
         }
     }
     Ok(delivered)
 }
 
+/// The time as a pass sees it: where it started, plus how long it has run.
+struct Clock {
+    at: OffsetDateTime,
+    started: std::time::Instant,
+}
+
+impl Clock {
+    fn now(&self) -> OffsetDateTime {
+        self.at + self.started.elapsed()
+    }
+}
+
+/// `text` with every occurrence of `address` replaced, ignoring case. An
+/// error from a sender may quote the recipient's address, and neither the
+/// log nor `last_error` may hold it; the outbox ID says who it was for.
+fn without_address(text: &str, address: &str) -> String {
+    if address.is_empty() {
+        return text.to_owned();
+    }
+    // ASCII lowercasing keeps every byte where it was, so the positions
+    // found in the lowered copy hold in the original.
+    let (lowered, needle) = (text.to_ascii_lowercase(), address.to_ascii_lowercase());
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (at, _) in lowered.match_indices(&needle) {
+        out.push_str(&text[last..at]);
+        out.push_str("[recipient]");
+        last = at + needle.len();
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
 /// Delivers one message, if any is due. Returns whether there was one.
 async fn deliver_next(
     db: &PgPool,
     delivery: &Delivery,
-    at: OffsetDateTime,
+    clock: &Clock,
     delivered: &mut Delivered,
 ) -> Result<bool, sqlx::Error> {
     let rules = &delivery.rules;
@@ -222,7 +289,7 @@ async fn deliver_next(
          LIMIT 1
          FOR UPDATE SKIP LOCKED",
     )
-    .bind(at)
+    .bind(clock.now())
     .bind(rules.max_attempts)
     .fetch_optional(&mut *tx)
     .await?;
@@ -236,17 +303,21 @@ async fn deliver_next(
         exchange,
         payload: &payload,
     };
-    let attempt = match prepare(&mut tx, delivery, row, at).await? {
+    let attempt = match prepare(&mut tx, delivery, row, clock.now()).await? {
         Ok(email) => {
             match tokio::time::timeout(rules.send_timeout, delivery.sender.send(&email)).await {
                 Ok(Ok(())) => Attempt::Sent,
-                Ok(Err(error)) => Attempt::Failed(format!("{error:#}")),
+                Ok(Err(error)) => {
+                    Attempt::Failed(without_address(&format!("{error:#}"), &email.to))
+                }
                 Err(_) => Attempt::Failed(format!("no answer within {:?}", rules.send_timeout)),
             }
         }
         Err(attempt) => attempt,
     };
 
+    // After the send, which may have taken many seconds.
+    let at = clock.now();
     match attempt {
         Attempt::Sent => {
             sqlx::query(
@@ -362,7 +433,8 @@ async fn prepare(
             Err(error) => {
                 check.rollback().await?;
                 return Ok(Err(Attempt::Failed(format!(
-                    "the reminder could not be checked: {error}"
+                    "the reminder could not be checked: {}",
+                    Redacted(&error)
                 ))));
             }
         }
@@ -385,6 +457,22 @@ async fn prepare(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_recipient_address_is_taken_out_of_an_error_whatever_its_case() {
+        assert_eq!(
+            without_address(
+                "550 5.1.1 <Ana.Lopez@Example.test> rejected: ana.lopez@example.test unknown",
+                "ana.lopez@example.test"
+            ),
+            "550 5.1.1 <[recipient]> rejected: [recipient] unknown"
+        );
+        assert_eq!(
+            without_address("no answer", "ana@example.test"),
+            "no answer"
+        );
+        assert_eq!(without_address("anything", ""), "anything");
+    }
 
     #[test]
     fn the_wait_doubles_with_each_failure_up_to_the_ceiling() {

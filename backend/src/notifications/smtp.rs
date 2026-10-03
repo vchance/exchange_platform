@@ -133,9 +133,13 @@ impl SmtpSender {
         body: &str,
         id: Option<String>,
     ) -> anyhow::Result<()> {
+        // No error here names the recipient or carries the server's text,
+        // which usually quotes the address (`550 5.1.1 <ana@...> unknown`):
+        // these errors are logged and stored in `outbox.last_error`. The
+        // caller knows which message, or which request, it was.
         let to: Address = to
             .parse()
-            .with_context(|| format!("{to:?} is not an address SMTP can deliver to"))?;
+            .map_err(|_| anyhow::anyhow!("the recipient is not an address SMTP can deliver to"))?;
         let message = Message::builder()
             .from(self.from.clone())
             .to(Mailbox::new(None, to))
@@ -143,12 +147,37 @@ impl SmtpSender {
             .message_id(id)
             .header(ContentType::TEXT_PLAIN)
             .body(body.to_owned())
-            .context("the message could not be built")?;
+            .map_err(|_| anyhow::anyhow!("the message could not be built"))?;
         self.transport
             .send(message)
             .await
-            .context("the SMTP server did not take the message")?;
+            .map_err(|error| anyhow::anyhow!(describe(&error)))?;
         Ok(())
+    }
+}
+
+/// Why a send failed, without anything the server said beyond its reply
+/// code, and without the underlying error's own text.
+pub fn describe(error: &lettre::transport::smtp::Error) -> String {
+    if let Some(code) = error.status() {
+        let kind = if error.is_permanent() {
+            "refused"
+        } else {
+            "turned away for now"
+        };
+        format!("the SMTP server {kind} the message (reply code {code})")
+    } else if error.is_timeout() {
+        "the SMTP server did not answer in time".to_owned()
+    } else if error.is_tls() {
+        "TLS with the SMTP server failed".to_owned()
+    } else if error.is_response() {
+        "the SMTP server's reply could not be understood".to_owned()
+    } else if error.is_client() {
+        // lettre's own fixed wording, such as "STARTTLS is not supported on
+        // this server", which never quotes the server or the message.
+        format!("the SMTP conversation failed on this side ({error})")
+    } else {
+        "the SMTP server could not be reached".to_owned()
     }
 }
 

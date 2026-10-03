@@ -23,7 +23,7 @@ use crate::domain::identity::Identifier;
 use crate::domain::invitation;
 use crate::domain::revision::{ContributionId, Revision, RevisionId, Slot};
 use crate::domain::risk::{Tier, required_tier};
-use crate::error::{ApiError, ErrorCode};
+use crate::error::{ApiError, ErrorCode, Redacted};
 use crate::http::Settings;
 use crate::http::extract::Session;
 use crate::languages;
@@ -1236,7 +1236,7 @@ pub async fn run_timers(
                 Ok(Ok(true)) => changed += 1,
                 Ok(Ok(false)) => {}
                 Ok(Err(error)) => {
-                    tracing::error!(%error, exchange = %id, "a timer failed for one exchange")
+                    tracing::error!(error = %Redacted(&error), exchange = %id, "a timer failed for one exchange")
                 }
                 Err(error) => {
                     tracing::error!(%error, exchange = %id, "a timer panicked for one exchange")

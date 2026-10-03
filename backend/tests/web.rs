@@ -74,6 +74,7 @@ fn service(web_origin: &str, web: Option<WebApp>) -> Router {
             min_client_versions: Default::default(),
         }),
         code_sender: Arc::new(LogSender),
+        metrics: Default::default(),
     };
     http::router(state, web)
 }

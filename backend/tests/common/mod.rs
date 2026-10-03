@@ -21,6 +21,7 @@ use exchange_backend::client_version::MinimumClientVersions;
 use exchange_backend::db;
 use exchange_backend::domain::Rules;
 use exchange_backend::http::{self, AppState, Settings, TrustedProxies};
+use exchange_backend::metrics::HttpMetrics;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -135,6 +136,8 @@ pub struct App {
     /// Connected as the schema owner, for looking at what was stored.
     pub owner: PgPool,
     pub rules: Rules,
+    /// What the router counted of the requests made through it.
+    pub metrics: Arc<HttpMetrics>,
 }
 
 impl App {
@@ -204,6 +207,7 @@ impl App {
     ) -> Self {
         let (owner_url, app_url) = database(database_name).await;
         let db = connect(app_url).await;
+        let metrics = Arc::new(HttpMetrics::default());
         let state = AppState {
             db: db.clone(),
             settings: Arc::new(Settings {
@@ -216,10 +220,12 @@ impl App {
                 min_client_versions,
             }),
             code_sender,
+            metrics: metrics.clone(),
         };
         Self {
             router: http::router(state, None),
             db,
+            metrics,
             owner: connect(owner_url).await,
             rules,
         }

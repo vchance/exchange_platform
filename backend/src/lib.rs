@@ -11,6 +11,7 @@ pub mod error;
 pub mod exchanges;
 pub mod http;
 pub mod languages;
+pub mod metrics;
 pub mod notifications;
 pub mod safety;
 pub mod shutdown;

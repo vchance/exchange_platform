@@ -141,6 +141,19 @@ fn trusted_proxies(get: Lookup<'_>) -> anyhow::Result<TrustedProxies> {
     }
 }
 
+/// Where to serve metrics, from `METRICS_ADDR`. Default none: no metrics
+/// listener at all. Never the public port: a listener of its own, which a
+/// deployment exposes only to whatever collects the metrics.
+fn metrics_addr(get: Lookup<'_>) -> anyhow::Result<Option<SocketAddr>> {
+    optional(get, "METRICS_ADDR")
+        .map(|value| {
+            value.trim().parse().with_context(|| {
+                format!("METRICS_ADDR={value} is not an address and port such as 0.0.0.0:9100")
+            })
+        })
+        .transpose()
+}
+
 /// Configuration for the `worker` process.
 pub struct WorkerConfig {
     /// The connection string for the restricted application role.
@@ -148,6 +161,8 @@ pub struct WorkerConfig {
     /// Notifications link into the web app.
     pub web_origin: String,
     pub email_sender: Arc<dyn EmailSender>,
+    /// Where to serve the worker's metrics, if anywhere.
+    pub metrics_addr: Option<SocketAddr>,
 }
 
 impl WorkerConfig {
@@ -158,6 +173,7 @@ impl WorkerConfig {
             database_url: required(get, "DATABASE_URL")?,
             web_origin: web_origin(get)?,
             email_sender: email_sender(get)?,
+            metrics_addr: metrics_addr(get)?,
         })
     }
 }
@@ -201,6 +217,8 @@ pub struct ApiConfig {
     pub web_dir: Option<PathBuf>,
     pub proxies: TrustedProxies,
     pub min_client_versions: MinimumClientVersions,
+    /// Where to serve the API's metrics, if anywhere. Never `bind_addr`.
+    pub metrics_addr: Option<SocketAddr>,
 }
 
 impl ApiConfig {
@@ -208,7 +226,7 @@ impl ApiConfig {
         load_env();
         let get: Lookup<'_> = &environment;
 
-        let bind_addr = get("BIND_ADDR")
+        let bind_addr: SocketAddr = get("BIND_ADDR")
             .unwrap_or_else(|| "127.0.0.1:8080".to_owned())
             .parse()
             .context("BIND_ADDR is not a valid socket address")?;
@@ -218,7 +236,13 @@ impl ApiConfig {
             bail!("APP_SECRET must be at least 32 bytes");
         }
 
+        let metrics_addr = metrics_addr(get)?;
+        if metrics_addr.is_some_and(|metrics| metrics.port() == bind_addr.port()) {
+            bail!("METRICS_ADDR must use a port of its own, not BIND_ADDR's");
+        }
+
         Ok(Self {
+            metrics_addr,
             database_url: required(get, "DATABASE_URL")?,
             bind_addr,
             app_secret,
@@ -354,6 +378,19 @@ mod tests {
         ] {
             assert!(trusted_proxies(&lookup(&wrong)).is_err(), "{wrong:?}");
         }
+    }
+
+    #[test]
+    fn metrics_are_off_unless_an_address_is_given() {
+        let read = |value: &str| metrics_addr(&lookup(&table(&[("METRICS_ADDR", value)])));
+        assert_eq!(metrics_addr(&lookup(&table(&[]))).unwrap(), None);
+        assert_eq!(read(" ").unwrap(), None);
+        assert_eq!(
+            read("0.0.0.0:9100").unwrap(),
+            Some("0.0.0.0:9100".parse().unwrap())
+        );
+        assert!(read("9100").is_err());
+        assert!(read("localhost:9100").is_err());
     }
 
     #[test]

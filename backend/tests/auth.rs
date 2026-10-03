@@ -118,6 +118,7 @@ impl App {
                 min_client_versions: Default::default(),
             }),
             code_sender: outbox.clone(),
+            metrics: Default::default(),
         };
 
         let app = Self {
