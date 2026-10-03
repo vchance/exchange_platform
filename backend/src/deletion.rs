@@ -61,6 +61,12 @@
 //! exchange above either closes at once or is on a timer that closes it
 //! (invariant 5), and while it is still open the exchange view tells them
 //! that the other party is no longer here (`ExchangeView::other_party_left`).
+//!
+//! **The deletion log.** The same transaction adds the account's ID and the
+//! time to `deletion_log` (migration 0015), and nothing else about it. A
+//! backup restored later would bring the account back; the log, exported
+//! beside every backup, is what lets `replay` delete it again, through this
+//! same code (docs/operations.md, "Restoring").
 
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
@@ -170,14 +176,80 @@ pub async fn delete_account_with_code(
     account: Uuid,
     code: &OfferedCode<'_>,
 ) -> Result<(), ApiError> {
-    retry(db, rules, account, Some(code)).await
+    retry(db, rules, account, Some(code), None).await
 }
 
 /// Deletes the account, for a caller that has confirmed it some other way.
 /// Deleting an account that is already deleted changes nothing and succeeds:
 /// that is what a repeat finds.
 pub async fn delete_account(db: &PgPool, rules: &Rules, account: Uuid) -> Result<(), ApiError> {
-    retry(db, rules, account, None).await
+    retry(db, rules, account, None, None).await
+}
+
+/// What `replay` found and did for one account.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Replayed {
+    /// It was live in this database, and is now deleted.
+    Deleted,
+    /// It was deleted here already. Its line in the log is there too.
+    AlreadyDeleted,
+    /// This database never held it: it was made after the backup.
+    NotHere,
+    /// It is suspended here, and a suspended account is not deleted
+    /// (`attempt`). Left as it is, for a person to look at.
+    Suspended,
+}
+
+/// Applies again, to a database restored from a backup, a deletion that the
+/// log says happened at `deleted_at` (`replay-deletions`, docs/operations.md,
+/// "Restoring"). It deletes through the same code as the person did, so
+/// every rule runs again: sessions end, identifiers go, exchanges are left
+/// through the rules. Its line in the log keeps the time it first happened.
+/// Replaying an account twice changes nothing the second time.
+pub async fn replay(
+    db: &PgPool,
+    rules: &Rules,
+    account: Uuid,
+    deleted_at: OffsetDateTime,
+) -> Result<Replayed, ApiError> {
+    let status: Option<String> = sqlx::query_scalar("SELECT status FROM account WHERE id = $1")
+        .bind(account)
+        .fetch_optional(db)
+        .await?;
+    match status.as_deref() {
+        None => Ok(Replayed::NotHere),
+        Some("SUSPENDED") => Ok(Replayed::Suspended),
+        Some("DELETED") => {
+            // Deleted before the backup, whose log already says so; a
+            // database older than the log may not.
+            log_deletion(db, account, Some(deleted_at)).await?;
+            Ok(Replayed::AlreadyDeleted)
+        }
+        Some(_) => {
+            retry(db, rules, account, None, Some(deleted_at)).await?;
+            Ok(Replayed::Deleted)
+        }
+    }
+}
+
+/// Adds the account to the deletion log, unless it is there already.
+async fn log_deletion<'c, E>(
+    conn: E,
+    account: Uuid,
+    deleted_at: Option<OffsetDateTime>,
+) -> Result<(), sqlx::Error>
+where
+    E: sqlx::PgExecutor<'c>,
+{
+    sqlx::query(
+        "INSERT INTO deletion_log (account_id, deleted_at) VALUES ($1, coalesce($2, now()))
+         ON CONFLICT (account_id) DO NOTHING",
+    )
+    .bind(account)
+    .bind(deleted_at)
+    .execute(conn)
+    .await?;
+    Ok(())
 }
 
 async fn retry(
@@ -185,10 +257,11 @@ async fn retry(
     rules: &Rules,
     account: Uuid,
     code: Option<&OfferedCode<'_>>,
+    logged_at: Option<OffsetDateTime>,
 ) -> Result<(), ApiError> {
     let mut wait = FIRST_WAIT;
     for _ in 0..ATTEMPTS {
-        match attempt(db, rules, account, code).await? {
+        match attempt(db, rules, account, code, logged_at).await? {
             Attempt::Done => return Ok(()),
             Attempt::Busy => {
                 tokio::time::sleep(wait).await;
@@ -199,11 +272,14 @@ async fn retry(
     Err(ErrorCode::ServiceUnavailable.into())
 }
 
+/// `logged_at` is the time for the deletion log: now, unless this replays a
+/// deletion that happened earlier.
 async fn attempt(
     db: &PgPool,
     rules: &Rules,
     account: Uuid,
     code: Option<&OfferedCode<'_>>,
+    logged_at: Option<OffsetDateTime>,
 ) -> Result<Attempt, ApiError> {
     let mut tx = db.begin().await?;
 
@@ -377,6 +453,8 @@ async fn attempt(
     .bind(languages::default())
     .execute(&mut *tx)
     .await?;
+    // Committed with the deletion or not at all.
+    log_deletion(&mut *tx, account, logged_at).await?;
 
     tx.commit().await?;
     Ok(Attempt::Done)

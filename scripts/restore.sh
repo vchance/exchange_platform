@@ -23,6 +23,9 @@
 # the tables. Every object belongs to the role that restores it, whatever its
 # name was where the backup was made.
 #
+# A restore brings back accounts deleted since the backup. Replay the
+# deletion log afterwards with scripts/replay-deletions.sh.
+#
 # The restore is one transaction: it either completes or leaves the database
 # as it was. Set PG_BIN to the directory holding pg_restore and psql if those
 # on the PATH are older than the server.
@@ -134,3 +137,7 @@ migrations=$(sql "SELECT count(*) || ' migrations, the latest ' || max(version)
 exchanges=$(sql "SELECT count(*) FROM exchange")
 events=$(sql "SELECT count(*) FROM exchange_event")
 echo "restored $file: $migrations; $exchanges exchanges, $events events"
+# Accounts deleted since the backup are live again in the copy until the
+# deletion log is replayed (docs/operations.md, "Restoring").
+echo "next: run migrate, then scripts/replay-deletions.sh with the newest deletion log," >&2
+echo "before the api and the worker start on this database" >&2

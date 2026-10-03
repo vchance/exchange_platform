@@ -18,6 +18,7 @@ use tokio::sync::MutexGuard;
 use uuid::Uuid;
 use yuppers_backend::auth::{CodeMessage, CodeSender, Purpose, SendFuture};
 use yuppers_backend::deletion;
+use yuppers_backend::deletion_log;
 use yuppers_backend::domain::Rules;
 use yuppers_backend::exchanges::service::run_timers;
 use yuppers_backend::http::TrustedProxies;
@@ -1920,4 +1921,152 @@ async fn a_deletion_that_found_the_account_busy_leaves_the_code_for_another_try(
     let after = events(app, &deal.exchange).await;
     assert_eq!(after.len(), recorded.len() + 1);
     assert_eq!(after.last().unwrap(), &event("CLOSE_REQUESTED", "B"));
+}
+
+async fn logged_at(app: &App, account: Uuid) -> Option<OffsetDateTime> {
+    sqlx::query_scalar("SELECT deleted_at FROM deletion_log WHERE account_id = $1")
+        .bind(account)
+        .fetch_optional(&app.owner)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_deletion_is_logged_with_its_time_once_in_the_same_transaction() {
+    let test = start().await;
+    let app = &test.app;
+    let ana = app.user("Ana").await;
+    assert_eq!(logged_at(app, ana.id).await, None);
+
+    let before = OffsetDateTime::now_utc();
+    test.delete(&ana).await;
+    let logged = logged_at(app, ana.id)
+        .await
+        .expect("the deletion is logged");
+    assert!(logged >= before - Duration::seconds(5) && logged <= OffsetDateTime::now_utc());
+
+    // Deleting again, as a repeat or a replay would, adds nothing and keeps
+    // the first time.
+    deletion::delete_account(&app.db, &app.rules, ana.id)
+        .await
+        .ok()
+        .unwrap();
+    assert_eq!(
+        deletion::replay(&app.db, &app.rules, ana.id, OffsetDateTime::now_utc())
+            .await
+            .ok(),
+        Some(deletion::Replayed::AlreadyDeleted)
+    );
+    assert_eq!(logged_at(app, ana.id).await, Some(logged));
+    assert_eq!(
+        count(
+            app,
+            "SELECT count(*) FROM deletion_log WHERE account_id = $1",
+            ana.id
+        )
+        .await,
+        1
+    );
+}
+
+/// What a restore brings back, deleted again from the log: in one database,
+/// an account that is live again stands for the restored copy.
+#[tokio::test]
+async fn replaying_the_log_deletes_again_through_the_rules_and_only_once() {
+    let test = start().await;
+    let app = &test.app;
+    let deal = app.active().await;
+    let (ana, ben) = (&deal.ana, &deal.ben);
+    // A second session for Ben, on another device.
+    test.sign_in(&ben.email).await;
+    assert_eq!(
+        count(
+            app,
+            "SELECT count(*) FROM account_session WHERE account_id = $1",
+            ben.id
+        )
+        .await,
+        2
+    );
+    // Someone else, suspended in the copy; and someone the copy never held.
+    let cy = app.user("Cy").await;
+    sqlx::query("UPDATE account SET status = 'SUSPENDED' WHERE id = $1")
+        .bind(cy.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    let stranger = Uuid::new_v4();
+    let deleted_at = OffsetDateTime::now_utc().replace_nanosecond(0).unwrap() - Duration::days(3);
+    let text = format!(
+        "# Yuppers deletion log\n{} {}\n{} {}\n{} {}\n",
+        ben.id,
+        deleted_at
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap(),
+        cy.id,
+        deleted_at
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap(),
+        stranger,
+        deleted_at
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap(),
+    );
+    let entries = deletion_log::parse(&text).unwrap();
+
+    let mut lines = Vec::new();
+    let summary = deletion_log::replay(&app.db, &app.rules, &entries, |line| {
+        lines.push(line.to_owned())
+    })
+    .await;
+    assert_eq!(summary.deleted, 1);
+    assert_eq!(summary.not_here, 1);
+    assert_eq!(summary.suspended, vec![cy.id]);
+    assert!(!summary.complete());
+    assert!(lines[0].starts_with(&format!("{}: deleted again", ben.id)));
+    assert!(lines[1].starts_with(&format!("{}: suspended here", cy.id)));
+    assert_eq!(lines[2], format!("{stranger}: not in this database"));
+
+    // Every rule ran, as when Ben deleted it himself: his sessions are over,
+    // his address is free for a new account, and the agreement he was in has
+    // a request to close in his name.
+    assert_eq!(
+        count(
+            app,
+            "SELECT count(*) FROM account_session WHERE account_id = $1",
+            ben.id
+        )
+        .await,
+        0
+    );
+    let (status, email): (String, Option<String>) =
+        sqlx::query_as("SELECT status, email FROM account WHERE id = $1")
+            .bind(ben.id)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
+    assert_eq!((status.as_str(), email), ("DELETED", None));
+    let (_, account) = test.sign_in(&ben.email).await;
+    assert_ne!(account["id"], json!(ben.id));
+    let view = app.view(ana, &deal.exchange).await;
+    assert_eq!(view["close_requested_by"], "B");
+    assert_eq!(view["other_party_left"], true);
+    // The log keeps the time it first happened.
+    assert_eq!(logged_at(app, ben.id).await, Some(deleted_at));
+    // The suspended account is left exactly as it was, and not logged.
+    let status: String = sqlx::query_scalar("SELECT status FROM account WHERE id = $1")
+        .bind(cy.id)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(status, "SUSPENDED");
+    assert_eq!(logged_at(app, cy.id).await, None);
+
+    // The same file again: nothing more happens.
+    let recorded = events(app, &deal.exchange).await;
+    let again = deletion_log::replay(&app.db, &app.rules, &entries, |_| {}).await;
+    assert_eq!(again.deleted, 0);
+    assert_eq!(again.already_deleted, 1);
+    assert_eq!(again.not_here, 1);
+    assert_eq!(events(app, &deal.exchange).await, recorded);
 }

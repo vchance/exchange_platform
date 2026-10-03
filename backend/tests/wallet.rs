@@ -35,11 +35,11 @@ const SERVICE: &str = "/v1/wallet/apple";
 
 /// A wallet with the platforms whose settings `keep` names (all, without).
 fn wallet(keep: Option<&[&str]>) -> Arc<Wallet> {
-    let settings: HashMap<&str, String> = testkit::settings()
+    let settings: HashMap<&str, String> = detailed(testkit::settings())
         .into_iter()
         .filter(|(name, _)| {
             keep.is_none_or(|keep| {
-                *name == "WALLET_DELIVERY" || keep.iter().any(|k| name.starts_with(k))
+                name.starts_with("WALLET_") || keep.iter().any(|k| name.starts_with(k))
             })
         })
         .collect();
@@ -58,7 +58,15 @@ fn wallet_using(recorder: &Arc<Recorder>) -> Arc<Wallet> {
 }
 
 fn settings_table() -> HashMap<&'static str, String> {
-    testkit::settings().into_iter().collect()
+    detailed(testkit::settings()).into_iter().collect()
+}
+
+/// The detailed status line, which most of these tests read: what presses
+/// is what changes a face. The default, neutral, has a test of its own
+/// (`by_default_a_face_says_in_force_whatever_presses`).
+fn detailed(mut settings: Vec<(&'static str, String)>) -> Vec<(&'static str, String)> {
+    settings.push(("WALLET_STATUS_ON_FACE", "detailed".to_owned()));
+    settings
 }
 
 async fn app() -> App {
@@ -1225,4 +1233,46 @@ async fn the_store_marks_and_revokes_passes_in_the_callers_transaction() {
         pass_status(&app, &serial).await,
         ("CURRENT".to_owned(), false)
     );
+}
+
+/// With `WALLET_STATUS_ON_FACE` unset, the face says how the agreement stands
+/// and nothing more: no "Due soon", no "Waiting for you", no next due date
+/// (DESIGN.md §11, the owner's decision of 3 October 2026).
+#[tokio::test]
+async fn by_default_a_face_says_in_force_whatever_presses() {
+    let _worker = WORKER.lock().await;
+    let settings = settings_table_default();
+    let config = WalletConfig::from_lookup(&|name| settings.get(name).cloned()).unwrap();
+    let app = App::start_with_wallet(
+        DB,
+        Arc::new(Wallet::new(&config, "https://app.test").unwrap()),
+    )
+    .await;
+    let due = OffsetDateTime::now_utc().date() + time::Duration::days(1);
+    let deal = due_on(&app, "UTC", due).await;
+    let face = |json: &Value| {
+        (
+            json["generic"]["primaryFields"][0]["value"].clone(),
+            json["generic"]["secondaryFields"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|field| field["key"] == "next-due"),
+        )
+    };
+
+    // Due tomorrow: due soon, on a detailed face.
+    let json = pass_json(&wallet_post(&app, &deal.ben, &deal.exchange, "apple").await);
+    assert_eq!(face(&json), (json!("In force"), false));
+
+    // Delivered to Ben: waiting for him, on a detailed face.
+    app.act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
+        .await
+        .ok();
+    let json = pass_json(&wallet_post(&app, &deal.ben, &deal.exchange, "apple").await);
+    assert_eq!(face(&json), (json!("In force"), false));
+}
+
+fn settings_table_default() -> HashMap<&'static str, String> {
+    testkit::settings().into_iter().collect()
 }
