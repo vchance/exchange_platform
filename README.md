@@ -10,7 +10,7 @@ The design guide is kept in a separate, private repository. Comments and documen
 
 | Path | What it is |
 |---|---|
-| `backend/` | Rust service: Axum, sqlx, PostgreSQL. One crate, five binaries. |
+| `backend/` | Rust service: Axum, sqlx, PostgreSQL. One crate, six binaries. |
 | `apps/web/` | React web app built with Vite. Also the no-install path for invited counterparties. |
 | `apps/mobile/` | iOS and Android app: React Native with Expo, routed with Expo Router. The web app's flows for agreeing an exchange and seeing it through, on its own screens. |
 | `docs/operations.md` | Running the service: deployment, health, logs, metrics, backups and restore. |
@@ -148,7 +148,7 @@ None of this replaces trying the apps with VoiceOver, TalkBack, NVDA and a keybo
 
 ### End-to-end tests
 
-`apps/web/e2e` drives the built web app in Chromium with Playwright, against the real API and a real PostgreSQL database. Each test signs up its own people, each in a browser context of their own, with `example.test` addresses nobody else uses, so tests are independent and run in parallel. They go through the screens as a person would: a first proposal through to a completed exchange and its record, the record's plain summary and its print layout, counter-proposals, declining and withdrawing, discarding a draft, amendments, disputes, a close request, the guide for when something isn't working, what a proposal changes for the person asked to sign it, blocking, Spanish, the main screens in Spanish at 320 pixels wide, account deletion, a build the service says is too old, a replaced invitation link, and the help pages, opened from the signing step and read through their contents.
+`apps/web/e2e` drives the built web app in Chromium with Playwright, against the real API and a real PostgreSQL database. Each test signs up its own people, each in a browser context of their own, with `example.test` addresses nobody else uses, so tests are independent and run in parallel. They go through the screens as a person would: a first proposal through to a completed exchange and its record, the record's plain summary and its print layout, counter-proposals, declining and withdrawing, discarding a draft, amendments, disputes, a close request, the guide for when something isn't working, what a proposal changes for the person asked to sign it, blocking, Spanish, the main screens in Spanish at 320 pixels wide, account deletion, a build the service says is too old, a replaced invitation link, a report reviewed by a reviewer named with the `staff` command (dismissed, and an account suspended and reinstated), and the help pages, opened from the signing step and read through their contents.
 
 ```sh
 npx playwright install chromium                              # once
@@ -156,7 +156,7 @@ cargo run --manifest-path backend/Cargo.toml --bin migrate   # the database the 
 npm run e2e                                                  # builds the API and the web app, then runs the tests
 ```
 
-`npm run e2e` starts the API on `http://127.0.0.1:8090`, serving the built web app from the same origin (`WEB_DIR`), with its database from `.env` and `CODE_DELIVERY=log`; a test reads a one-time code back from the API's log, `apps/web/e2e/.output/api.log`, so no mail server is involved. Every browser connects from 127.0.0.1 and sign-in is limited per network address, so the API runs with that limit raised out of the way (`SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR`, `signInLimits` in `apps/web/e2e/support/env.ts`); the limits per email address stay as they are, since every person has an address of their own. The test for a build that is too old starts a second API on port 8091 with `MIN_CLIENT_VERSION_WEB` above the web app's version. `E2E_PORT`, `E2E_OUTDATED_PORT`, `E2E_API_LOG`, `E2E_API_BIN` and `E2E_WEB_DIR` change those; if an API already answers on `E2E_PORT` it is used as it is, and `E2E_API_LOG` must then name its log. The report of the last run is in `apps/web/playwright-report`.
+`npm run e2e` starts the API on `http://127.0.0.1:8090`, serving the built web app from the same origin (`WEB_DIR`), with its database from `.env` and `CODE_DELIVERY=log`; a test reads a one-time code back from the API's log, `apps/web/e2e/.output/api.log`, so no mail server is involved. Every browser connects from 127.0.0.1 and sign-in is limited per network address, so the API runs with that limit raised out of the way (`SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR`, `signInLimits` in `apps/web/e2e/support/env.ts`); the limits per email address stay as they are, since every person has an address of their own. The test for a build that is too old starts a second API on port 8091 with `MIN_CLIENT_VERSION_WEB` above the web app's version. `E2E_PORT`, `E2E_OUTDATED_PORT`, `E2E_API_LOG`, `E2E_API_BIN`, `E2E_STAFF_BIN` (the `staff` command the review tests name a reviewer with, run with the database from `.env` or the environment) and `E2E_WEB_DIR` change those; if an API already answers on `E2E_PORT` it is used as it is, and `E2E_API_LOG` must then name its log. The report of the last run is in `apps/web/playwright-report`.
 
 Nothing that takes days is tested: a proposal or an invitation expiring, a close request lapsing into a close as unresolved, an exchange closed for inactivity. Those are the worker's timers, and the backend's tests cover them.
 
@@ -219,6 +219,7 @@ What remains, as of October 2026. Every package here is already at the newest ve
 - `worker` — background jobs: expiries and closures on their timers, and reminders that something is due soon or overdue, and delivering notifications from the outbox.
 - `migrate` — applies migrations as the schema owner. The API and worker never run them.
 - `openapi` — prints the API description that the TypeScript client is generated from.
+- `staff` — names who reviews abuse reports: `grant`, `revoke` and `list`, run by the owner with the schema owner's connection, never by the service ([docs/operations.md](docs/operations.md), "Reviewing reports").
 - `replay-deletions` — after a restore, deletes again the accounts a deletion log names, through the service's own deletion ([docs/operations.md](docs/operations.md), "Replaying deletions").
 
 Both long-running binaries stop cleanly on `Ctrl-C` and on `SIGTERM`, which is what a container runtime or service manager sends.
@@ -381,11 +382,23 @@ A person can delete their account from the account screen of the web app and of 
 - **The deletion log.** The same transaction records the account's ID and the time, and nothing else, in `deletion_log`. A backup restored later would bring the account back; replaying the log deletes it again, through the same code (docs/operations.md, "Replaying deletions").
 - **What it leaves alone.** Revisions, signatures and events. The other party keeps the exchange and its record, with the names as the agreement wrote them. What becomes of a departed person's words in that history is not decided by this code.
 
+## Reviewing reports
+
+Abuse reports are reviewed by staff the owner names, on the web app's `/staff` screen (`DESIGN.md` §9; `backend/src/review.rs`, `apps/web/src/screens/StaffPage.tsx`). A reviewer is an account in `staff_member`, which only the owner can write, with the `staff` command; they sign in with a one-time code like anyone, and the staff endpoints (`/v1/staff/...`) also want that code entered within the last 12 hours. To everyone else every staff path is "not found", and nothing in either app links to the screen. The staff endpoints are in the generated client like the rest, each described as "Staff only". The screen's words are in the `staff` part of the wording files, in English and Spanish.
+
+- **The queue**: open reports, oldest first, with their age; one older than 24 hours is marked overdue. **A report**: what it says, who reported whom, and the reported yup's whole record, readable only while the report is open. Opening it is recorded.
+- **Decisions**: dismiss; hide the yup's content from the person reported; suspend their account; or both of the last two. Each needs a note, except dismissing. A report is resolved once, and the database refuses to change a resolution. Suspensions can be lifted and hidden content shown again, each with a note.
+- **Hidden content**: for the person reported only, everything written in that yup reads "Hidden by review" in their language, in the exchange, its history and their copy of the record (which then says `content_hidden`, since its fingerprints no longer match what it shows), and signing or sending terms there is refused with `CONTENT_HIDDEN`. Names and amounts stay, and they can still end the yup. Nothing stored changes.
+- **The audit history**: every report opened, every decision and undoing, and every grant and revoke is a row in `review_event`, which neither the service nor the schema owner can change.
+- **The alert**: a new report emails every reviewer through the outbox, saying only that a report is waiting, with a link to `/staff`; and the metrics `yuppers_reports_open` and `yuppers_reports_oldest_open_age_seconds`.
+
+[docs/operations.md](docs/operations.md), "Reviewing reports", is the routine. `backend/tests/review.rs` checks all of it against a real database, and `apps/web/e2e/review.spec.ts` names a reviewer with the command and reviews a report through the screen.
+
 ## Not built yet
 
 The scaffold, the database schema (`backend/migrations/`), the domain rules (`backend/src/domain/`), sign-in (`backend/src/auth.rs`), the exchange API (`backend/src/exchanges/`, `backend/src/http/`), the web app's screens (`apps/web/src/`) and the mobile app's (`apps/mobile/src/`) exist: two people can take an exchange from a draft to completion in a browser or in the app. The mobile app has not yet been run on a device or a simulator. Still to build, in rough order:
 
-1. Somewhere for staff to read reports and act on them. Report and block exist in the API, on the web and in the mobile app (`backend/src/safety.rs`, `DESIGN.md` §9), and a report is stored with who made it, about which exchange and which party, and why; but there is no staff sign-in yet, so nothing reads them.
+1. A content policy for the report form to link to (`DESIGN.md` §18, item 5). Reports are reviewed: see "Reviewing reports" below.
 
 Codes by text message, push notifications and Wallet passes are built and off by default; each waits only for its provider's account and settings ("Notifications", [docs/operations.md](docs/operations.md), [docs/wallet.md](docs/wallet.md)).
 

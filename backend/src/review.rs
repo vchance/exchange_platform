@@ -844,15 +844,19 @@ pub async fn resolve(
     Ok(())
 }
 
+/// A suspended account: its ID and name, and the latest suspension's
+/// time, note and report.
+type SuspensionRow = (
+    Uuid,
+    String,
+    Option<OffsetDateTime>,
+    Option<String>,
+    Option<Uuid>,
+);
+
 /// The suspended accounts, most recently suspended first.
 pub async fn suspensions(db: &PgPool) -> Result<Vec<Suspension>, ApiError> {
-    let rows: Vec<(
-        Uuid,
-        String,
-        Option<OffsetDateTime>,
-        Option<String>,
-        Option<Uuid>,
-    )> = sqlx::query_as(
+    let rows: Vec<SuspensionRow> = sqlx::query_as(
         "SELECT a.id, a.display_name, latest.occurred_at, latest.note, latest.report_id
          FROM account a
          LEFT JOIN LATERAL (
@@ -1225,16 +1229,19 @@ pub async fn revoke(db: &PgPool, who: &str) -> anyhow::Result<bool> {
     Ok(removed)
 }
 
+/// A reviewer's account: ID, email, phone, name, status, and since when.
+type ReviewerRow = (
+    Uuid,
+    Option<String>,
+    Option<String>,
+    String,
+    String,
+    OffsetDateTime,
+);
+
 /// The reviewers, longest-serving first.
 pub async fn reviewers(db: &PgPool) -> Result<Vec<Reviewer>, sqlx::Error> {
-    let rows: Vec<(
-        Uuid,
-        Option<String>,
-        Option<String>,
-        String,
-        String,
-        OffsetDateTime,
-    )> = sqlx::query_as(
+    let rows: Vec<ReviewerRow> = sqlx::query_as(
         "SELECT a.id, a.email, a.phone, a.display_name, a.status, s.granted_at
              FROM staff_member s JOIN account a ON a.id = s.account_id
              ORDER BY s.granted_at, a.id",
