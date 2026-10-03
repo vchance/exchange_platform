@@ -275,6 +275,64 @@ describe('the record', () => {
   })
 })
 
+describe('help', () => {
+  test('the list of topics', async () => {
+    const { loadHelp } = await import('./app/wording')
+    const help = await loadHelp('en')
+    await start('/help', null)
+    await heading(help.title)
+    expect(await violations()).toEqual([])
+    expect(document.title).toBe(`${help.title} · Yuppers`)
+  })
+
+  test.each(['en', 'es'] as const)('a topic, with its contents, in %s', async (language) => {
+    const { loadHelp } = await import('./app/wording')
+    const help = await loadHelp(language)
+    await start('/help/keeping-track', null, language)
+    await heading(help.topics['keeping-track'].title)
+    expect(document.documentElement.lang).toBe(language)
+    expect(await violations()).toEqual([])
+    // Headings go down one level at a time, and each section is in the contents.
+    const levels = [...document.querySelectorAll('main h1, main h2, main h3')].map((h) => h.tagName)
+    expect(levels[0]).toBe('H1')
+    for (let i = 1; i < levels.length; i += 1) {
+      expect(Number(levels[i][1]) - Number(levels[i - 1][1])).toBeLessThanOrEqual(1)
+    }
+    const contents = document.querySelector('nav.help-sections')!
+    expect(contents.getAttribute('aria-labelledby')).toBeTruthy()
+    expect(contents.querySelectorAll('a')).toHaveLength(
+      document.querySelectorAll('main section[aria-labelledby^="section-"]').length,
+    )
+  })
+
+  test('the skip link leads to the help itself', async () => {
+    const { loadHelp } = await import('./app/wording')
+    const help = await loadHelp('en')
+    const { wording } = await start('/help/signing', null)
+    await heading(help.topics.signing.title)
+    const skip = document.querySelector<HTMLAnchorElement>('a.skip')!
+    expect(skip.textContent).toBe(wording.common.skipToContent)
+    const target = document.getElementById(skip.getAttribute('href')!.slice(1))!
+    expect(target.tagName).toBe('MAIN')
+    expect(target.contains(document.querySelector('h1'))).toBe(true)
+    expect(target.tabIndex).toBe(-1)
+  })
+
+  test('a “Learn more” link in the signing step says it opens a new tab', async () => {
+    const { wording } = await start(`/exchanges/${DRAFT}`, ana)
+    await heading(wording.composer.titleFirst)
+    await press(button(wording.composer.review))
+    await heading(wording.composer.signTitle)
+    const learn = [...document.querySelectorAll<HTMLAnchorElement>('.consent a')].find((a) =>
+      a.textContent?.startsWith(wording.help.learnMore.signing),
+    )!
+    expect(learn.getAttribute('href')).toBe('/help/signing?lang=en')
+    expect(learn.target).toBe('_blank')
+    expect(learn.textContent).toContain(wording.help.newTab)
+    expect(await violations()).toEqual([])
+  })
+})
+
 describe('the other screens', () => {
   test('the list of exchanges', async () => {
     const { wording } = await start('/', ana)

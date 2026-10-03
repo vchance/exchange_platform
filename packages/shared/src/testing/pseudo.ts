@@ -1,5 +1,6 @@
+import helpEn from '../../wording/help/en.json'
 import en from '../../wording/en.json'
-import type { Wording } from '../wording/types'
+import type { HelpWording, Wording } from '../wording/types'
 
 /*
  * A pseudo-language, for tests only: nothing in the apps imports this, so it
@@ -99,6 +100,7 @@ export function pseudoMessage(message: string): string {
 
 function transform<T>(value: T): T {
   if (typeof value === 'string') return pseudoMessage(value) as T
+  if (Array.isArray(value)) return value.map(transform) as T
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, transform(child)]),
   ) as T
@@ -107,6 +109,11 @@ function transform<T>(value: T): T {
 /** The whole English wording in the pseudo-language. */
 export function pseudoWording(): Wording {
   return transform(en as Wording)
+}
+
+/** The English help pages in the pseudo-language. */
+export function pseudoHelp(): HelpWording {
+  return transform(helpEn as HelpWording)
 }
 
 /**

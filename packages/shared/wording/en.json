@@ -841,6 +841,20 @@
       "savePdfHint": "This opens your browser’s print window. Choose “Save as PDF” as the printer to keep this page, summary and full record, as a file."
     }
   },
+  "help": {
+    "link": "Help",
+    "newTab": "(opens in a new tab)",
+    "inBrowser": "Opens in your browser.",
+    "learnMore": {
+      "signing": "Learn more about signing",
+      "moneyOutside": "Learn more about money and what we don’t do",
+      "trouble": "Learn more about the ways forward",
+      "amendment": "Learn more about changing an agreement",
+      "blocking": "Learn more about blocking",
+      "deletion": "Learn more about deleting your account",
+      "record": "Learn more about the record"
+    }
+  },
   "errors": {
     "STALE_REVISION": "The terms changed while you were looking. Review the latest version.",
     "WRONG_ACTOR": "Only the other party can do this.",

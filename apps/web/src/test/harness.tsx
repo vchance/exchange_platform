@@ -1,5 +1,5 @@
 import type { Account } from '@yuppers/api-client'
-import type { Wording } from '@yuppers/shared'
+import type { Language, Wording } from '@yuppers/shared'
 import axe from 'axe-core'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -49,12 +49,13 @@ export interface Started {
 /**
  * Opens the app at `address`, as `account` or signed out, with a fresh copy
  * of every module so nothing one test did is still there in the next. The
- * wording is English unless `wording` is given (the pseudo-language test).
+ * wording is English unless `speaking` names another language, or is a whole
+ * wording of its own (the pseudo-language test).
  */
 export async function start(
   address: string,
   account: Account | null,
-  given?: Wording,
+  speaking: Language | Wording = 'en',
 ): Promise<Started> {
   await stop()
   vi.resetModules()
@@ -67,10 +68,11 @@ export async function start(
 
   const { App } = await import('../app/App')
   const { loadWording } = await import('../app/wording')
-  const wording = given ?? (await loadWording('en'))
+  const language: Language = typeof speaking === 'string' ? speaking : 'en'
+  const wording = typeof speaking === 'string' ? await loadWording(speaking) : speaking
   await act(async () => {
     root = createRoot(document.getElementById('root')!)
-    root.render(<App initialLanguage="en" initialWording={wording} />)
+    root.render(<App initialLanguage={language} initialWording={wording} />)
   })
   return { service, wording }
 }

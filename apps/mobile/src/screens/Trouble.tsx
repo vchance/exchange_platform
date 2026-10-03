@@ -14,6 +14,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { HelpLink } from '../components/HelpLink';
 import { Actions, Button, Heading, Notice, P, Panel, Written } from '../components/ui';
 import { focusOn } from '../lib/accessibility';
 import { useI18n } from '../lib/context';
@@ -112,6 +113,7 @@ export function Trouble({ exchange, otherName, actions, onRevise }: Props) {
           ))}
         </>
       )}
+      <HelpLink place="trouble" />
       <Actions>
         {situation ? (
           <Button

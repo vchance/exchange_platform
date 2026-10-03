@@ -41,6 +41,7 @@ import { View, type ScrollView } from 'react-native';
 
 import { Consent } from '../components/Consent';
 import { DateField } from '../components/DateField';
+import { HelpLink } from '../components/HelpLink';
 import { InvitationFor } from '../components/InvitationLink';
 import { TermsView } from '../components/TermsView';
 import {
@@ -332,7 +333,12 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
       <FieldErrorsAnnounced value={false}>
         <Heading>{title}</Heading>
         <P>{kind === 'first' ? w.introFirst : kind === 'amend' ? w.introAmend : w.introCounter}</P>
-        {kind === 'amend' && <P>{w.effectsSteer}</P>}
+        {kind === 'amend' && (
+          <>
+            <P>{w.effectsSteer}</P>
+            <HelpLink place="amendment" />
+          </>
+        )}
 
         {conflict && <ErrorNote>{w.conflict}</ErrorNote>}
         {stale && base && (
@@ -456,6 +462,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
                   )}
                   {/* Money is paid outside the product and only recorded here (DESIGN.md §11). */}
                   <Hint>{w.moneyOutside}</Hint>
+                  <HelpLink place="moneyOutside" />
                 </>
               ) : (
                 <>

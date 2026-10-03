@@ -16,6 +16,7 @@ import {
   Panel,
   TextField,
 } from '../components/ui';
+import { HelpLink } from '../components/HelpLink';
 import { useI18n, useSession } from '../lib/context';
 import { api } from '../lib/session';
 
@@ -32,6 +33,7 @@ export function DeleteAccount({ account }: { account: Account }) {
   return (
     <>
       <Heading level={2}>{w.heading}</Heading>
+      <HelpLink place="deletion" />
       {open ? (
         <Steps account={account} onCancel={() => setOpen(false)} />
       ) : (

@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
-import { languages, timeZoneCity } from '@yuppers/shared'
-import { formattedWords, pseudoWording, untranslated } from '@yuppers/shared/testing/pseudo'
-import { afterEach, describe, expect, test } from 'vitest'
+import { HELP_TOPICS, languages, timeZoneCity } from '@yuppers/shared'
+import {
+  formattedWords,
+  pseudoHelp,
+  pseudoWording,
+  untranslated,
+} from '@yuppers/shared/testing/pseudo'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import {
   ACTIVE,
@@ -36,6 +41,7 @@ import { button, field, press, settle, start, stop, type, until } from './test/h
  */
 
 const pseudo = pseudoWording()
+const pseudoHelpPages = pseudoHelp()
 const ALLOWED = [
   ...STAND_IN_TEXT,
   ...formattedWords('en', ['America/Chicago']),
@@ -194,5 +200,32 @@ describe('every word on the main web screens comes from the wording', () => {
       await check()
     })
     expect(found).toEqual([])
+  })
+
+  test('the help pages, the list of topics and every topic', async () => {
+    // The help pages' text is a file of its own, fetched by the help page;
+    // here it comes in the pseudo-language too.
+    vi.doMock('./app/wording', async (original) => ({
+      ...(await original<typeof import('./app/wording')>()),
+      loadHelp: async () => pseudoHelpPages,
+    }))
+    try {
+      const found = await screens(async (check) => {
+        await start('/help', null, pseudo)
+        await h1(pseudoHelpPages.title)
+        await check()
+        for (const topic of HELP_TOPICS) {
+          await start(`/help/${topic}`, null, pseudo)
+          await h1(pseudoHelpPages.topics[topic].title)
+          await check()
+        }
+        await start('/help/nothing-here', null, pseudo)
+        await h1(pseudo.common.notFoundTitle)
+        await check()
+      })
+      expect(found).toEqual([])
+    } finally {
+      vi.doUnmock('./app/wording')
+    }
   })
 })

@@ -37,6 +37,7 @@ const AccountPage = lazy(() => import('../screens/AccountPage'))
 const DeleteAccount = lazy(() => import('../screens/DeleteAccount'))
 const ExchangePage = lazy(() => import('../screens/ExchangePage'))
 const RecordPage = lazy(() => import('../screens/RecordPage'))
+const HelpPage = lazy(() => import('../screens/HelpPage'))
 
 interface Props {
   initialLanguage: Language
@@ -215,6 +216,10 @@ function Shell({ outdated }: { outdated: boolean }) {
         </Gate>
       )
       break
+    case 'help':
+      // Open to anyone, signed in or not.
+      page = <HelpPage key={route.topic ?? ''} topic={route.topic} />
+      break
     default:
       page = <NotFound />
   }
@@ -256,6 +261,11 @@ function Shell({ outdated }: { outdated: boolean }) {
         <AccountDeleted />
         <Suspense fallback={<p>{wording.common.loading}</p>}>{page}</Suspense>
       </main>
+      <footer className="site">
+        <Link to={paths.help()} aria-current={current('help')}>
+          {wording.help.link}
+        </Link>
+      </footer>
       <LiveRegions />
     </>
   )

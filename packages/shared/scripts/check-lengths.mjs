@@ -104,6 +104,7 @@ const TIGHT = {
       'profile.title',
       'exchange.titleNoName',
       'common.notFoundTitle',
+      'help.link',
     ],
   },
   // The tag beside an exchange in the list and on its page. An item's own

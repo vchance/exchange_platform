@@ -38,6 +38,7 @@ import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { Consent } from '../components/Consent'
+import { HelpLink } from '../components/HelpLink'
 import { InvitationFor } from '../components/InvitationLink'
 import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
@@ -323,7 +324,12 @@ function Editor({ exchange, reload, onSent }: Props) {
         {title}
       </PageHeading>
       <p>{kind === 'first' ? w.introFirst : kind === 'amend' ? w.introAmend : w.introCounter}</p>
-      {kind === 'amend' && <p>{w.effectsSteer}</p>}
+      {kind === 'amend' && (
+        <>
+          <p>{w.effectsSteer}</p>
+          <HelpLink place="amendment" />
+        </>
+      )}
 
       {conflict && <ErrorNote>{w.conflict}</ErrorNote>}
       {stale && base && (
@@ -500,6 +506,7 @@ function Editor({ exchange, reload, onSent }: Props) {
                       <p className="hint" id={`${item.id}-amount-outside`}>
                         {w.moneyOutside}
                       </p>
+                      <HelpLink place="moneyOutside" />
                     </>
                   )}
                 </Field>

@@ -19,6 +19,16 @@ test('an invitation page is /{language}/i for any language tag', () => {
   expect(matchRoute('/zh-Hant/i/')).toEqual({ name: 'invitation', language: 'zh-Hant' })
 })
 
+test('help is /help, and each topic /help/{topic}', () => {
+  expect(matchRoute('/help')).toEqual({ name: 'help', topic: null })
+  expect(matchRoute('/help/')).toEqual({ name: 'help', topic: null })
+  expect(matchRoute(paths.help())).toEqual({ name: 'help', topic: null })
+  expect(matchRoute(paths.help('signing'))).toEqual({ name: 'help', topic: 'signing' })
+  expect(matchRoute('/help/what-we-dont-do/')).toEqual({ name: 'help', topic: 'what-we-dont-do' })
+  // A topic that does not exist is the help page's to say so.
+  expect(matchRoute('/help/no-such-topic')).toEqual({ name: 'help', topic: 'no-such-topic' })
+})
+
 test('the other pages, and everything else', () => {
   expect(matchRoute('/')).toEqual({ name: 'home' })
   expect(matchRoute('/account')).toEqual({ name: 'account' })
@@ -28,6 +38,8 @@ test('the other pages, and everything else', () => {
     `/exchanges/${ID}/other`,
     '/i',
     '/en/x',
+    '/help/signing/more',
+    '/help/Signing',
   ]) {
     expect(matchRoute(path), path).toEqual({ name: 'notFound' })
   }

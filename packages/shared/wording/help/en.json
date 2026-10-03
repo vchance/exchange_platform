@@ -1,0 +1,225 @@
+{
+  "title": "Help",
+  "intro": "How yups work, what we do and don’t do, and what happens when something goes wrong. Each topic is short; pick the one you need.",
+  "topicsHeading": "Help topics",
+  "onThisPage": "On this page",
+  "allTopics": "All help topics",
+  "topics": {
+    "yups": {
+      "title": "What a yup is, and how one goes",
+      "summary": "A yup is a deal between two people, written down together and signed by both.",
+      "blocks": [
+        { "p": "A yup is a deal between two people: what each of you will give or do, written down together. Once you have both signed the same version, it is a binding agreement, and you keep track here of what each of you has delivered." },
+        { "h": "How a yup goes" },
+        {
+          "ol": [
+            "Draft. You write down who it is between and what each of you provides: items, services, tasks or money, each with when it is due. Your draft is saved as you go, and nobody else sees it until you send it. You can discard a draft you don’t want.",
+            "Send. Signing and sending is one step: by sending the terms, you sign them. You then get an invitation link to send to the other person, however you usually reach them. We don’t send it for you.",
+            "Read. The other person opens the link and can read the whole proposal without an account.",
+            "Sign in. To respond, they sign in with a one-time code we send them. There is no password.",
+            "Sign. They can sign the terms as they are, decline them, or propose changes."
+          ]
+        },
+        { "h": "The invitation link" },
+        { "p": "An invitation link can be used for {invitationDays} days, and you see it only once. If you lose it, create a new one; the old one stops working. You can tie a link to the other person’s email address or phone number, so that only they can use it. If you don’t, whoever opens the link is asked to sign in, and you confirm that they are the person you meant to invite. Until you do, they can read and sign, but their signature only takes effect once you confirm them." },
+        { "h": "Versions and counteroffers" },
+        { "p": "Each set of terms that is sent is a version, numbered in order. Only one version waits to be signed at a time." },
+        { "p": "Proposing changes sends a counteroffer: a new version that replaces the one before it. Whoever sends it signs it by sending it, and the other person can then sign it, decline it, or propose changes in turn. Before signing a counteroffer you see what it changes, compared with the version it answers." },
+        { "p": "A version stays open for {proposalDays} days. If you haven’t both signed it by then, it lapses. The person who sent it can withdraw it, and the other person can decline it. When nothing has been agreed yet, a version that lapses, is withdrawn or is declined ends the yup, and it can’t be reopened." },
+        { "h": "When it becomes binding" },
+        { "p": "Nothing binds either of you while a yup is being written or negotiated. When you have both signed the same version, that version becomes the agreement, in force from that moment." },
+        { "p": "The agreement is complete when every required item has been confirmed or waived. Until then it stays open, and you can follow where each item stands." }
+      ]
+    },
+    "signing": {
+      "title": "What signing means",
+      "summary": "Signing means you agree to the exact terms shown, and a few facts are recorded with your signature.",
+      "blocks": [
+        { "p": "By signing, you agree to these exact terms. Your signature is electronic and is meant to bind you in the same way a handwritten one would. You also agree to sign electronically, and to receive the agreement and its records electronically." },
+        { "p": "You sign when you send terms, and when you accept terms someone sent you. Before you sign, you tick a box to say you have read the terms and sign them. Nothing is signed by default." },
+        { "p": "The message sent with a version, and the date it stays open until, are not part of what you sign." },
+        { "h": "What is recorded with your signature" },
+        {
+          "ul": [
+            "Your account, and the version you signed.",
+            "How you were verified: a one-time code sent to your email address or phone number, and when you entered it.",
+            "When you signed.",
+            "The fingerprint of the terms: a code worked out from the exact terms you signed. Anyone with a copy of the record can work it out again and check that the terms haven’t changed.",
+            "Which version of the signing wording you were shown, and in which language.",
+            "Your network address, and what your browser or app reports about itself and your device. These two are kept for {networkDays} days and then deleted. The rest of the signature is kept with the agreement."
+          ]
+        },
+        { "h": "What a signature rests on" },
+        { "p": "The only check of who signed is the one-time code they entered when they signed in, which may have been some time before they signed. No other proof of identity is asked for, and the record says so." },
+        { "p": "We record what you both agreed and what each of you reports. We don’t hold money, decide disputes or guarantee that anyone delivers." }
+      ]
+    },
+    "what-we-dont-do": {
+      "title": "What we don’t do",
+      "summary": "We keep the agreement and a record of what each of you says. We don’t handle money, judge or guarantee anything.",
+      "blocks": [
+        { "p": "Yuppers keeps a written agreement and a shared record of what each of you says was done. That is all it does." },
+        {
+          "ul": [
+            "We don’t hold or move money. Nothing is paid through us.",
+            "We don’t decide disputes. When you disagree, we record what each of you says. We don’t decide who is right.",
+            "We don’t guarantee that anyone delivers. We can’t make anyone do their part.",
+            "We don’t check what you record. Marking something delivered, confirming it, disputing it or waiving it, and every note you write, are your own statements. We keep them as they were made."
+          ]
+        },
+        { "h": "Money" },
+        { "p": "Money in a yup is paid outside our service, however the two of you arrange it. The yup only records it: the person paying records that they’ve paid, and only the person receiving can confirm that they received it. Confirming is final." },
+        { "p": "Recording a payment here doesn’t pay anyone, and nothing here shows that money arrived other than what the receiver says." }
+      ]
+    },
+    "keeping-track": {
+      "title": "Keeping track, and when something isn’t working",
+      "summary": "How each item is marked delivered and confirmed, and the ways out when you can’t carry on as agreed.",
+      "blocks": [
+        { "p": "Once a yup is an agreement, each item shows where it stands. Whoever provides an item marks it delivered, and only the person receiving it can confirm it." },
+        { "h": "Each item" },
+        {
+          "ul": [
+            "Mark as delivered (for money, “I’ve paid”): the provider says it’s done. They can undo this while it waits to be confirmed.",
+            "Confirm received: the receiver accepts it as done. Confirming is final.",
+            "Dispute: the receiver says what is wrong with something marked delivered. The provider can put it right and mark it delivered again, saying what they did.",
+            "Waive: the receiver releases the provider from that item, for good."
+          ]
+        },
+        { "p": "The receiver can also confirm or waive an item that hasn’t been marked delivered. Each step, and any note with it, goes into the history." },
+        { "p": "The agreement is complete when every required item has been confirmed or waived. Optional items don’t hold it open. We send a reminder when an item is due soon and when it is overdue." },
+        { "h": "Something isn’t working" },
+        { "p": "On an agreement in progress, “Something isn’t working” asks what the situation is:" },
+        {
+          "ul": [
+            "the other person hasn’t done their part;",
+            "you can’t do your part;",
+            "you both want to stop;",
+            "you disagree about whether something was done."
+          ]
+        },
+        { "p": "It then shows the ways forward that fit, and what each one means for who is released from what. It does nothing by itself: you pick a way and confirm it." },
+        { "h": "The three ways out" },
+        {
+          "ul": [
+            "Waive. You release the other person from one item they owe you. Everything else stays as agreed. Only the person owed an item can waive it, so if you can’t do your part, only the other person can release you from it.",
+            "End by agreement. One of you proposes ending, and the other agrees. The agreement ends at once, and both of you are released from everything still outstanding. Until it is answered, either of you can set the proposal aside.",
+            "Close without agreement. For when you can’t resolve things together. One of you asks to close, and the other has {closeDays} days to respond. After that the agreement closes as unresolved. Nobody is released: each item keeps the status it has, and the record shows it that way."
+          ]
+        },
+        { "p": "While a request to close is open, the person who made it can take it back, either of you can add a statement to the record, and you can still settle what is outstanding or end by agreement instead. If every required item is confirmed or waived in that time, the agreement is complete." },
+        { "p": "You can also propose a change to the agreement, which takes effect only once you have both signed it." },
+        { "h": "If nothing happens for a long time" },
+        { "p": "If neither of you does anything on an agreement for {inactivityPromptDays} days, counted from the last due date if that is later, we ask you both whether it is still under way. If nothing happens in the {inactivityCloseDays} days after that, it closes as unresolved, and each item keeps the status it has. Anything either of you does restarts the count." }
+      ]
+    },
+    "changing": {
+      "title": "Changing an agreement",
+      "summary": "An agreement changes only when you both sign the change, and each item’s status follows set rules.",
+      "blocks": [
+        { "p": "An agreement in force can be changed by an amendment: a new version of the terms that you both sign. Either of you can propose one with “Propose a change”." },
+        { "p": "The agreement stays as it is until you have both signed the change. The other person can sign it, decline it, or propose changes to it. If it is declined, withdrawn, or not signed within {proposalDays} days, the agreement carries on unchanged. Only one change waits to be signed at a time." },
+        { "h": "What happens to each item" },
+        { "p": "Before you sign, you see what the change does to each item. Once you have both signed it:" },
+        {
+          "ul": [
+            "An item left exactly as it was keeps its status.",
+            "An item whose terms change goes back to the start, not yet delivered or paid. Anything marked delivered or paid for it no longer counts, though the history keeps it.",
+            "A new item starts as not yet delivered or paid.",
+            "An item left out is removed from the agreement and can’t come back. To have it again, add it as a new item.",
+            "An item that has been confirmed can’t be changed or removed. To adjust for it, add a new item instead."
+          ]
+        },
+        { "h": "Signing a change someone sent you" },
+        { "p": "Above the way to sign, you see what the change does field by field, compared with the agreement in force, and where each item will stand once you have both signed. Earlier versions stay in the record." }
+      ]
+    },
+    "blocking": {
+      "title": "Blocking and reporting",
+      "summary": "What a block does and doesn’t do, and how to report something that is wrong.",
+      "blocks": [
+        { "p": "You can block or report the other person from a yup you share, once they have joined it. You can also report a proposal from the invitation page, before you sign in." },
+        { "h": "What blocking does" },
+        {
+          "ul": [
+            "Neither of you can join a yup the other starts, for as long as the block stands.",
+            "Any proposal still waiting to be signed between the two of you ends: one you sent is withdrawn, and one sent to you is declined. That includes a proposed change to an agreement.",
+            "If you had opened their invitation and they hadn’t yet confirmed you, you leave that yup, and anything you signed in it is void."
+          ]
+        },
+        { "h": "What blocking doesn’t do" },
+        {
+          "ul": [
+            "An agreement you have both signed stays in force. Either of you can still mark items, confirm them, and complete or close it, as before.",
+            "The other person isn’t told. Anything the block ends looks to them like any other withdrawal or refusal.",
+            "Unblocking doesn’t bring back anything the block ended."
+          ]
+        },
+        { "p": "Someone you block may be able to work out that you blocked them." },
+        { "p": "Your blocks are listed on your account page, under “People you’ve blocked”, where you can lift them." },
+        { "h": "Reporting" },
+        { "p": "Report a yup or a proposal if something is wrong, such as harassment, a scam, something illegal, someone pretending to be someone else, or someone under 18. The person you report isn’t told. A report changes nothing in the yup itself; block the person as well if you want to stop dealing with them." }
+      ]
+    },
+    "deleting": {
+      "title": "Deleting your account",
+      "summary": "What is removed, what happens to open yups, and what the other person keeps.",
+      "blocks": [
+        { "p": "You can delete your account from your account page. It can’t be undone. To confirm it’s you, we send a one-time code that only works for deleting your account." },
+        { "h": "What is removed" },
+        {
+          "ul": [
+            "You’re signed out on every device.",
+            "Your email address, phone number, name and language.",
+            "Your list of people you’ve blocked, and invitation links nobody has used."
+          ]
+        },
+        { "h": "What happens to open yups" },
+        {
+          "ul": [
+            "A draft you haven’t sent is discarded.",
+            "A proposal waiting to be signed ends with nothing agreed: one you sent is withdrawn, and one sent to you is declined.",
+            "If you had opened someone’s invitation and they hadn’t yet confirmed you, you leave it, and their proposal stays open for someone else.",
+            "An agreement in progress gets a request to close, made in your name. The other person has {closeDays} days to respond. Then it closes as unresolved, and each item keeps the status it has."
+          ]
+        },
+        { "p": "Nothing is marked delivered, received or waived for you. If something is still outstanding, consider settling it, or agreeing with the other person to end the agreement, first." },
+        { "h": "What the other person keeps" },
+        { "p": "Agreements you signed stay in the other person’s record: the terms, your name as the agreement gives it, your signature and the history. They keep their copy. While a yup is still open, they are shown that you deleted your account." },
+        { "p": "You can sign up again with the same email address or phone number later. That is a new account, with none of your old yups." }
+      ]
+    },
+    "record": {
+      "title": "Reading the record and saving it",
+      "summary": "Everything that was sent, signed and recorded, to read, save as a PDF or keep as a file.",
+      "blocks": [
+        { "p": "Every yup has a record: everything that was sent, signed and recorded, from the start. Only the two of you can see it. It names you both as the agreement does, and shows no email address or phone number. Open it from a yup with “Open the full record”." },
+        { "h": "What is in it" },
+        {
+          "ul": [
+            "A summary in plain words: who it is between, what each of you agreed to give, who signed and when, where it stands or how it ended, and where each item stands. Where the summary and the full record differ, the full record counts.",
+            "Every version that was sent and what became of it, with its fingerprint.",
+            "Every signature, with how the signer was verified.",
+            "Everything that happened, in order, with the messages, notes, reasons and statements written along the way."
+          ]
+        },
+        { "h": "Saving it" },
+        { "p": "On the web, “Save as PDF” opens your browser’s print window. Choose “Save as PDF” as the printer to keep the summary and the full record as a file. “Download a copy (JSON)” saves the record as data, including the exact terms of each version, so that anyone can work out its fingerprint again." },
+        { "p": "In the app, “Save as PDF” makes a PDF of the record, summary first, to save or send, and you can also share the JSON copy." },
+        { "p": "A copy holds everything in the record, including the terms and both names. Anyone you send it to can read all of it." }
+      ]
+    },
+    "languages": {
+      "title": "Languages",
+      "summary": "The product speaks your language. What people write is never translated.",
+      "blocks": [
+        { "h": "The product’s words" },
+        { "p": "Everything the product says, such as buttons, explanations, the emails we send and this help, is in your language." },
+        { "p": "On the web, choose it from the language menu at the top of any page. Before you sign in, the app uses your device’s language. Once you’re signed in, your account’s language is used everywhere, including in emails; change it on your account page." },
+        { "h": "What people write" },
+        { "p": "Names, terms, descriptions and messages are the parties’ own words. They appear exactly as the person wrote them, in whatever language they wrote them. We never translate or change them." },
+        { "p": "So if the other person writes in another language, what you sign is their words as written. Make sure you understand the terms before you sign. If you don’t, ask them, or propose changes." }
+      ]
+    }
+  }
+}

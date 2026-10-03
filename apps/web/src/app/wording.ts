@@ -1,4 +1,10 @@
-import { pickLanguage, type Language, type Wording } from '@yuppers/shared'
+import {
+  languages,
+  pickLanguage,
+  type HelpWording,
+  type Language,
+  type Wording,
+} from '@yuppers/shared'
 
 /*
  * Each language's wording is its own file, fetched when that language is
@@ -16,6 +22,31 @@ export function loadWording(language: Language): Promise<Wording> {
   const path = Object.keys(files).find((file) => file.endsWith(`/${language}.json`))
   if (!path) return Promise.reject(new Error(`no wording file for ${language}`))
   return files[path]()
+}
+
+/*
+ * The help pages' text is a file of its own per language, fetched only by
+ * the help pages, so that the wording every other page loads first does not
+ * carry it.
+ */
+const helpFiles = import.meta.glob<HelpWording>('../../../../packages/shared/wording/help/*.json', {
+  import: 'default',
+})
+
+export function loadHelp(language: Language): Promise<HelpWording> {
+  const path = Object.keys(helpFiles).find((file) => file.endsWith(`/${language}.json`))
+  if (!path) return Promise.reject(new Error(`no help file for ${language}`))
+  return helpFiles[path]()
+}
+
+/**
+ * The language a link asked for with `?lang=`, if it is one we have. The
+ * mobile app opens help pages this way, in a browser that does not know
+ * which language the app is in. It is not remembered.
+ */
+export function addressLanguage(): Language | null {
+  const asked = new URLSearchParams(window.location.search).get('lang')?.toLowerCase()
+  return languages.find((info) => info.code.toLowerCase() === asked)?.code ?? null
 }
 
 const CHOICE = 'yuppers.language'

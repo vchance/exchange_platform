@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { useI18n } from '../lib/context';
 import { deviceTimezone } from '../lib/time-zone';
 import { space, useColors } from '../lib/theme';
+import { HelpLink } from './HelpLink';
 import { Heading, Hint, Label, P, Tag, Tags, Written } from './ui';
 
 type Contribution = components['schemas']['ContributionDto'];
@@ -94,7 +95,12 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer }: 
                     <P>{fmt(w.amount, { amount: money(contribution.amount_minor, currency) })}</P>
                   )}
                   {/* Money is paid outside the product and only recorded here (DESIGN.md §11). */}
-                  {contribution.type === 'MONEY' && <Hint>{w.moneyOutside}</Hint>}
+                  {contribution.type === 'MONEY' && (
+                    <>
+                      <Hint>{w.moneyOutside}</Hint>
+                      <HelpLink place="moneyOutside" />
+                    </>
+                  )}
                   {contribution.quantity && (
                     <P>
                       {contribution.quantity.unit

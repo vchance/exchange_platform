@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { useI18n } from '../lib/context';
 import { space } from '../lib/theme';
+import { HelpLink } from './HelpLink';
 import { Actions, Button, Check, Failure, Heading, Notice, P } from './ui';
 
 interface Props {
@@ -49,6 +50,7 @@ export function Consent({
       <P>{w.binding}</P>
       <P>{w.electronic}</P>
       <P>{w.noJudge}</P>
+      <HelpLink place="signing" />
       <Check testID="consent-agree" label={w.agree} value={agreed} onChange={setAgreed} />
       <Failure code={failure} />
       <Actions>

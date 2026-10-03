@@ -17,6 +17,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { EventList } from '../components/EventList';
+import { HelpLink } from '../components/HelpLink';
 import { RecordSummary } from '../components/RecordSummary';
 import { TermsView } from '../components/TermsView';
 import {
@@ -166,6 +167,7 @@ function Record({ record, failure, reload }: RecordProps) {
       </Actions>
       <Hint>{mobile.savePdfHint}</Hint>
       <Hint>{mobile.shareHint}</Hint>
+      <HelpLink place="record" />
       {problem === 'unavailable' && <ErrorNote>{mobile.shareUnavailable}</ErrorNote>}
       {problem === 'failed' && <ErrorNote>{mobile.shareFailed}</ErrorNote>}
       {problem === 'pdfFailed' && <ErrorNote>{mobile.pdfFailed}</ErrorNote>}

@@ -14,6 +14,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
 import { paths } from '../app/routes'
+import { HelpLink } from '../components/HelpLink'
 import { Panel } from '../components/Panel'
 import { Written } from '../components/ui'
 import type { Actions } from '../lib/actions'
@@ -105,6 +106,7 @@ export function Trouble({ exchange, otherName, actions }: Props) {
           ))}
         </>
       )}
+      <HelpLink place="trouble" />
       <div className="actions">
         {situation && (
           <button

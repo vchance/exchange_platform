@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Actions, Button, Heading, Label, Screen } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
+import { openHelp } from '../lib/help';
 import { space, type, useColors } from '../lib/theme';
 import { ProfileForm } from './AccountSetup';
 import { BlockedPeople } from './BlockedPeople';
@@ -11,7 +12,7 @@ import { DeleteAccount } from './DeleteAccount';
 
 /** The account: what it is verified with, its name and language, and signing out. */
 export function AccountScreen() {
-  const { wording } = useI18n();
+  const { wording, language } = useI18n();
   const { account, signOut } = useSession();
   const colors = useColors();
   const router = useRouter();
@@ -50,6 +51,15 @@ export function AccountScreen() {
       ) : null}
       <ProfileForm account={account} first={false} />
       <BlockedPeople />
+      <Actions>
+        <Button
+          testID="help"
+          variant="link"
+          label={wording.help.link}
+          hint={wording.help.inBrowser}
+          onPress={() => void openHelp(language)}
+        />
+      </Actions>
       <View style={[styles.rule, { backgroundColor: colors.border }]} />
       <Actions>
         <Button label={wording.nav.signOut} disabled={leaving} onPress={() => void leave()} />

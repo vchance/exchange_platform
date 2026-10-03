@@ -136,5 +136,13 @@ test('the main screens fit a 320-pixel window in Spanish', async ({ person }) =>
   await page.getByRole('button', { name: es.composer.review, exact: true }).click()
   await check('the composer, with what needs fixing')
 
+  // Help: the list of topics, and the longest topic with its contents.
+  await page.goto('/help')
+  await expect(page.locator('nav.help-topics')).toBeVisible()
+  await check('help')
+  await page.goto('/help/keeping-track')
+  await expect(page.locator('nav.help-sections')).toBeVisible()
+  await check('a help topic')
+
   expect(found).toEqual([])
 })

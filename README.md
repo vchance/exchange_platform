@@ -145,7 +145,7 @@ None of this replaces trying the apps with VoiceOver, TalkBack, NVDA and a keybo
 
 ### End-to-end tests
 
-`apps/web/e2e` drives the built web app in Chromium with Playwright, against the real API and a real PostgreSQL database. Each test signs up its own people, each in a browser context of their own, with `example.test` addresses nobody else uses, so tests are independent and run in parallel. They go through the screens as a person would: a first proposal through to a completed exchange and its record, the record's plain summary and its print layout, counter-proposals, declining and withdrawing, discarding a draft, amendments, disputes, a close request, the guide for when something isn't working, what a proposal changes for the person asked to sign it, blocking, Spanish, the main screens in Spanish at 320 pixels wide, account deletion, a build the service says is too old, and a replaced invitation link.
+`apps/web/e2e` drives the built web app in Chromium with Playwright, against the real API and a real PostgreSQL database. Each test signs up its own people, each in a browser context of their own, with `example.test` addresses nobody else uses, so tests are independent and run in parallel. They go through the screens as a person would: a first proposal through to a completed exchange and its record, the record's plain summary and its print layout, counter-proposals, declining and withdrawing, discarding a draft, amendments, disputes, a close request, the guide for when something isn't working, what a proposal changes for the person asked to sign it, blocking, Spanish, the main screens in Spanish at 320 pixels wide, account deletion, a build the service says is too old, a replaced invitation link, and the help pages, opened from the signing step and read through their contents.
 
 ```sh
 npx playwright install chromium                              # once
@@ -304,8 +304,17 @@ TLS termination is the proxy's or the platform's: the service speaks plain HTTP 
 1. Add `packages/shared/wording/<code>.json` with every message that `en.json` has. The code is a language tag such as `fr` or `pt-BR`.
 2. List it in `packages/shared/wording/languages.json`, with its own name for itself and its text direction.
 3. Import it and add it to the `wording` object in `packages/shared/src/language.ts`.
+4. Add `packages/shared/wording/help/<code>.json`, the help pages, with every piece that `help/en.json` has, and add it to `help` in `packages/shared/src/help.test.ts`.
 
 `npm run typecheck` then fails until the file is complete, or while a button, title, status tag or mobile list line in it is longer than its space allows (below). The service reads the same list, so it needs no change, and neither does the API or the database. Nor does the mobile app. The web app needs none either: it finds the wording file by itself, and its build writes the language's invitation page, `/<code>/i`, from the file's `linkPreview` text. `DESIGN.md` §4.2 lists what else a language needs before it is offered to people, which is mostly not code.
+
+## Help
+
+The web app serves the help pages, open to anyone, signed in or not: `/help` lists the topics and `/help/{topic}` is one of them, with its sections listed at the top (`apps/web/src/screens/HelpPage.tsx`). The topics, in order, are in `HELP_TOPICS` (`packages/shared/src/help.ts`). A footer link on every web page leads there, and so does "Help" on the mobile account screen.
+
+- **Text.** Each language's help is a file of its own, `packages/shared/wording/help/{language}.json`: per topic a title, a one-line summary and a list of headings, paragraphs and lists, in JSON so that the wording check covers it the way it covers the rest of the wording. It is apart from the product's wording file so that only the help pages load it: the invitation page's first load and the mobile app carry none of it, and the help page is a lazily loaded chunk of its own. Help says what the product does today; where it states a number of days, it names one of `HELP_FIGURES` as a placeholder, and `help.test.ts` fails if those differ from `Rules::default` in `backend/src/domain/mod.rs`.
+- **"Learn more".** Small links from the places a topic explains: the signing step, the notice that money is paid outside, "Something isn't working", the amendment composer, the block panel, account deletion and the record (`HELP_LINKS`). On the web they open the topic in a new tab, so the step the person is in is not lost; in the app they open it in the system's browser (`apps/mobile/src/lib/help.ts`).
+- **Language.** A help address may name its language, `/help/{topic}?lang=es`, which the web app shows the page in when nobody is signed in. The links from the apps always do, since the browser that opens them may not know the app's language.
 
 ## An exchange's record
 
