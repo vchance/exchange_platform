@@ -194,11 +194,23 @@ jobs:
           asset="$(curl --silent --fail http://127.0.0.1:8080/ | grep --only-matching '/assets/[^"]*\.js' | head -1)"
           test -n "$asset"
           curl --silent --fail --head "http://127.0.0.1:8080$asset" | grep --ignore-case --quiet '^cache-control: public, max-age=31536000, immutable'
+          # Every response names its request, and a plain request ID sent in
+          # is the one returned.
+          curl --silent --fail --head --header 'X-Request-Id: ci-smoke-1' http://127.0.0.1:8080/healthz | grep --ignore-case --quiet '^x-request-id: ci-smoke-1'
+          # Metrics on their own port, counted by route template; never on
+          # the public one, where /metrics is just another page of the app.
+          curl --silent --fail http://127.0.0.1:9100/metrics | grep --quiet '^exchange_http_requests_total{route="/healthz",method="GET",status="2xx"}'
+          curl --silent --fail http://127.0.0.1:9100/metrics | grep --quiet '^exchange_database_up 1'
+          if curl --silent http://127.0.0.1:8080/metrics | grep --quiet exchange_http_requests_total; then
+            echo "::error::metrics are served on the public port"
+            exit 1
+          fi
 
       - name: Worker runs and stops cleanly on a signal
         run: |
           sleep 5
           docker compose --profile full logs worker | grep --quiet 'worker started'
+          curl --silent --fail http://127.0.0.1:9101/metrics | grep --quiet '^exchange_worker_runs_total{job="timers",result="ok"} [1-9]'
           docker compose --profile full stop --timeout 20 worker
           docker compose --profile full logs worker | grep --quiet 'worker shutting down'
           code="$(docker inspect --format '{{.State.ExitCode}}' "$(docker compose --profile full ps --all --quiet worker)")"
@@ -311,3 +323,144 @@ jobs:
             apps/web/test-results
             apps/web/e2e/.output
           retention-days: 14
+
+  # An authoritative record that cannot be restored is not authoritative
+  # (DESIGN.md §13.2). Fills a database through the API, backs it up with
+  # scripts/backup.sh, restores it into a new database with
+  # scripts/restore.sh, and proves the copy is the same: grants, triggers,
+  # every table's rows, the schema test run against the copy, and a signed
+  # agreement read back through the API with its hash intact
+  # (docs/operations.md, "Backups").
+  backup:
+    name: Backup and restore
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      SOURCE_URL: postgres://exchange:exchange@127.0.0.1:5432/exchange
+      SOURCE_APP_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/exchange
+      RESTORED_URL: postgres://exchange:exchange@127.0.0.1:5432/exchange_restored
+      RESTORED_APP_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/exchange_restored
+      APP_SECRET: ci-only-secret-for-the-backup-check-0123456789
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: exchange
+          POSTGRES_PASSWORD: exchange
+          POSTGRES_DB: exchange
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d exchange"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update
+          rustup default "$RUST_TOOLCHAIN"
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: backend
+
+      # For the load check, which makes the data through the API.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Create the application role
+        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d exchange < docker/postgres-init.sql
+
+      # The server's own major version of pg_dump, pg_restore and psql, from
+      # the image the database runs, whatever the runner has installed.
+      - name: PostgreSQL 17 tools
+        run: |
+          mkdir -p "$RUNNER_TEMP/pg17"
+          for tool in pg_dump pg_restore psql; do
+            printf '#!/bin/sh\nexec docker run --rm -i --network host -v "%s:%s" -w "$PWD" postgres:17 %s "$@"\n' \
+              "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$tool" > "$RUNNER_TEMP/pg17/$tool"
+            chmod +x "$RUNNER_TEMP/pg17/$tool"
+          done
+          echo "PG_BIN=$RUNNER_TEMP/pg17" >> "$GITHUB_ENV"
+          echo "PSQL=$RUNNER_TEMP/pg17/psql" >> "$GITHUB_ENV"
+
+      - name: Build the backend
+        working-directory: backend
+        run: cargo build --locked --bin api --bin worker --bin migrate
+
+      - name: Apply the migrations
+        run: MIGRATION_DATABASE_URL="$SOURCE_URL" backend/target/debug/migrate
+
+      # Ten pairs of people through a whole exchange: sign-in, a revision,
+      # signatures, deliveries, an ending, notifications sent by the worker.
+      - name: Make data through the API
+        env:
+          DATABASE_URL: ${{ env.SOURCE_APP_URL }}
+          BIND_ADDR: 127.0.0.1:8090
+          WEB_ORIGIN: http://127.0.0.1:8090
+          CODE_DELIVERY: log
+          NOTIFICATION_DELIVERY: log
+          TRUSTED_PROXY_HEADER: X-Forwarded-For
+          NO_COLOR: "1"
+        run: |
+          mkdir -p .backup
+          backend/target/debug/api > .backup/api.log 2>&1 &
+          echo $! > .backup/api.pid
+          backend/target/debug/worker > .backup/worker.log 2>&1 &
+          echo $! > .backup/worker.pid
+          for _ in $(seq 1 30); do
+            if curl --silent --fail --output /dev/null http://127.0.0.1:8090/readyz; then break; fi
+            sleep 1
+          done
+          node scripts/load-check.mjs --pairs 10 --concurrency 5 --base-url http://127.0.0.1:8090 \
+            --api-log .backup/api.log --database-url "$SOURCE_URL"
+          # Nothing writes to the source from here on.
+          kill -TERM "$(cat .backup/api.pid)" "$(cat .backup/worker.pid)"
+          sleep 2
+
+      - name: Back up
+        run: scripts/backup.sh -d "$SOURCE_URL" .backup/exchange.dump
+
+      - name: A database that is not empty is refused
+        run: |
+          if scripts/restore.sh -d "$SOURCE_URL" .backup/exchange.dump; then
+            echo "::error::restore.sh restored over a database that holds tables"
+            exit 1
+          fi
+
+      - name: Restore into a new database
+        run: |
+          "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "CREATE DATABASE exchange_restored OWNER exchange"
+          scripts/restore.sh -d "$RESTORED_URL" .backup/exchange.dump
+
+      - name: The copy matches the source
+        run: scripts/check-restore.sh "$SOURCE_URL" "$RESTORED_URL"
+
+      - name: Restoring again over the copy, when told to
+        run: |
+          scripts/restore.sh --overwrite -d "$RESTORED_URL" .backup/exchange.dump
+          scripts/check-restore.sh "$SOURCE_URL" "$RESTORED_URL"
+
+      # backend/tests/schema.rs against the copy: the application role can
+      # record an agreement and cannot rewrite history, and nor can the
+      # owner. Each test rolls back what it writes.
+      - name: Schema test against the copy
+        working-directory: backend
+        env:
+          MIGRATION_DATABASE_URL: ${{ env.RESTORED_URL }}
+          DATABASE_URL: ${{ env.RESTORED_APP_URL }}
+        run: cargo test --locked --test schema
+
+      - name: A signed agreement reads back from the copy
+        run: scripts/check-restored-record.sh "$RESTORED_URL" "$RESTORED_APP_URL" "$SOURCE_URL"
+
+      - name: Logs
+        if: ${{ failure() }}
+        run: |
+          tail -n 100 .backup/api.log .backup/worker.log || true

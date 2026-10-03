@@ -9,6 +9,8 @@ A versioned agreement between two parties, signed electronically, with a shared 
 | `backend/` | Rust service: Axum, sqlx, PostgreSQL. One crate, four binaries. |
 | `apps/web/` | React web app built with Vite. Also the no-install path for invited counterparties. |
 | `apps/mobile/` | iOS and Android app: React Native with Expo, routed with Expo Router. The web app's flows for agreeing an exchange and seeing it through, on its own screens. |
+| `docs/operations.md` | Running the service: deployment, health, logs, metrics, backups and restore. |
+| `scripts/` | The load check, and backing up, restoring and checking a restored database. |
 | `packages/api-client/` | TypeScript API client, generated from the service's own API description. |
 | `packages/shared/` | Shared by web, mobile and the service: the wording, one file per language, and the list of supported languages. Also everything the two apps do that is not a screen: the calls to the API with their idempotency keys, the action runner, filling in wording messages, formatting dates, numbers and money, saving a working copy of terms and turning it into a revision, reading an invitation link. |
 
@@ -136,12 +138,13 @@ Nothing that takes days is tested: a proposal or an invitation expiring, a close
 
 ## CI
 
-GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Four jobs run side by side:
+GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Five jobs run side by side:
 
 - **Backend and API client**, against a PostgreSQL 17 container with the same two roles as local development: `cargo fmt --check`, `cargo clippy --all-targets` with warnings as errors, `cargo test`, and then `npm run gen:api`, which fails the job if it changes anything under `packages/api-client`. A stale client means the contract has drifted; regenerate it and commit the result.
 - **TypeScript**: `npm ci`, `npm run typecheck` (which includes the wording check), `npm run lint -w @exchange/web` (warnings fail it), `npm run lint -w @exchange/mobile`, `npm test` and `npm run build:web`.
-- **Container image**: builds the `Dockerfile`, starts the whole stack from `docker-compose.yml` and checks it from outside: `/healthz` and `/readyz` answer, the web app's entry pages are served in each language with the right cache and security headers, API paths keep precedence, and the worker starts and exits cleanly when stopped. Docker is not needed on a development machine for anything else, so this job is where the image is verified.
+- **Container image**: builds the `Dockerfile`, starts the whole stack from `docker-compose.yml` and checks it from outside: `/healthz` and `/readyz` answer, the web app's entry pages are served in each language with the right cache and security headers, API paths keep precedence, a request ID comes back, metrics answer on their own port and not on the public one, and the worker starts, reports its passes and exits cleanly when stopped. Docker is not needed on a development machine for anything else, so this job is where the image is verified.
 - **End to end**: against a PostgreSQL 17 container, builds the API and the web app, applies the migrations, starts the API in the background and runs `apps/web/e2e` in Chromium. When it fails, the Playwright report, with a trace of each failed test, and the API's log are kept as the run's `playwright-report` artifact.
+- **Backup and restore**: fills a database through the API with the load check, backs it up with `scripts/backup.sh`, restores it into a new database with `scripts/restore.sh` (which first has to refuse the non-empty source), and proves the copy is the same: `scripts/check-restore.sh` compares grants, triggers and every table's rows, `backend/tests/schema.rs` runs against the copy, and `scripts/check-restored-record.sh` reads a signed agreement back through the API with its hash intact. [docs/operations.md](docs/operations.md), "The restore drill", is the same by hand.
 
 The workflow names the Rust and Node versions it uses; raise them there when the project moves to newer ones.
 
@@ -220,14 +223,18 @@ Nothing in the service assumes a particular host. A deployment is a PostgreSQL d
 |---|---|
 | `DATABASE_URL` | The application role's connection string: a role that can add to the agreement history but not change or delete it (`DESIGN.md` §13.2). `docker/postgres-init.sql` creates it for a fresh database. |
 | `MIGRATION_DATABASE_URL` | The schema owner's connection string, for `migrate` only. Run it once per release, before the new API and worker start; it is safe to run again. |
-| `APP_SECRET` | At least 32 random bytes (`openssl rand -hex 32`), kept as a secret. Changing it invalidates one-time codes that are in flight, nothing else. |
+| `APP_SECRET` | At least 32 random bytes (`openssl rand -hex 32`), kept as a secret. Changing it invalidates one-time codes that are in flight and starts the sign-in limit counts again; sessions and everything else are untouched ([docs/operations.md](docs/operations.md), "Rotating `APP_SECRET`"). |
 | `WEB_ORIGIN` | The public origin the web app is served from, which with `WEB_DIR` is the API's own, such as `https://app.example.com`. Cookie sessions are honored only for requests from it, notification emails link into it, and when it is HTTPS every response carries HSTS. |
 | `CODE_DELIVERY`, `NOTIFICATION_DELIVERY` | How one-time codes and notification emails reach people. Both are required and have no default, so a deployment that forgot to choose cannot start with the development delivery (`log`) by accident. `smtp` sends through the server below. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | The SMTP server, when either delivery is `smtp`. Nearly every email provider offers one; the values are what it gives you. `SMTP_TLS` is `tls` (from the first byte, port 465, the default), `starttls` (port 587; a server that cannot upgrade is refused) or `none` (a relay on the same host only). The password never appears in a log or an error. Codes go by email only; SMS delivery is not built. |
 | `TRUSTED_PROXY_HEADER`, `TRUSTED_PROXIES` | Behind a reverse proxy or CDN, the header that carries the requester's address and how many proxies in a row add to it. By default no header is trusted and the connection's peer is taken, so a header a client sends itself is ignored. The address is recorded with each signature (`DESIGN.md` §8). |
 | `WEB_DIR`, `BIND_ADDR`, `RUST_LOG` | Set by the image; override only if the layout differs. |
+| `LOG_FORMAT` | `text` (the default) or `json`, one object per line for a log collector. Each request logs one line with its method, path, status, latency and request ID; nothing personal is ever logged. |
+| `METRICS_ADDR` | Off by default. An address such as `0.0.0.0:9100` on which the api, or the worker, serves Prometheus metrics, on a listener of its own and never the public port. |
 
 TLS termination is the proxy's or the platform's: the service speaks plain HTTP behind it, and `WEB_ORIGIN` tells it what the outside sees. Secrets belong in the platform's secret store, never in the image or the repository.
+
+[docs/operations.md](docs/operations.md) is the runbook: the first deployment step by step, health checks, log fields, metrics and what to watch, backups and the restore drill, rotating `APP_SECRET`, and what to do when the worker is down.
 
 ## Conventions
 

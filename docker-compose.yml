@@ -21,6 +21,10 @@ x-app-environment: &app-environment
   DATABASE_URL: postgres://exchange_app:exchange_app@postgres:5432/exchange
   WEB_ORIGIN: http://localhost:8080
   RUST_LOG: ${RUST_LOG:-info}
+  LOG_FORMAT: ${LOG_FORMAT:-text}
+  # Metrics on a port of their own inside each container, published below
+  # on this machine only (docs/operations.md, "Metrics").
+  METRICS_ADDR: 0.0.0.0:9100
 
 services:
   postgres:
@@ -58,6 +62,7 @@ services:
     <<: *service
     ports:
       - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9100:9100"
     environment:
       <<: *app-environment
       APP_SECRET: ${APP_SECRET:-development-only-secret-do-not-use-anywhere-else}
@@ -70,6 +75,8 @@ services:
   worker:
     <<: *service
     command: ["/usr/local/bin/worker"]
+    ports:
+      - "127.0.0.1:9101:9100"
     environment:
       <<: *app-environment
       # Development delivery: notifications appear in `docker compose logs worker`.

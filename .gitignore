@@ -8,6 +8,11 @@ dist/
 .env.*
 !.env.example
 
+# Database backups hold every account and agreement (docs/operations.md)
+*.dump
+*.dump.partial
+.backup/
+
 # Platform credentials never belong in the repository (DESIGN.md §13.3)
 *.p8
 *.p12
