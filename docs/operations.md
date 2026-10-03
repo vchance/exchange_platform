@@ -22,7 +22,7 @@ All three come from the same image: the `api` is its default command, the other 
    CREATE DATABASE yuppers OWNER exchange;
    ```
 
-   On a managed service the owner may be the role the service gives you; what matters is that the API and worker never connect as it. `exchange_app` must exist before the first migration, which grants to it. Require TLS to the database if the service offers it (`?sslmode=require` on both connection strings).
+   On a managed service the owner may be the role the service gives you; what matters is that the API and worker never connect as it. `exchange_app` must exist before the first migration, which grants to it, and must have exactly that name: the migrations name it, and they are never edited once applied. (The roles predate the name Yuppers; the database's name is free.) Require TLS to the database if the service offers it (`?sslmode=require` on both connection strings).
 
 2. **Secrets.** In the platform's secret store, never in the image or the repository:
    - `DATABASE_URL`: `exchange_app`'s connection string, for the api and the worker.
@@ -155,7 +155,7 @@ To recover:
 
 ```sh
 MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/yuppers \
-  scripts/backup.sh /backups/exchange-$(date -u +%Y%m%d).dump
+  scripts/backup.sh /backups/yuppers-$(date -u +%Y%m%d).dump
 ```
 
 - It needs `pg_dump` and `pg_restore` of the server's major version or newer (PostgreSQL 17); the image does not contain them. Run it from a small scheduled job in the same network, for example a `postgres:17` container with the repository's `scripts/` mounted, or set `PG_BIN` to where the tools are.

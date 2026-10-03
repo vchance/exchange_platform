@@ -6,6 +6,7 @@ SQL files named `<version>_<description>.sql`, embedded into the binaries at bui
 - The role `exchange_app` must exist before migrating; migrations grant to it and fail if it is missing.
 - Every new table needs its own explicit `GRANT` to `exchange_app`. Nothing is granted by default, so a table is unreachable by the service until a migration says what the service may do with it.
 - A migration that has been applied anywhere is never edited. Add a new one.
+- So the role names stay as the migrations wrote them, from before the product was called Yuppers: `exchange_app` for the service, and by convention `exchange` for the owner. A role belongs to the whole PostgreSQL cluster, so a migration cannot rename it either: every other database on the cluster still has to apply `0001` and grant to `exchange_app`. Likewise the `exchange` table and the other names in the schema are the technical model, not the brand.
 
 ## 0001_record_model
 

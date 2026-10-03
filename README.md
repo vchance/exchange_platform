@@ -1,6 +1,10 @@
-# Exchange Platform
+# Yuppers
 
-A versioned agreement between two parties, signed electronically, with a shared record of what each has delivered. The design guide is kept in a separate, private repository. Comments and documents here cite it by section, as in `DESIGN.md §13.2`; the code and its tests are the public statement of how things work.
+Send a yup: a two-person agreement, written together, signed electronically, then tracked until each side has delivered. Nothing here moves money; it keeps a versioned agreement and a shared record of what each party says was done.
+
+What a person makes and sends is a yup. In the code, the API and the database it is still an exchange (`Exchange`, `/v1/exchanges`, the `exchange` table), the technical name that predates the brand; the wording says yup in everyday places and agreement wherever someone commits to something or deals with a problem.
+
+The design guide is kept in a separate, private repository. Comments and documents here cite it by section, as in `DESIGN.md §13.2`; the code and its tests are the public statement of how things work.
 
 ## Layout
 
@@ -47,7 +51,9 @@ $PG/psql -h 127.0.0.1 -d postgres \
   -c "CREATE DATABASE yuppers OWNER exchange"
 ```
 
-`exchange` owns the schema and runs migrations; it may create databases because the API tests each build a throwaway one. `exchange_app` is what the API and worker connect as; it can add to the agreement history but not change or delete it.
+The roles keep their technical names, `exchange` and `exchange_app`, because the migrations grant to `exchange_app` by name and an applied migration is never edited. `exchange` owns the schema and runs migrations; it may create databases because the API tests each build a throwaway one. `exchange_app` is what the API and worker connect as; it can add to the agreement history but not change or delete it.
+
+A database created before the product was named Yuppers is called `exchange`. Either rename it once, with nothing connected to it, `$PG/psql -h 127.0.0.1 -d postgres -c "ALTER DATABASE exchange RENAME TO yuppers"` (in Docker: `docker compose exec postgres psql -U exchange -d postgres -c "ALTER DATABASE exchange RENAME TO yuppers"`), or keep pointing `DATABASE_URL` and `MIGRATION_DATABASE_URL` in your `.env` at `/exchange`. The roles need nothing.
 
 In development, one-time codes are not sent anywhere: with `CODE_DELIVERY=log` the API writes each code to its own log, which is where you read it to sign in. Notifications work the same way: with `NOTIFICATION_DELIVERY=log` the worker writes each email to its log instead of sending it.
 
@@ -72,6 +78,7 @@ The app in `apps/mobile` takes an exchange from a draft to completion the way th
 | `EXPO_PUBLIC_API_URL` | Where the service is. Defaults to `http://localhost:8080`. |
 | `EXPO_PUBLIC_WEB_URL` | Where the web app is served from. Invitation links point there, `{web origin}/{language}/i#{token}`, so they work for someone without the app. Defaults to `http://localhost:5173`. |
 
+- **Name and icons.** The app is Yuppers, with the iOS bundle identifier and Android package `app.yuppers` (`app.json`). Its icon, the layers of the Android adaptive icon and the splash image are the Yuppers mark, drawn once in `scripts/make-icons.mjs`, which writes them all and the web favicon too; run it again with `node apps/mobile/scripts/make-icons.mjs` (it needs `rsvg-convert`, from librsvg).
 - **Session.** The app signs in for a token, keeps it in the device's secure storage through `expo-secure-store` and nowhere else, and sends it as a bearer token (`src/lib/session.ts`, `src/lib/token-store.ts`).
 - **Invitation links.** Until the web domain can open the app by itself, an invitation reaches the app in two ways: its own scheme, `yuppers://{language}/i#{token}`, and pasting the link into the app ("Open an invitation" on the first screen, signed in or not; signed out, it leads to reading the proposal without an account, as the link does). Either way the token is taken out of the link before the router sees it and is held in memory only (`src/lib/invitation.ts`, `src/app/+native-intent.ts`).
 - **Languages.** The device's language before sign-in and the account's after. Hermes, the engine the app runs on, has a narrower `Intl` than a browser: the shared formatting avoids what it lacks, and `src/lib/plural-rules.ts` supplies plural rules for every language from the Unicode data, so adding a language needs nothing in the app.
