@@ -207,3 +207,107 @@ jobs:
       - name: Logs
         if: ${{ failure() }}
         run: docker compose --profile full logs
+
+  # The web app in a real browser, against the real API and a real database:
+  # two people, each in a browser of their own, taking exchanges through
+  # their lifecycle (apps/web/e2e). One-time codes are read from the API's
+  # log, so no mail server is involved.
+  e2e:
+    name: End to end
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/exchange
+      MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/exchange
+      APP_SECRET: ci-only-secret-for-the-end-to-end-tests-0123456789
+      # Where the API started below writes its log; the tests read codes from it.
+      E2E_API_LOG: ${{ github.workspace }}/apps/web/e2e/.output/api.log
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: exchange
+          POSTGRES_PASSWORD: exchange
+          POSTGRES_DB: exchange
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d exchange"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update
+          rustup default "$RUST_TOOLCHAIN"
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: backend
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Create the application role
+        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d exchange < docker/postgres-init.sql
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      - name: Build the backend
+        working-directory: backend
+        run: cargo build --locked --bin api --bin migrate
+
+      - name: Build the web app
+        run: npm run build:web
+
+      - name: Apply the migrations
+        run: backend/target/debug/migrate
+
+      # The address and settings the tests expect (apps/web/e2e/support/env.ts).
+      - name: Start the API
+        env:
+          BIND_ADDR: 127.0.0.1:8090
+          WEB_ORIGIN: http://127.0.0.1:8090
+          WEB_DIR: ${{ github.workspace }}/apps/web/dist
+          CODE_DELIVERY: log
+          NOTIFICATION_DELIVERY: log
+          NO_COLOR: "1"
+          # Each simulated person sends an address of their own here, so the
+          # per-address sign-in limits count them apart.
+          TRUSTED_PROXY_HEADER: X-Forwarded-For
+        run: |
+          mkdir -p "$(dirname "$E2E_API_LOG")"
+          nohup backend/target/debug/api > "$E2E_API_LOG" 2>&1 &
+          for _ in $(seq 1 30); do
+            if curl --silent --fail --output /dev/null http://127.0.0.1:8090/readyz; then exit 0; fi
+            sleep 1
+          done
+          cat "$E2E_API_LOG"
+          echo "::error::the API did not become ready"
+          exit 1
+
+      - name: Run the tests
+        run: npm run e2e -w @exchange/web
+
+      - name: Upload the Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+            apps/web/e2e/.output
+          retention-days: 14
