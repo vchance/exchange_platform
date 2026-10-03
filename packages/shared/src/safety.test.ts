@@ -1,6 +1,13 @@
 import { expect, test } from 'vitest'
 
-import { checkReport, hasOtherParty, REPORT_REASONS, reportNeedsDetails } from './safety'
+import {
+  blockLeavesAgreement,
+  checkReport,
+  hasOtherParty,
+  offersCloseAfterBlock,
+  REPORT_REASONS,
+  reportNeedsDetails,
+} from './safety'
 
 test('a report is never sent with a reason nobody picked', () => {
   expect(checkReport(null, '')).toEqual({ ok: false, reasonMissing: true, detailsMissing: false })
@@ -53,4 +60,27 @@ test('there is someone to report or block once someone has joined', () => {
   expect(hasOtherParty({ state: 'CLOSED', counterparty: 'CONFIRMED' })).toBe(true)
   // One that closed before anyone joined has nobody on the other side.
   expect(hasOtherParty({ state: 'CLOSED', counterparty: 'UNCLAIMED' })).toBe(false)
+})
+
+test('a block from an agreement in force says that the agreement stands', () => {
+  expect(blockLeavesAgreement({ state: 'ACTIVE' })).toBe(true)
+  for (const state of ['DRAFT', 'NEGOTIATING', 'CLOSED'] as const) {
+    expect(blockLeavesAgreement({ state })).toBe(false)
+  }
+})
+
+test('closing without agreement is offered beside a block only where it can be asked for', () => {
+  const inForce = { state: 'ACTIVE', close_requested_by: null } as const
+  // Once blocked, and only then: nothing is offered before the block is made.
+  expect(offersCloseAfterBlock(inForce, true)).toBe(true)
+  expect(offersCloseAfterBlock(inForce, false)).toBe(false)
+  expect(offersCloseAfterBlock(inForce, null)).toBe(false)
+  expect(offersCloseAfterBlock({ state: 'ACTIVE' }, true)).toBe(true)
+  // A request to close already open, from either party, is not asked again.
+  expect(offersCloseAfterBlock({ ...inForce, close_requested_by: 'A' }, true)).toBe(false)
+  expect(offersCloseAfterBlock({ ...inForce, close_requested_by: 'B' }, true)).toBe(false)
+  // Nothing in force, nothing to close: a block already ended what was waiting.
+  for (const state of ['NEGOTIATING', 'CLOSED'] as const) {
+    expect(offersCloseAfterBlock({ state, close_requested_by: null }, true)).toBe(false)
+  }
 })

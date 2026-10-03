@@ -516,6 +516,7 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     if (call === `GET ${at}/history`) return [200, history(exchange)]
     if (call === `GET ${at}/record`) return [200, record(exchange)]
     if (call === `GET ${at}/block`) return [200, { blocked: false, name: PARTIES.B }]
+    if (call === `PUT ${at}/block`) return [204, null]
   }
   return [404, { code: 'NOT_FOUND' }]
 }

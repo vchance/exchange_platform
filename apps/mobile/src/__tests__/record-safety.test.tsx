@@ -415,6 +415,10 @@ describe('blocking from an exchange', () => {
       fill(safety.blockStops, other),
       safety.blockEnds,
       safety.blockKeeps,
+      // This exchange is an agreement in force: what the person blocked can
+      // still do in it, and that it can be closed.
+      fill(safety.blockInForce, other),
+      fill(safety.blockThenClose, other),
       fill(safety.blockQuiet, other),
       fill(safety.confirmBlock, other),
     ].map((sentence) => read.indexOf(sentence));
@@ -444,6 +448,51 @@ describe('blocking from an exchange', () => {
     });
     const put = service.sent.find((request) => request.method === 'PUT');
     expect(put).toMatchObject({ authorization: `Bearer ${TOKEN}`, body: null });
+  });
+
+  test('once blocked, an agreement in force can be asked to close right there', async () => {
+    await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
+    await fireEvent.press(await screen.findByRole('button', { name: blockLabel }));
+    // Nothing is offered before the block is made.
+    expect(screen.queryByText(fill(safety.blockedInForce, other))).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: fill(safety.confirmBlock, other) }));
+
+    await screen.findByText(fill(safety.blockedInForce, other));
+    // The same request to close as under "Ending the agreement", opened here.
+    const offers = screen.getAllByRole('button', { name: w.exchange.requestClose });
+    await fireEvent.press(offers.at(-1)!);
+    expect(
+      screen.getAllByRole('button', { name: w.exchange.requestClose, expanded: true }),
+    ).toHaveLength(1);
+    expect(screen.getAllByText(fill(w.exchange.requestCloseText, other))).toHaveLength(1);
+    expect(calls().filter((call) => call.endsWith('/commands'))).toEqual([]);
+
+    await fireEvent.press(screen.getByRole('button', { name: w.exchange.sendCloseRequest }));
+    await waitFor(() =>
+      expect(sentTo('/commands').at(-1)).toMatchObject({
+        body: { command: { type: 'REQUEST_CLOSE', note: null } },
+      }),
+    );
+    // Asked once, it is not offered again.
+    await waitFor(() =>
+      expect(screen.queryByText(fill(safety.blockedInForce, other))).toBeNull(),
+    );
+  });
+
+  test('a block from a proposal still being negotiated says nothing about an agreement', async () => {
+    await open(`/exchanges/${EXCHANGE}`, {
+      signedIn: true,
+      before: (made) => {
+        made.exchange = { ...made.exchange, state: 'NEGOTIATING' };
+      },
+    });
+    await fireEvent.press(await screen.findByRole('button', { name: blockLabel }));
+    screen.getByText(safety.blockEnds);
+    expect(screen.queryByText(fill(safety.blockInForce, other))).toBeNull();
+    expect(screen.queryByText(fill(safety.blockThenClose, other))).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: fill(safety.confirmBlock, other) }));
+    await screen.findByText(fill(safety.blocked, other));
+    expect(screen.queryByText(fill(safety.blockedInForce, other))).toBeNull();
   });
 
   test('someone already blocked is shown as blocked, and can be unblocked', async () => {

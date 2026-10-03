@@ -1,5 +1,12 @@
 import type { ExchangeView } from '@yuppers/api-client'
-import { hasOtherParty, isUnconfirmedClaimant, useExchangeSafety } from '@yuppers/shared'
+import {
+  blockLeavesAgreement,
+  CLOSE_AFTER_BLOCK_PANEL,
+  hasOtherParty,
+  isUnconfirmedClaimant,
+  offersCloseAfterBlock,
+  useExchangeSafety,
+} from '@yuppers/shared'
 import { useEffect, useRef } from 'react'
 
 import { useI18n } from '../app/context'
@@ -10,6 +17,7 @@ import { ReportForm } from '../components/ReportForm'
 import { Failure } from '../components/ui'
 import type { Actions } from '../lib/actions'
 import { safetyApi } from '../lib/safety'
+import { RequestClosePanel } from './Ending'
 
 interface Props {
   exchange: ExchangeView
@@ -22,6 +30,14 @@ interface Props {
  * Report and block, on every view of an exchange that has someone on the
  * other side (DESIGN.md §9). Each is said in full before it is done: what
  * happens, and that the other party is not told.
+ *
+ * A block leaves an agreement in force standing, and the person blocked can
+ * still act in it. Blocking from one says so, and once the block is made,
+ * closing without agreement is offered right here. It opens the same request
+ * to close as "Ending the agreement" does, after the block rather than as
+ * part of it: the block is silent and immediate, while a request to close
+ * is seen by the other party, has its own window and its own statement, and
+ * deserves its own confirmation (DESIGN.md §5.3).
  */
 export function ExchangeSafety(props: Props) {
   const { exchange } = props
@@ -58,6 +74,7 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
   }, [outcome])
 
   const waiting = busy || actions.busy
+  const offerClose = offersCloseAfterBlock(exchange, blocked)
 
   return (
     <section aria-labelledby="safety-heading">
@@ -70,6 +87,24 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
           {outcome === 'blocked' && fmt(w.blocked, name)}
           {outcome === 'unblocked' && fmt(w.unblocked, name)}
         </p>
+      )}
+      {offerClose && (
+        <>
+          <p>{fmt(w.blockedInForce, name)}</p>
+          <div className="actions">
+            <button
+              type="button"
+              aria-expanded={actions.panel === CLOSE_AFTER_BLOCK_PANEL}
+              disabled={waiting}
+              onClick={() => actions.open(CLOSE_AFTER_BLOCK_PANEL)}
+            >
+              {wording.exchange.requestClose}
+            </button>
+          </div>
+          {actions.panel === CLOSE_AFTER_BLOCK_PANEL && (
+            <RequestClosePanel otherName={name.name} actions={actions} />
+          )}
+        </>
       )}
 
       <div className="actions">
@@ -120,6 +155,12 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
             <>
               <p>{w.blockEnds}</p>
               <p>{w.blockKeeps}</p>
+              {blockLeavesAgreement(exchange) && (
+                <>
+                  <p>{fmt(w.blockInForce, name)}</p>
+                  <p>{fmt(w.blockThenClose, name)}</p>
+                </>
+              )}
             </>
           )}
           <p>{fmt(w.blockQuiet, name)}</p>

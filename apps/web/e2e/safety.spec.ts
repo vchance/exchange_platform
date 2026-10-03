@@ -1,5 +1,5 @@
 import { expect, test } from './support/fixtures'
-import { negotiate, stateTag } from './support/flows'
+import { agree, negotiate, stateTag } from './support/flows'
 import { en, fill } from './support/wording'
 
 test('blocking the other party from an exchange lists them on the account, until they are unblocked', async ({
@@ -44,4 +44,32 @@ test('blocking the other party from an exchange lists them on the account, until
       .getByRole('region', { name: en.safety.blockedHeading, exact: true })
       .getByText(en.safety.blockedEmpty),
   ).toBeVisible()
+})
+
+test('blocking from an agreement in force says it stands, and offers to close it right there', async ({
+  person,
+}) => {
+  const ana = await person('Ana')
+  const bruno = await person('Bruno')
+  await agree(ana, bruno, [{ from: 'me', kind: 'ITEM', description: 'A box of records' }])
+  const { page } = ana
+  const name = { name: bruno.name }
+
+  const safety = page.getByRole('region', { name: en.safety.heading, exact: true })
+  await safety.getByRole('button', { name: fill(en.safety.block, name) }).click()
+  const panel = safety.getByRole('group', { name: fill(en.safety.block, name) })
+  await expect(panel.getByText(fill(en.safety.blockInForce, name))).toBeVisible()
+  await expect(panel.getByText(fill(en.safety.blockThenClose, name))).toBeVisible()
+  await panel.getByRole('button', { name: fill(en.safety.confirmBlock, name) }).click()
+  await expect(safety.getByText(fill(en.safety.blockedInForce, name))).toBeVisible()
+  await expect(stateTag(page)).toHaveText(en.states.ACTIVE)
+
+  // The usual request to close, opened under the offer, and confirmed there.
+  await safety.getByRole('button', { name: en.exchange.requestClose, exact: true }).click()
+  const request = safety.getByRole('group', { name: en.exchange.requestClose, exact: true })
+  await expect(request).toBeFocused()
+  await expect(request.getByText(fill(en.exchange.requestCloseText, name))).toBeVisible()
+  await request.getByRole('button', { name: en.exchange.sendCloseRequest }).click()
+  await expect(safety.getByText(fill(en.safety.blockedInForce, name))).toBeHidden()
+  await expect(page.getByText(en.exchange.closeRequestLapses.split('{date}')[0])).toBeVisible()
 })

@@ -19,6 +19,14 @@ import type { ReportReason } from './safety'
 export const SAFETY_PANELS = { report: 'safety-report', block: 'safety-block' } as const
 export type SafetyPanel = keyof typeof SAFETY_PANELS
 
+/**
+ * The request to close an agreement in force without agreement, opened from
+ * the report-and-block section right after a block. It is the exchange's own
+ * request to close, shown there rather than under "Ending the agreement", so
+ * that it opens where it was asked for.
+ */
+export const CLOSE_AFTER_BLOCK_PANEL = 'safety-request-close'
+
 /** What was just done, to be said once it is. */
 export type SafetyOutcome = 'reported' | 'blocked' | 'unblocked'
 

@@ -39,13 +39,30 @@ test('from an exchange, a person reports it and blocks the other party, and can 
 
   // Blocking says what it does first, and leaves the agreement in force.
   await button(page, fill(en.safety.block, name)).click()
+  // The panel's heading sits under "Report or block"; the screen has one h1.
+  await expect(
+    page.getByRole('heading', { name: fill(en.safety.block, name), level: 3 }),
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
   await expect(page.getByText(en.safety.blockKeeps)).toBeVisible()
+  await expect(page.getByText(fill(en.safety.blockInForce, name))).toBeVisible()
+  await expect(page.getByText(fill(en.safety.blockThenClose, name))).toBeVisible()
   await expect(page.getByText(fill(en.safety.blockQuiet, name))).toBeVisible()
   await button(page, fill(en.safety.confirmBlock, name)).click()
   await expect(page.getByText(fill(en.safety.blocked, name)).first()).toBeVisible()
   await expect(button(page, fill(en.safety.unblock, name))).toBeVisible()
   expect((await ana.view(id)).state).toBe('ACTIVE')
   await expect(page.getByText(en.states.ACTIVE, { exact: true })).toBeVisible()
+
+  // Closing without agreement is offered right there, and is the usual request.
+  await expect(page.getByText(fill(en.safety.blockedInForce, name))).toBeVisible()
+  await button(page, en.exchange.requestClose).last().click()
+  await expect(page.getByText(fill(en.exchange.requestCloseText, name))).toBeVisible()
+  await button(page, en.exchange.sendCloseRequest).click()
+  await expect(page.getByText(fill(en.safety.blockedInForce, name))).toBeHidden()
+  const asked = await ana.view(id)
+  expect(asked.close_requested_by).toBe('B')
+  expect(asked.state).toBe('ACTIVE')
 
   // The account screen lists who is blocked, and unblocks from there too.
   await page.goto('/')

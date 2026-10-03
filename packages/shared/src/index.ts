@@ -172,14 +172,17 @@ export {
 } from './claimant'
 export type { Leaver } from './claimant'
 export {
+  blockLeavesAgreement,
   checkReport,
   hasOtherParty,
+  offersCloseAfterBlock,
   REPORT_DETAILS_MAX_CHARS,
   REPORT_REASONS,
   reportNeedsDetails,
 } from './safety'
 export type { ReportCheck, ReportReason } from './safety'
 export {
+  CLOSE_AFTER_BLOCK_PANEL,
   SAFETY_PANELS,
   useBlockedPeople,
   useExchangeSafety,

@@ -265,6 +265,16 @@ function respond(
       };
       return [200, service.exchange];
     }
+    if (command.type === 'REQUEST_CLOSE' && !service.exchange.close_requested_by) {
+      service.exchange = {
+        ...service.exchange,
+        version: service.exchange.version + 1,
+        close_requested_by: 'A',
+        close_requested_at: '2026-10-03T09:00:00Z',
+        close_request_lapses_at: '2026-10-10T09:00:00Z',
+      };
+      return [200, service.exchange];
+    }
     return [409, { code: 'ACTION_NOT_ALLOWED' }];
   }
   return [404, { code: 'NOT_FOUND' }];

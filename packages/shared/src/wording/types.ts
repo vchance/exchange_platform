@@ -472,9 +472,20 @@ export interface Wording {
     blockStops: string
     blockEnds: string
     blockKeeps: string
+    /**
+     * Said too when the block is made from an agreement in force: what the
+     * blocked person can still do in it, and that it can be closed.
+     */
+    blockInForce: string
+    blockThenClose: string
     blockQuiet: string
     confirmBlock: string
     blocked: string
+    /**
+     * Beside a block, on an agreement in force that nobody has asked to close
+     * yet, before the button that asks to close it without agreement.
+     */
+    blockedInForce: string
     unblock: string
     unblocked: string
     blockedHeading: string

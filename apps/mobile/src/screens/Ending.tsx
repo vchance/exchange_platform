@@ -134,15 +134,7 @@ export function Ending({ exchange, otherName, actions }: Props) {
       )}
 
       {actions.panel === 'request-close' && (
-        <StatementPanel
-          title={w.requestClose}
-          text={fmt(w.requestCloseText, { name: otherName })}
-          label={w.statementLabel}
-          submitLabel={w.sendCloseRequest}
-          required={false}
-          actions={actions}
-          onSubmit={(note) => actions.run({ type: 'REQUEST_CLOSE', note })}
-        />
+        <RequestClosePanel otherName={otherName} actions={actions} />
       )}
 
       {actions.panel === 'statement' && (
@@ -161,6 +153,33 @@ export function Ending({ exchange, otherName, actions }: Props) {
         />
       )}
     </>
+  );
+}
+
+/**
+ * Asking to close an agreement in force without agreement, with an optional
+ * statement. Opened from "Ending the agreement", and right after a block
+ * (`ExchangeSafety`), so that it appears where it was asked for.
+ */
+export function RequestClosePanel({
+  otherName,
+  actions,
+}: {
+  otherName: string;
+  actions: ExchangeActions;
+}) {
+  const { wording, fmt } = useI18n();
+  const w = wording.exchange;
+  return (
+    <StatementPanel
+      title={w.requestClose}
+      text={fmt(w.requestCloseText, { name: otherName })}
+      label={w.statementLabel}
+      submitLabel={w.sendCloseRequest}
+      required={false}
+      actions={actions}
+      onSubmit={(note) => actions.run({ type: 'REQUEST_CLOSE', note })}
+    />
   );
 }
 
