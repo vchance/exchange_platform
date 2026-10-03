@@ -84,6 +84,16 @@ Sign-in hardening (`DESIGN.md` §8, §18 item 4). A new code no longer ends the 
 
 **`sign_in_limit`** counts code requests and failed guesses per requester's address, identifier or account, one row per thing counted and fixed window (an hour, or a UTC day). The service locks the row while it decides, so concurrent requests cannot both slip under a limit. Whom a row counts is a keyed hash under `APP_SECRET`, never an address or identifier in the clear, and the worker removes windows more than two days old; so deleting an account need not touch the table. The application role may read, add, change and remove rows. `backend/tests/schema.rs` checks the constraints and grants; `backend/tests/auth.rs` and `backend/tests/deletion.rs` the limits through the API.
 
+## 0009_load_indexes
+
+Three indexes on `exchange`, for queries the load check (README, "Load check") found reading the whole table, each run often enough that its cost would have grown with every exchange ever made:
+
+- `(created_by, created_at)`: counting an account's exchanges in the last day, on every creation, under the per-account limit.
+- `(open_revision_id)` where there is one: the worker's search for expired revisions, on every pass. Without it the search read every revision whose expiry had passed, which in time is nearly every revision ever sent, accepted or not.
+- `(inactivity_prompted_at)` where it is set: the worker's search for idle exchanges whose prompt has gone unanswered, on every pass.
+
+The last two are partial, so they hold only the exchanges the worker is looking for. Like every migration this one runs in a transaction, so the indexes are built without `CONCURRENTLY` and writes to `exchange` wait while they build. Against the load check's 4,500 exchanges the whole migration took a tenth of a second.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

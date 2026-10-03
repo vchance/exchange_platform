@@ -129,6 +129,19 @@ GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on ev
 
 The workflow names the Rust and Node versions it uses; raise them there when the project moves to newer ones.
 
+### Dependencies
+
+[`.github/workflows/audit.yml`](.github/workflows/audit.yml) checks the locked dependencies against the published advisories every Monday and whenever it is started by hand (Actions, "Dependency audit", "Run workflow"): `npm audit --audit-level=high` and `cargo audit`. It fails on high or critical only, and never runs on a push or a pull request, since a new advisory says nothing about the change in front of you. An npm advisory that has been looked at and accepted is named in the workflow, so it does not fail every week; each is below, and comes off the list when its fix lands.
+
+What remains, as of October 2026. Every package here is already at the newest version its dependents allow; npm's suggested fix for the Expo ones is a downgrade to Expo 44, which is not one. The Rust side has nothing open.
+
+| Package | Issue | Where it runs | Why it stays |
+|---|---|---|---|
+| `node-forge` 1.4.0 (high) | RSA signature verification accepts a malformed signature | The Expo command-line tools, through `@expo/cli`: code-signing certificates on the development machine | No fixed release exists. Neither app nor the service contains it. Accepted in the audit workflow. |
+| `braces` 3.0.3 (high) | Stack exhaustion on deeply nested brace patterns | Jest's file matching, through `micromatch`, when the mobile tests run | No fixed release exists. The patterns are the repository's own test configuration. Accepted in the audit workflow, for when `npm audit` starts reporting it. |
+| `decode-uri-component` 0.2.2 (moderate) | Exponential time decoding malformed percent-encoding | The mobile app itself: `expo-router` reads the links the app opens with `query-string` 7 | Waiting on Expo. The fix, 0.5.0, is an ES module that `query-string` 7 cannot load, and `expo-router` 57 requires `query-string` 7. At worst, a crafted link makes the app hang for the person who opens it, and no one else. |
+| `uuid` 7.0.3 (moderate) | Missing bounds check when an output buffer is passed to v3, v5 or v6 | Generating the iOS project at build time, through `xcode` and `@expo/config-plugins` | `xcode` calls only `v4()`, without a buffer, so the flaw is never reached. Waiting on Expo. |
+
 ## Backend binaries
 
 - `api` — the HTTP service. With `WEB_DIR` set, it also serves the built web app from the same origin: each language's entry page at `/{language}/i`, the app's own page for any other path the API does not route, and hashed assets cached for a year (`backend/src/http/web.rs`).
@@ -137,6 +150,47 @@ The workflow names the Rust and Node versions it uses; raise them there when the
 - `openapi` — prints the API description that the TypeScript client is generated from.
 
 Both long-running binaries stop cleanly on `Ctrl-C` and on `SIGTERM`, which is what a container runtime or service manager sends.
+
+### Load check
+
+`scripts/load-check.mjs` takes pairs of people through a whole exchange over HTTP against a running `api` and `worker`, many pairs at once. Each pair signs in with the codes the API writes to its log, gives names and confirms ages; the initiator saves a working copy and sends a revision with three contributions; the counterparty previews and claims the invitation and accepts; the initiator confirms them; each marks one contribution delivered and the other confirms it; the initiator proposes ending with the third outstanding and the counterparty agrees; and each reads the exchange, its history, its record and their list. It reports per endpoint the count, p50, p95 and p99 latency and errors, then the throughput, the API's peak resident memory, the connections and lock waits it saw in `pg_stat_activity` (sampled a few times a second, so a short wait can be missed), and how long the worker took to send the notifications the run queued.
+
+Every person is a new account and every initiator makes one exchange, so the per-account limits are never approached: one code per email address against `codes_per_hour`, one exchange per initiator against `exchanges_per_day`, one invitation per exchange, and at most six changes by one party to one exchange in a minute against `changes_per_minute`. Code requests are also limited per network address (`code_requests_per_address_per_hour`), and the whole run comes from one machine, so each person's requests carry an `X-Forwarded-For` header with an address of their own from the range set aside for benchmarking (198.18.0.0/15), and the API under test is started with `TRUSTED_PROXY_HEADER=X-Forwarded-For` to believe it. Without that, every code request after the tenth in an hour is refused, and the script says why.
+
+It writes agreement history, which cannot be deleted, so give it a database of its own. With `.env` pointing there and `CODE_DELIVERY=log`, `NOTIFICATION_DELIVERY=log`:
+
+```sh
+cargo build --release --manifest-path backend/Cargo.toml --bins
+./backend/target/release/migrate
+TRUSTED_PROXY_HEADER=X-Forwarded-For ./backend/target/release/api > api.log 2>&1 &
+./backend/target/release/worker > worker.log 2>&1 &
+node scripts/load-check.mjs --pairs 200 --concurrency 25 --base-url http://127.0.0.1:8080 \
+  --api-log api.log --database-url postgres://exchange:exchange@127.0.0.1:5432/exchange_load
+```
+
+`--database-url` is only read from, for the connection and outbox figures; give the schema owner's, which sees every connection's state, and set `PSQL` if `psql` is not on the path. `--json` prints the report as JSON. The API's process is found by its port, or given with `--api-pid`.
+
+On an Apple M4 with 10 cores and 16 GB, with PostgreSQL 17 on the same machine, release builds, in October 2026, against a database that already held 6,250 exchanges from earlier runs. Other agents were working on the machine at the same time (load average 2 to 6 across the runs), so take the figures as an order of magnitude.
+
+| | 50 pairs, 10 at once | 200 pairs, 25 at once |
+|---|---|---|
+| Requests | 1,550 in 0.4 s, 3,470 a second | 6,200 in 1.2 s, 4,970 a second |
+| Errors | none | none |
+| Slowest p95 | 33 ms, creating an exchange (the first loads the list of timezones) | 15 ms, signing in |
+| Every other p95 | 21 ms or less | 13 ms or less |
+| API peak resident memory | 12.8 MB | 16.6 MB |
+| Database connections, peak | 13 open, none waiting on a lock or idle in a transaction | 13 open, none waiting on a lock or idle in a transaction |
+| Notifications queued, and sent | 500, all sent 4.5 s after the run | 2,000, all sent 3.8 s after the run |
+
+The per-endpoint p95 at 200 pairs, in milliseconds: signing in 15.1, requesting a code 13.4, sending a revision 11.9, claiming 9.0, a command 8.6, the profile 8.0, creating an exchange 7.0, the record 6.8, reading an exchange 6.3, the list 5.0, saving a working copy 4.9, previewing 4.9, the history 4.7. The notifications are sent within a tick of five seconds, so the time to send them depends on where in the tick the run ends.
+
+What the first runs found, and what was done:
+
+- **Creating an exchange** was the slowest request by far (p95 199 ms at 25 at once). Checking the timezone read PostgreSQL's whole timezone database each time; the list is now read once per process.
+- **The outbox** drained at one batch of 100 per five-second tick: 2,000 notifications took 94 s to send, though a batch took under 50 ms. The worker now goes round again at once after a full batch.
+- **Three queries read the whole `exchange` table**: the per-account count on every creation and two of the worker's timers on every pass. Migration `0009_load_indexes` indexes them.
+- **Nothing grew with the data.** After 4,000 more pairs (4,450 exchanges, 49,000 events), a 200-pair run's p50 for the list, the history and the record was within a millisecond of the run on an empty database (3.4, 3.8 and 6.2 ms), and their p95 within 8 ms, about the spread between two runs on this machine. Their plans, and the worker's, are index scans that read only the exchange or the rows asked for. No lock waits and no connection idle in a transaction were seen in any run, and the API's pool of 10 connections served 25 at once without an error.
+- **One run stalled**: 200 pairs took 16 s, with every endpoint's p95 between 200 and 470 ms. It ran straight after the 4,000-pair fill, while autovacuum went through every table and other tests forced a checkpoint on the shared server, at a load average of 10. The six runs after it, two of them while the worker was sending a backlog of several thousand, were normal.
 
 ## Deploying
 

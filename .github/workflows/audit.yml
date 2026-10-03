@@ -1,0 +1,107 @@
+name: Dependency audit
+
+# Known vulnerabilities in the locked dependencies, npm and Rust. Weekly and
+# on demand only: a new advisory says nothing about the change in front of
+# you, so it never fails a push or a pull request (README, "Dependencies").
+on:
+  schedule:
+    - cron: "23 6 * * 1" # Mondays, 06:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The same versions as ci.yml.
+  RUST_TOOLCHAIN: "1.97"
+  NODE_VERSION: "26"
+  CARGO_AUDIT_VERSION: "0.22.2"
+
+jobs:
+  npm:
+    name: npm
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    env:
+      # Advisories at high or critical that have been looked at and accepted,
+      # with the reason in the README's "Dependencies". Each fails the job
+      # again once it leaves this list; take it out when the fix lands.
+      ACCEPTED: >-
+        GHSA-86w9-cpqp-85rv
+        GHSA-vfj7-8cjw-p6xm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # The whole report, for reading. It reads the lockfile; nothing is
+      # installed.
+      - name: npm audit
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      # Fails on an advisory at high or critical that is not accepted above.
+      - name: High and critical advisories
+        run: |
+          npm audit --audit-level=high --json > audit.json || true
+          node --input-type=module <<'EOF'
+          import { readFileSync } from "node:fs";
+          const report = JSON.parse(readFileSync("audit.json", "utf8"));
+          if (report.error) throw new Error(JSON.stringify(report.error));
+          const accepted = new Set(process.env.ACCEPTED.split(/\s+/).filter(Boolean));
+          const found = new Map();
+          for (const [name, entry] of Object.entries(report.vulnerabilities ?? {})) {
+            for (const via of entry.via) {
+              if (typeof via === "string") continue;
+              if (via.severity !== "high" && via.severity !== "critical") continue;
+              const id = via.url.split("/").pop();
+              found.set(id, `${via.severity} ${name} ${via.range}: ${via.title} (${via.url})`);
+            }
+          }
+          let failed = false;
+          for (const [id, line] of found) {
+            if (accepted.has(id)) {
+              console.log(`accepted: ${line}`);
+            } else {
+              console.log(`::error::${line}`);
+              failed = true;
+            }
+          }
+          for (const id of accepted) {
+            if (!found.has(id)) console.log(`::notice::${id} is accepted but npm audit does not report it; take it off the list once it is fixed`);
+          }
+          process.exit(failed ? 1 : 0);
+          EOF
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust and cargo-audit
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update
+          rustup default "$RUST_TOOLCHAIN"
+          cargo install cargo-audit --version "$CARGO_AUDIT_VERSION" --locked
+
+      # The whole report, for reading: vulnerabilities at every severity, and
+      # warnings such as unmaintained or yanked crates.
+      - name: cargo audit
+        continue-on-error: true
+        working-directory: backend
+        run: cargo audit
+
+      # cargo audit has no command-line threshold; its configuration file
+      # does, written here so that a local run still reports everything. An
+      # advisory without a severity is kept, since it cannot be shown to be
+      # below high.
+      - name: High and critical advisories
+        working-directory: backend
+        run: |
+          mkdir -p ~/.cargo
+          printf '[advisories]\nseverity_threshold = "high"\n' > ~/.cargo/audit.toml
+          cargo audit
