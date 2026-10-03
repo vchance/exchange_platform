@@ -685,6 +685,63 @@ export interface Wording {
     statementAdded: string
   }
   /**
+   * Wallet passes (DESIGN.md §11): the button on the exchange view, and what
+   * the service writes on a pass (`backend/src/wallet`). A pass carries
+   * nothing from the agreement, so none of this takes a name or an amount.
+   */
+  wallet: {
+    /** Above the button: what a pass is and is not. `{productName}`. */
+    intro: string
+    addToApple: string
+    addToGoogle: string
+    /** The button while the pass is being fetched. */
+    adding: string
+    /** The pass's labels and its fixed text. */
+    pass: {
+      /** What the pass is, for screen readers. `{productName}`, `{code}`. */
+      description: string
+      status: string
+      reference: string
+      nextDue: string
+      outstanding: string
+      with: string
+      closedOn: string
+      open: string
+      /** On the back. `{productName}`. */
+      note: string
+      /** On the back of a revoked pass. */
+      void: string
+    }
+    /** How the agreement stands, the pass's largest field. */
+    status: {
+      inForce: string
+      waitingForYou: string
+      dueSoon: string
+      overdue: string
+      disputed: string
+      completed: string
+      ended: string
+      closed: string
+      void: string
+    }
+    /** A date on a pass: `{month}`, `{day}`, `{year}`. */
+    date: string
+    months: {
+      jan: string
+      feb: string
+      mar: string
+      apr: string
+      may: string
+      jun: string
+      jul: string
+      aug: string
+      sep: string
+      oct: string
+      nov: string
+      dec: string
+    }
+  }
+  /**
    * The record of an exchange: its history in the exchange view, the record
    * page, and what the downloaded copy says about itself.
    */

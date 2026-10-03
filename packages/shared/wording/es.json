@@ -655,6 +655,50 @@
     "waitingLongMoney": "{name} no ha confirmado haber recibido esto desde que registraste el pago el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrarlo sin acuerdo; el registro mostrará entonces esto como pagado pero sin confirmar.",
     "closeRequestLapses": "Si nada cambia, se cierra el {date}."
   },
+  "wallet": {
+    "intro": "Guarda este acuerdo en la cartera de tu teléfono. El pase muestra cómo va y enlaza aquí; sus términos se quedan en {productName}.",
+    "addToApple": "Añadir a Apple Wallet",
+    "addToGoogle": "Añadir a Google Wallet",
+    "adding": "Preparando tu pase…",
+    "pass": {
+      "description": "{productName}: yup {code}",
+      "status": "Estado",
+      "reference": "Referencia",
+      "nextDue": "Próximo vencimiento",
+      "outstanding": "Pendiente",
+      "with": "Con",
+      "closedOn": "Cerrado el",
+      "open": "Abrir el yup",
+      "note": "Este pase solo muestra cómo va tu yup. Sus términos se quedan en {productName}, donde inicias sesión para leerlos.",
+      "void": "Este pase ya no está en uso."
+    },
+    "status": {
+      "inForce": "En vigor",
+      "waitingForYou": "Te toca a ti",
+      "dueSoon": "Vence pronto",
+      "overdue": "Vencido",
+      "disputed": "En disputa",
+      "completed": "Completado",
+      "ended": "Terminado de mutuo acuerdo",
+      "closed": "Cerrado",
+      "void": "Ya no está en uso"
+    },
+    "date": "{day} {month} {year}",
+    "months": {
+      "jan": "ene",
+      "feb": "feb",
+      "mar": "mar",
+      "apr": "abr",
+      "may": "may",
+      "jun": "jun",
+      "jul": "jul",
+      "aug": "ago",
+      "sep": "sept",
+      "oct": "oct",
+      "nov": "nov",
+      "dec": "dic"
+    }
+  },
   "record": {
     "historyHeading": "Historial",
     "historyEmpty": "Todavía no ha pasado nada.",
@@ -881,7 +925,8 @@
     "CLIENT_TOO_OLD": "Actualiza la aplicación para continuar.",
     "NOT_FOUND": "No pudimos encontrar eso.",
     "SERVICE_UNAVAILABLE": "El servicio no está disponible temporalmente. Inténtalo de nuevo en unos momentos.",
-    "INTERNAL": "Algo salió mal de nuestro lado. Inténtalo de nuevo."
+    "INTERNAL": "Algo salió mal de nuestro lado. Inténtalo de nuevo.",
+    "WALLET_UNAVAILABLE": "Los pases para esta cartera aún no están disponibles."
   },
   "a11y": {
     "openExchange": "Abre este yup.",

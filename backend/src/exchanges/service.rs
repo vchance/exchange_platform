@@ -525,6 +525,22 @@ pub async fn get(
     view(&mut tx, rules, id, session.account_id).await
 }
 
+/// An exchange as one of its parties sees it, for a caller that is not that
+/// party's own request: a Wallet pass being drawn (`crate::wallet`). Anyone
+/// who is not a party is told it does not exist, as always.
+pub async fn view_for(
+    db: &PgPool,
+    rules: &Rules,
+    id: Uuid,
+    account: Uuid,
+) -> Result<ExchangeView, ApiError> {
+    let mut tx = db.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    view(&mut tx, rules, id, account).await
+}
+
 /// Saves the caller's working copy. Private to them and never binding.
 pub async fn save_draft(
     db: &PgPool,

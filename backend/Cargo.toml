@@ -6,15 +6,41 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.104"
 axum = "0.8.9"
+# Wallet passes (src/wallet): base64url for a Google Wallet JWT, and the
+# standard alphabet for Apple's tokens.
+base64 = "0.22.1"
+# Wallet passes: the CMS (PKCS #7) structures of an Apple pass's signature.
+# Only the ASN.1 types are used, with der and x509-cert below; the signing
+# itself is ring's. The `builder` feature stays off: it would pull in the
+# `rsa` crate, whose timing advisory has no fix (RUSTSEC-2023-0071).
+cms = { version = "0.2.3", default-features = false, features = ["std"] }
+const-oid = { version = "0.9.6", features = ["db"] }
+der = { version = "0.7.10", features = ["std", "oid"] }
 dotenvy = "0.15.7"
 getrandom = "0.4.3"
 hmac = "0.13.0"
+# The HTTP client for Apple's push service (HTTP/2, with the pass type
+# certificate as the client certificate) and Google's Wallet API, over the
+# rustls and ring the service already uses. hyper is already here under axum.
+http-body-util = "0.1.5"
+hyper = { version = "1.11.1", features = ["client", "http1", "http2"] }
+hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "http2", "ring", "tls12", "webpki-tokio"] }
+hyper-util = { version = "0.1.21", features = ["client-legacy", "http1", "http2", "tokio"] }
 # SMTP over the tokio runtime with rustls, so the image needs no OpenSSL. No
 # connection pool: a notification is rare, and a fresh connection per send is
 # one less thing to keep healthy.
 lettre = { version = "0.11.23", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls-tls", "builder", "hostname"] }
+# RSA signatures for Wallet passes (PKCS #1 v1.5 with SHA-256): an Apple
+# pass's manifest and a Google Wallet JWT. Constant-time, and already the
+# rustls provider here.
+ring = "0.17.14"
+rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
+# Reads the PEM files of the Wallet certificates and keys.
+rustls-pki-types = { version = "1.15.1", features = ["std"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+# The SHA-1 digests Apple requires in a pass's manifest.
+sha1 = "0.11.0"
 sha2 = "0.11.0"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "migrate", "uuid", "time"] }
 thiserror = "2.0.21"
@@ -25,6 +51,11 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 utoipa = { version = "6.0.0", features = ["axum_extras", "uuid"] }
 uuid = { version = "1.26.1", features = ["serde", "v4"] }
+webpki-roots = "1.0.9"
+x509-cert = { version = "0.2.5", default-features = false, features = ["std", "pem"] }
+# An Apple pass is a zip archive. Stored entries only: the images are PNG
+# already, and the rest is a few kilobytes.
+zip = { version = "8.6.0", default-features = false }
 
 # The macOS 27 toolchain can strip a proc-macro dylib into one the loader
 # rejects ("mis-aligned LINKEDIT string pool"), which fails the build of
@@ -35,8 +66,21 @@ strip = "none"
 [profile.release.build-override]
 strip = "none"
 
+# The Wallet tests generate RSA keys, which takes many seconds unoptimised.
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+
+[profile.dev.package.rsa]
+opt-level = 3
+
 [dev-dependencies]
-http-body-util = "0.1.5"
 # Reads back what the test SMTP server received.
 mail-parser = "0.11.9"
+# Makes the throwaway RSA keys of the Wallet tests: a stand-in for Apple's
+# certificate chain and a Google service account. Tests only, never the
+# service, which signs with ring. RUSTSEC-2023-0071 is about timing observed
+# over a network; the advisory itself says local use is fine.
+rsa = { version = "0.9.10", features = ["getrandom", "sha2"] }
 tower = { version = "0.5.3", features = ["util"] }
+# Signs the test certificates.
+x509-cert = { version = "0.2.5", features = ["builder"] }

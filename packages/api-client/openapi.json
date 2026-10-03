@@ -1119,6 +1119,222 @@
         }
       }
     },
+    "/v1/exchanges/{id}/wallet/apple": {
+      "post": {
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Adds the caller's pass to Apple Wallet: the signed `.pkpass`. A party to\nthe exchange only, and only once something is agreed.",
+        "operationId": "apple_pass",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The pass",
+            "content": {
+              "application/vnd.apple.pkpass": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pkpass"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account, or Apple Wallet passes are not available (WALLET_UNAVAILABLE)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nothing has been agreed yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Asked for too often",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchanges/{id}/wallet/apple/link": {
+      "post": {
+        "tags": [
+          "wallet"
+        ],
+        "summary": "A link that downloads the caller's Apple pass for a few minutes, without\na session: opened in Safari, it adds the pass to Wallet. For the app and\nthe web page, which hold the session themselves.",
+        "operationId": "apple_link",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletLink"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account, or Apple Wallet passes are not available (WALLET_UNAVAILABLE)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nothing has been agreed yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Asked for too often",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchanges/{id}/wallet/google": {
+      "post": {
+        "tags": [
+          "wallet"
+        ],
+        "summary": "The \"Save to Google Wallet\" link for the caller's pass. A party to the\nexchange only, and only once something is agreed.",
+        "operationId": "google_link",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Exchange ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletLink"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such exchange for this account, or Google Wallet passes are not available (WALLET_UNAVAILABLE)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nothing has been agreed yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Asked for too often",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/invitations/claim": {
       "post": {
         "tags": [
@@ -2362,6 +2578,7 @@
           "INVITATION_NOT_FOR_YOU",
           "IDEMPOTENCY_KEY_REUSED",
           "CLIENT_TOO_OLD",
+          "WALLET_UNAVAILABLE",
           "NOT_FOUND",
           "SERVICE_UNAVAILABLE",
           "INTERNAL"
@@ -2695,7 +2912,8 @@
         "required": [
           "service",
           "version",
-          "minimum_client_versions"
+          "minimum_client_versions",
+          "wallet_platforms"
         ],
         "properties": {
           "minimum_client_versions": {
@@ -2707,6 +2925,13 @@
           },
           "version": {
             "type": "string"
+          },
+          "wallet_platforms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WalletPlatform"
+            },
+            "description": "The wallets a pass can be added to here (DESIGN.md §11). Empty until\na deployment configures one; a client shows no Wallet button then."
           }
         }
       },
@@ -2856,6 +3081,11 @@
             "type": "string"
           }
         }
+      },
+      "Pkpass": {
+        "type": "string",
+        "format": "binary",
+        "description": "A signed Apple pass, a zip archive. Only describes the answer for the\nAPI description; the handler sends the bytes themselves."
       },
       "QuantityDto": {
         "type": "object",
@@ -3877,6 +4107,33 @@
             "description": "When the signer was removed or left. RFC 3339, UTC."
           }
         }
+      },
+      "WalletLink": {
+        "type": "object",
+        "description": "A link to follow to add a pass.",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the link stops working, RFC 3339. Absent for a link that does\nnot expire."
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "WalletPlatform": {
+        "type": "string",
+        "description": "A wallet a pass can be added to.",
+        "enum": [
+          "APPLE",
+          "GOOGLE"
+        ]
       }
     }
   }

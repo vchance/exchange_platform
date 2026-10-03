@@ -95,6 +95,15 @@ Three indexes on `exchange`, for queries the load check (README, "Load check") f
 
 The last two are partial, so they hold only the exchanges the worker is looking for. Like every migration this one runs in a transaction, so the indexes are built without `CONCURRENTLY` and writes to `exchange` wait while they build. Against the load check's 4,500 exchanges the whole migration took a tenth of a second.
 
+## 0010_wallet
+
+What Wallet passes need beyond the `wallet_pass` table of 0001 (`DESIGN.md` §11, [docs/wallet.md](../../docs/wallet.md)).
+
+- **`wallet_pass`** gains the SHA-256 of an Apple pass's authentication token (Apple's only: a check refuses one on a Google pass, and anything but 32 bytes), the face's Last-Modified time and the hashes of the face it belongs to and of the face last delivered, and the update queue's columns: a mark counter, when to try next, the worker's lease, the attempts and the last error. The pass row is its own queue entry, marked in the transaction of every change to its exchange. Its serial (`external_id`) must fit both Apple's and Google's rules. The application role keeps the grants of 0001: it reads, adds and updates passes, and never deletes one; a revoked pass is voided, not removed.
+- **`wallet_device_registration`**: the devices that asked Apple's pass web service for a pass's updates, with their push tokens, which the service adds, updates and removes as devices and Apple say. Working data, granted in full.
+
+`backend/tests/schema.rs` checks the constraints and the grants; `backend/tests/wallet.rs` everything through the API.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

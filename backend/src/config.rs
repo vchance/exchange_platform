@@ -264,6 +264,8 @@ pub struct WorkerConfig {
     pub email_sender: Arc<dyn EmailSender>,
     /// Where to serve the worker's metrics, if anywhere.
     pub metrics_addr: Option<SocketAddr>,
+    /// Wallet passes, for the platforms configured (`crate::wallet::config`).
+    pub wallet: crate::wallet::WalletConfig,
 }
 
 impl WorkerConfig {
@@ -275,6 +277,7 @@ impl WorkerConfig {
             web_origin: web_origin(get)?,
             email_sender: email_sender(get)?,
             metrics_addr: metrics_addr(get)?,
+            wallet: crate::wallet::WalletConfig::from_lookup(get)?,
         })
     }
 }
@@ -353,6 +356,8 @@ pub struct ApiConfig {
     pub metrics_addr: Option<SocketAddr>,
     /// The rules for one-time codes, some of them set by the deployment.
     pub auth: AuthRules,
+    /// Wallet passes, for the platforms configured (`crate::wallet::config`).
+    pub wallet: crate::wallet::WalletConfig,
 }
 
 impl ApiConfig {
@@ -387,6 +392,7 @@ impl ApiConfig {
             min_client_versions: min_client_versions(get)?,
             app_links: app_links(get)?,
             auth: auth_rules(get)?,
+            wallet: crate::wallet::WalletConfig::from_lookup(get)?,
         })
     }
 }
