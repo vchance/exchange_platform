@@ -49,6 +49,10 @@ jest.mock('@react-native-community/datetimepicker', () => {
   };
 });
 
+// The installed build's version, which the test preset's mock leaves out. A
+// build that cannot read one names none (`lib/client-identity.ts`).
+jest.mock('expo-application', () => ({ nativeApplicationVersion: '1.2.0' }));
+
 jest.mock('expo-crypto', () => {
   let next = 0;
   return { randomUUID: () => `00000000-0000-4000-8000-${String((next += 1)).padStart(12, '0')}` };
@@ -144,7 +148,7 @@ test('a session from an earlier launch opens straight onto the exchanges', async
   expect(service.sent.some((request) => request.path === '/v1/meta')).toBe(true);
   // Every request names the client and its build.
   for (const request of service.sent) {
-    expect(request.clientVersion).toMatch(/^(ios|android)\/\d+(\.\d+)*$/);
+    expect(request.clientVersion).toMatch(/^(ios|android)\/1\.2\.0$/);
   }
 });
 

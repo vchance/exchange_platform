@@ -78,14 +78,49 @@ fn smtp_settings(get: Lookup<'_>) -> anyhow::Result<SmtpSettings> {
         (None, None) => None,
         _ => bail!("SMTP_USERNAME and SMTP_PASSWORD must be set together, or neither"),
     };
+    let host = required(get, "SMTP_HOST")?;
+    if tls == TlsMode::None {
+        refuse_plaintext_remote(get, &host, credentials.is_some())?;
+    }
     Ok(SmtpSettings {
-        host: required(get, "SMTP_HOST")?,
+        host,
         port,
         tls,
         credentials,
         from: required(get, "SMTP_FROM")?,
         timeout: SMTP_TIMEOUT,
     })
+}
+
+/// `SMTP_TLS=none` is for a relay on this host: anything said to a server
+/// across a network, a password first of all, could be read on the way.
+/// Refused for any other host, or with credentials, unless
+/// `SMTP_ALLOW_PLAINTEXT_REMOTE=true` says it is a test server.
+fn refuse_plaintext_remote(get: Lookup<'_>, host: &str, credentials: bool) -> anyhow::Result<()> {
+    match optional(get, "SMTP_ALLOW_PLAINTEXT_REMOTE").as_deref() {
+        Some("true") => return Ok(()),
+        None | Some("false") => {}
+        Some(other) => bail!("SMTP_ALLOW_PLAINTEXT_REMOTE={other} is not `true` or `false`"),
+    }
+    let host = host.trim().trim_end_matches('.');
+    let unbracketed = host.trim_start_matches('[').trim_end_matches(']');
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || unbracketed
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback());
+    if !loopback {
+        bail!(
+            "SMTP_TLS=none sends everything in plain text, so SMTP_HOST must be this host \
+             (localhost, 127.0.0.1 or ::1); set SMTP_ALLOW_PLAINTEXT_REMOTE=true for a test server"
+        );
+    }
+    if credentials {
+        bail!(
+            "SMTP_TLS=none would send SMTP_USERNAME and SMTP_PASSWORD in plain text; \
+             set SMTP_ALLOW_PLAINTEXT_REMOTE=true for a test server"
+        );
+    }
+    Ok(())
 }
 
 fn smtp_sender(get: Lookup<'_>) -> anyhow::Result<Arc<SmtpSender>> {
@@ -376,10 +411,59 @@ mod tests {
         assert_eq!((default.tls, default.port), (TlsMode::Tls, 465));
         let starttls = settings(&[("SMTP_TLS", "starttls")]).unwrap();
         assert_eq!((starttls.tls, starttls.port), (TlsMode::StartTls, 587));
-        let local = settings(&[("SMTP_TLS", "none"), ("SMTP_PORT", "2525")]).unwrap();
+        let local = settings(&[
+            ("SMTP_TLS", "none"),
+            ("SMTP_PORT", "2525"),
+            ("SMTP_HOST", "localhost"),
+        ])
+        .unwrap();
         assert_eq!((local.tls, local.port), (TlsMode::None, 2525));
         assert!(settings(&[("SMTP_TLS", "ssl")]).is_err());
         assert!(settings(&[("SMTP_PORT", "smtp")]).is_err());
+    }
+
+    #[test]
+    fn plain_text_smtp_is_for_this_host_only_without_a_password() {
+        let settings = |extra: &[(&str, &str)]| {
+            let table = table(&[SMTP, &[("SMTP_TLS", "none")], extra].concat());
+            smtp_settings(&lookup(&table))
+        };
+        for host in [
+            "localhost",
+            "LOCALHOST.",
+            "127.0.0.1",
+            "127.8.9.10",
+            "::1",
+            "[::1]",
+        ] {
+            assert!(settings(&[("SMTP_HOST", host)]).is_ok(), "{host}");
+        }
+        for host in [
+            "smtp.example.test",
+            "10.0.0.5",
+            "::2",
+            "localhost.example.test",
+        ] {
+            assert!(settings(&[("SMTP_HOST", host)]).is_err(), "{host}");
+        }
+        let password = [
+            ("SMTP_HOST", "127.0.0.1"),
+            ("SMTP_USERNAME", "u"),
+            ("SMTP_PASSWORD", "hunter2"),
+        ];
+        let refused = settings(&password).unwrap_err();
+        assert!(!format!("{refused:#}").contains("hunter2"));
+
+        // Said outright, for a test server.
+        let allow = ("SMTP_ALLOW_PLAINTEXT_REMOTE", "true");
+        assert!(settings(&[allow]).is_ok());
+        assert!(settings(&[&password[..], &[allow]].concat()).is_ok());
+        assert!(settings(&[("SMTP_ALLOW_PLAINTEXT_REMOTE", "false")]).is_err());
+        assert!(settings(&[("SMTP_ALLOW_PLAINTEXT_REMOTE", "yes")]).is_err());
+
+        // Encrypted connections are not affected.
+        let table = table(&[SMTP, &password[1..]].concat());
+        assert!(smtp_settings(&lookup(&table)).is_ok());
     }
 
     #[test]

@@ -1011,9 +1011,12 @@ async fn find_invitation(
 
 /// What the holder of an invitation link may read before signing in: the
 /// proposal itself. Every way a link can be dead gives the same answer, and
-/// so does a block between the signed-in viewer and the initiator: were the
-/// preview to work where the claim does not, that difference would be the
-/// one thing a block must never tell (DESIGN.md §9).
+/// so does a block between the signed-in viewer and the initiator, so the
+/// preview and the claim agree for them.
+///
+/// Known gap, accepted for now and listed to be fixed (DESIGN.md §9, §18
+/// item 13a): the same link still shows its proposal to anyone signed out,
+/// so a blocked person who compares the two can still infer the block.
 pub async fn preview_invitation(
     db: &PgPool,
     viewer: Option<Uuid>,

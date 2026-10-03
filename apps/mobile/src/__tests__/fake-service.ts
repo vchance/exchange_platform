@@ -126,6 +126,8 @@ export interface FakeService {
   /** The account behind the session token, once there is one. */
   account: Account | null;
   exchange: ExchangeView;
+  /** The other party's name in the list of exchanges. */
+  otherPartyName: string;
   /** Makes the next command fail as if the other party had acted first. */
   conflictNext: boolean;
   fetch: typeof fetch;
@@ -136,6 +138,7 @@ export function fakeService(): FakeService {
     sent: [],
     account: null,
     exchange: activeExchange(),
+    otherPartyName: 'Ben Ortiz',
     conflictNext: false,
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
@@ -226,7 +229,7 @@ function respond(
         {
           id: service.exchange.id,
           display_code: service.exchange.display_code,
-          other_party_name: 'Ben Ortiz',
+          other_party_name: service.otherPartyName,
           state: service.exchange.state,
           updated_at: '2026-10-02T06:30:00Z',
           you: 'A',

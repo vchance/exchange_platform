@@ -9,7 +9,7 @@ import type {
   Meta,
 } from '@exchange/api-client'
 
-import { clientHeader, type ClientIdentity } from './client-version'
+import { clientHeader, parseVersion, type ClientIdentity } from './client-version'
 import { idempotencyKeys } from './idempotency'
 import type { ReportReason } from './safety'
 
@@ -95,7 +95,11 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
     const sent: Record<string, string> = {}
     const held = token()
     if (held) sent.Authorization = `Bearer ${held}`
-    if (identity) sent['X-Client-Version'] = clientHeader(identity)
+    // A build that cannot say which it is names none: the service would
+    // ignore a version it cannot read anyway.
+    if (identity && parseVersion(identity.version)) {
+      sent['X-Client-Version'] = clientHeader(identity)
+    }
     return Object.keys(sent).length > 0 ? sent : undefined
   }
 

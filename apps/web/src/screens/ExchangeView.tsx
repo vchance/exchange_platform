@@ -132,7 +132,11 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
 
   return (
     <>
-      <PageHeading>{writtenName ? fmt(w.title, { name: writtenName }) : w.titleNoName}</PageHeading>
+      {writtenName ? (
+        <PageHeading name={writtenName}>{w.title}</PageHeading>
+      ) : (
+        <PageHeading>{w.titleNoName}</PageHeading>
+      )}
       <p className="tags">
         <span className="tag">
           {exchange.closed_outcome
@@ -141,7 +145,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
         </span>
         <span className="tag">{fmt(wording.home.reference, { code: exchange.display_code })}</span>
       </p>
-      {exchange.closed_reason && exchange.closed_reason in wording.closedReasons && (
+      {exchange.closed_reason && Object.hasOwn(wording.closedReasons, exchange.closed_reason) && (
         <p>{wording.closedReasons[exchange.closed_reason as ClosedReason]}</p>
       )}
 

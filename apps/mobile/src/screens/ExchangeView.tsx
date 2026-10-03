@@ -3,6 +3,7 @@ import {
   consentShown,
   failureCode,
   isUnconfirmedClaimant,
+  labelText,
   moneyIds,
   otherPartyName,
   remainingRequired,
@@ -156,7 +157,11 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
         setRefreshed(false);
         void reload().finally(() => setRefreshing(false));
       }}>
-      <Heading>{writtenName ? fmt(w.title, { name: writtenName }) : w.titleNoName}</Heading>
+      {/* A screen reader says the heading first. Nothing in the name may
+          turn the words around it or break the line. */}
+      <Heading>
+        {writtenName ? fmt(w.title, { name: labelText(writtenName) }) : w.titleNoName}
+      </Heading>
       <Tags>
         <Tag>
           {exchange.closed_outcome
@@ -165,7 +170,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
         </Tag>
         <Tag>{fmt(wording.home.reference, { code: exchange.display_code })}</Tag>
       </Tags>
-      {exchange.closed_reason && exchange.closed_reason in wording.closedReasons ? (
+      {exchange.closed_reason && Object.hasOwn(wording.closedReasons, exchange.closed_reason) ? (
         <P>{wording.closedReasons[exchange.closed_reason as ClosedReason]}</P>
       ) : null}
 

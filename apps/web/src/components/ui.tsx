@@ -1,4 +1,5 @@
 import type { ErrorCode } from '@exchange/api-client'
+import { labelText } from '@exchange/shared'
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 
 import { useI18n } from '../app/context'
@@ -18,16 +19,29 @@ let headingsShown = 0
  * the sign-in form giving way to the page it stood in for: the focus would
  * otherwise be lost to the top of the document.
  */
-export function PageHeading({ children, step }: { children: string; step?: boolean }) {
-  const { wording } = useI18n()
+export function PageHeading({
+  children,
+  name,
+  step,
+}: {
+  /** The heading. With `name`, a message with a `{name}` placeholder. */
+  children: string
+  /** Someone's name, written by them, to fill in `{name}` with. */
+  name?: string
+  step?: boolean
+}) {
+  const { wording, fmt } = useI18n()
   const heading = useRef<HTMLHeadingElement>(null)
   // Where this heading came in this page load, decided once, so that running
   // the effect again (React does in development) does not change the answer.
   const order = useRef<number | null>(null)
+  // A tab's title cannot isolate a name the way `<bdi>` does below, so it
+  // has the name without anything that could turn the title around.
+  const title = labelText(name === undefined ? children : fmt(children, { name: labelText(name) }))
 
   useEffect(() => {
-    document.title = `${children} · ${wording.productName}`
-  }, [children, wording.productName])
+    document.title = `${title} · ${wording.productName}`
+  }, [title, wording.productName])
 
   // `step` marks a heading that replaces another without the address
   // changing, such as moving from editing to signing.
@@ -39,8 +53,31 @@ export function PageHeading({ children, step }: { children: string; step?: boole
 
   return (
     <h1 ref={heading} tabIndex={-1}>
-      {children}
+      {name === undefined ? children : <WithName message={children} name={name} />}
     </h1>
+  )
+}
+
+// Stands in for the name while the message around it is filled in. Never in
+// any wording, and taken out of the name itself by `labelText`.
+const NAME_MARK = '\u0000'
+
+/**
+ * A message with someone's name in it, the name isolated in `<bdi>`: a name
+ * written right to left, or with characters that change direction, cannot
+ * turn the words around it, and nothing in it can steer the rest of the
+ * line. Control and direction characters are taken out of it as well.
+ */
+export function WithName({ message, name }: { message: string; name: string }) {
+  const { fmt } = useI18n()
+  const [before, ...after] = fmt(message, { name: NAME_MARK }).split(NAME_MARK)
+  if (after.length === 0) return <>{before}</>
+  return (
+    <>
+      {before}
+      <bdi>{labelText(name)}</bdi>
+      {after.join(labelText(name))}
+    </>
   )
 }
 

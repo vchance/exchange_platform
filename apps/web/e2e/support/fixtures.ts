@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto'
 
-import { test as base, type BrowserContext, type Page } from '@playwright/test'
+import { expect, test as base, type BrowserContext, type Page } from '@playwright/test'
 
 /*
  * The people in a test. Each has a browser context of their own, so two
  * people never share a cookie, and an `example.test` address nobody else
  * uses, so tests can run side by side against one database.
+ *
+ * Every page the service serves carries a strict Content-Security-Policy
+ * (backend/src/http/mod.rs). Anything a page tries that the policy refuses,
+ * such as an inline style or script, is collected from each person's
+ * browser and fails the test.
  */
 
 export interface Person {
@@ -31,6 +36,7 @@ export const test = base.extend<Fixtures>({
   // `use`, renamed so it is not taken for a React hook.
   person: async ({ browser, baseURL }, provide, testInfo) => {
     const contexts: BrowserContext[] = []
+    const refused: string[] = []
     // Unique per test, and readable in the log.
     const run = randomUUID().slice(0, 8)
     await provide(async (name, options = {}) => {
@@ -41,12 +47,23 @@ export const test = base.extend<Fixtures>({
         permissions: ['clipboard-read', 'clipboard-write'],
       })
       contexts.push(context)
+      await context.exposeBinding('reportRefusedByPolicy', (_source, what: string) => {
+        refused.push(`${name}: ${what}`)
+      })
+      await context.addInitScript(() => {
+        document.addEventListener('securitypolicyviolation', (event) => {
+          const report = (window as unknown as { reportRefusedByPolicy(what: string): void })
+            .reportRefusedByPolicy
+          report(`${event.violatedDirective} ${event.blockedURI} at ${event.sourceFile}:${event.lineNumber}`)
+        })
+      })
       const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
       const email = `${slug}-w${testInfo.workerIndex}-${run}@example.test`
       return { name, email, context, page: await context.newPage() }
     })
     for (const context of contexts) await context.close()
+    expect(refused, 'refused by the Content-Security-Policy').toEqual([])
   },
 })
 
-export { expect } from '@playwright/test'
+export { expect }

@@ -13,6 +13,10 @@
 //!   handles in the browser can be opened or reloaded directly;
 //! * the API's paths are never answered with a page.
 //!
+//! A path that starts with several slashes is read as if it had one, and a
+//! directory is never answered with a redirect: `//assets` redirected to
+//! `//assets/` would be a link to a host named `assets`.
+//!
 //! Hashed assets may be cached for a year; everything else must be checked
 //! each time, or a new build would be a page pointing at files that are gone.
 //!
@@ -93,14 +97,33 @@ impl WebApp {
 
     /// The service for everything the API does not route.
     pub fn router(self) -> Router {
+        // No redirect from a directory to its path with a slash: the entry
+        // pages are routed above without one, and a redirect built from the
+        // request's own path can point at another host.
         let files = ServeDir::new(&self.directory)
             .append_index_html_on_directories(true)
+            .redirect_to_trailing_slash(false)
             .fallback(ServeFile::new(self.directory.join("index.html")));
         Router::new()
             .fallback_service(files)
             .layer(middleware::from_fn(cache_control))
             .layer(middleware::from_fn_with_state(self, route))
     }
+}
+
+/// `uri` with any run of slashes at the start of its path made one, or
+/// `None` if it has no such run.
+fn single_leading_slash(uri: &Uri) -> Option<Uri> {
+    let path = uri.path();
+    if !path.starts_with("//") {
+        return None;
+    }
+    let path = format!("/{}", path.trim_start_matches('/'));
+    let path_and_query = match uri.query() {
+        Some(query) => format!("{path}?{query}"),
+        None => path,
+    };
+    path_and_query.parse().ok()
 }
 
 /// Keeps API paths away from the pages and sends an entry-page path to its
@@ -110,6 +133,12 @@ async fn route(
     mut request: Request,
     next: Next,
 ) -> Response {
+    if request.uri().path().starts_with("//") {
+        let Some(uri) = single_leading_slash(request.uri()) else {
+            return StatusCode::NOT_FOUND.into_response();
+        };
+        *request.uri_mut() = uri;
+    }
     let path = request.uri().path();
     if is_api_path(path) {
         return ApiError::from(ErrorCode::NotFound).into_response();
@@ -173,6 +202,20 @@ mod tests {
         ] {
             assert!(!is_api_path(page), "{page}");
         }
+    }
+
+    #[test]
+    fn leading_slashes_are_made_one() {
+        let one =
+            |text: &str| single_leading_slash(&text.parse().unwrap()).map(|uri| uri.to_string());
+        assert_eq!(one("//assets").as_deref(), Some("/assets"));
+        assert_eq!(
+            one("///evil.example/x?a=b").as_deref(),
+            Some("/evil.example/x?a=b")
+        );
+        assert_eq!(one("//").as_deref(), Some("/"));
+        assert_eq!(one("/assets"), None);
+        assert_eq!(one("/a//b"), None);
     }
 
     #[test]

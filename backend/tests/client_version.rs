@@ -130,3 +130,63 @@ async fn a_client_below_the_minimum_may_read_but_not_change() {
     // The exchange was not touched by the refused requests.
     assert_eq!(app.view(&ana, &exchange).await["version"], Value::from(0));
 }
+
+#[tokio::test]
+async fn a_client_below_the_minimum_may_still_sign_out_and_delete_the_account() {
+    let app = App::start_requiring(
+        DATABASE,
+        MinimumClientVersions {
+            web: None,
+            ios: Some("9.0".to_owned()),
+            android: None,
+        },
+    )
+    .await;
+    let old = [("x-client-version", "ios/1.0.0")];
+    let ana = app.user("Ana").await;
+
+    // Asking for a deletion code goes through.
+    let reply = app
+        .call(
+            Some(&ana),
+            Method::POST,
+            "/v1/me/deletion/codes",
+            Some(json!({ "channel": "EMAIL" })),
+            &old,
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+
+    // So does deleting: a wrong code is refused for being wrong, not for the
+    // client's age.
+    app.call(
+        Some(&ana),
+        Method::POST,
+        "/v1/me/deletion",
+        Some(json!({ "channel": "EMAIL", "code": "000000" })),
+        &old,
+    )
+    .await
+    .refused(StatusCode::UNAUTHORIZED, "INVALID_CODE");
+
+    // And signing out.
+    let reply = app
+        .call(Some(&ana), Method::DELETE, "/v1/auth/session", None, &old)
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+    app.call(Some(&ana), Method::GET, "/v1/me", None, &old)
+        .await
+        .refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
+
+    // Anything else the same client asks to change is still refused.
+    let ben = app.user("Ben").await;
+    app.call(
+        Some(&ben),
+        Method::PATCH,
+        "/v1/me",
+        Some(json!({ "display_name": "Benjamin" })),
+        &old,
+    )
+    .await
+    .refused(StatusCode::UPGRADE_REQUIRED, "CLIENT_TOO_OLD");
+}

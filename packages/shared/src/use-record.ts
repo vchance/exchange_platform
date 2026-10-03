@@ -22,23 +22,45 @@ export interface HistoryReading {
   readingEarlier: boolean
 }
 
+/** Something read, with the exchange it was read for. */
+interface ReadFor<T> {
+  id: string
+  value: T
+}
+
+/** `read` if it was read for exchange `id`, otherwise `null`. */
+function readFor<T>(read: ReadFor<T> | null, id: string): T | null {
+  return read !== null && read.id === id ? read.value : null
+}
+
 /**
  * The latest of an exchange's history, and as much before it as the person
  * asks for. Every change to an exchange adds to its history, so the latest
  * page is read again whenever the exchange on screen is a newer version;
  * what was read before it stays, and until the new page arrives, so does
  * what is shown.
+ *
+ * Everything read is kept with the exchange it was read for. When the
+ * screen moves to another exchange, nothing of the first is shown, built
+ * on, or still counted as being read.
  */
 export function useHistory(
   api: Pick<ExchangeApi, 'history'>,
   exchange: Pick<ExchangeView, 'id' | 'version'>,
 ): HistoryReading {
-  const [page, setPage] = useState<HistoryPage | null>(null)
-  const [failure, setFailure] = useState<ErrorCode | null>(null)
-  const [readingEarlier, setReadingEarlier] = useState(false)
+  const [page, setPage] = useState<ReadFor<HistoryPage> | null>(null)
+  const [failure, setFailure] = useState<ReadFor<ErrorCode> | null>(null)
+  const [readingEarlier, setReadingEarlier] = useState<string | null>(null)
   const { id, version } = exchange
   // The page on screen, for joining a new reading onto without a render.
-  const shown = useRef<HistoryPage | null>(null)
+  const shown = useRef<ReadFor<HistoryPage> | null>(null)
+
+  const show = useCallback((forId: string, value: HistoryPage) => {
+    const read = { id: forId, value }
+    shown.current = read
+    setPage(read)
+    setFailure(null)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -46,51 +68,53 @@ export function useHistory(
       (found) => {
         if (cancelled) return
         // The earlier pages already read stay in front of the latest.
+        const before = readFor(shown.current, id)
         const first = found.events[0]?.sequence ?? Number.POSITIVE_INFINITY
-        const earlier = (shown.current?.events ?? []).filter((event) => event.sequence < first)
-        const joined: HistoryPage = {
+        const earlier = (before?.events ?? []).filter((event) => event.sequence < first)
+        show(id, {
           ...found,
           events: [...earlier, ...found.events],
-          earlier: earlier.length > 0 ? (shown.current?.earlier ?? null) : found.earlier,
-        }
-        shown.current = joined
-        setPage(joined)
-        setFailure(null)
+          earlier: earlier.length > 0 ? (before?.earlier ?? null) : found.earlier,
+        })
       },
       (error: unknown) => {
-        if (!cancelled) setFailure(failureCode(error))
+        if (!cancelled) setFailure({ id, value: failureCode(error) })
       },
     )
     return () => {
       cancelled = true
     }
-  }, [api, id, version])
+  }, [api, id, version, show])
 
   const readEarlier = useCallback(async () => {
-    const current = shown.current
-    if (!current || current.earlier == null || readingEarlier) return
-    setReadingEarlier(true)
+    const current = readFor(shown.current, id)
+    if (!current || current.earlier == null || readingEarlier === id) return
+    setReadingEarlier(id)
     try {
       const found = await api.history(id, current.earlier)
       // The page may have been replaced by a newer reading meanwhile; what
-      // was read goes in front of whatever is shown now.
-      const latest = shown.current ?? current
-      const joined: HistoryPage = {
+      // was read goes in front of whatever is shown now, if that is still
+      // this exchange's.
+      const latest = readFor(shown.current, id)
+      if (!latest) return
+      show(id, {
         ...latest,
         events: [...found.events, ...latest.events],
         earlier: found.earlier,
-      }
-      shown.current = joined
-      setPage(joined)
-      setFailure(null)
+      })
     } catch (error) {
-      setFailure(failureCode(error))
+      setFailure({ id, value: failureCode(error) })
     } finally {
-      setReadingEarlier(false)
+      setReadingEarlier((reading) => (reading === id ? null : reading))
     }
-  }, [api, id, readingEarlier])
+  }, [api, id, readingEarlier, show])
 
-  return { page, failure, readEarlier, readingEarlier }
+  return {
+    page: readFor(page, id),
+    failure: readFor(failure, id),
+    readEarlier,
+    readingEarlier: readingEarlier === id,
+  }
 }
 
 export interface RecordReading {
@@ -103,8 +127,9 @@ export interface RecordReading {
 
 /** The whole record of an exchange. A long record comes in parts; this joins them. */
 export function useRecord(api: Pick<ExchangeApi, 'recordPart'>, id: string): RecordReading {
-  const [record, setRecord] = useState<RecordDocument | null>(null)
-  const [failure, setFailure] = useState<ErrorCode | null>(null)
+  // Kept with the exchange they are about, so another's is never shown.
+  const [record, setRecord] = useState<ReadFor<RecordDocument> | null>(null)
+  const [failure, setFailure] = useState<ReadFor<ErrorCode> | null>(null)
   // Only the reading asked for last may answer.
   const asked = useRef(0)
 
@@ -113,10 +138,10 @@ export function useRecord(api: Pick<ExchangeApi, 'recordPart'>, id: string): Rec
     try {
       const found = await readWholeRecord((from) => api.recordPart(id, from))
       if (mine !== asked.current) return
-      setRecord(found)
+      setRecord({ id, value: found })
       setFailure(null)
     } catch (error) {
-      if (mine === asked.current) setFailure(failureCode(error))
+      if (mine === asked.current) setFailure({ id, value: failureCode(error) })
     }
   }, [api, id])
 
@@ -127,5 +152,5 @@ export function useRecord(api: Pick<ExchangeApi, 'recordPart'>, id: string): Rec
     }
   }, [reload])
 
-  return { record, failure, reload }
+  return { record: readFor(record, id), failure: readFor(failure, id), reload }
 }

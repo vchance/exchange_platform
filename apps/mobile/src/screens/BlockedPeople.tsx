@@ -1,4 +1,4 @@
-import { useBlockedPeople, type BlockedPerson } from '@exchange/shared';
+import { labelText, useBlockedPeople, type BlockedPerson } from '@exchange/shared';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
@@ -52,7 +52,7 @@ export function BlockedPeople() {
                     unless the reader has left it: then it only names them. */}
                 <Pressable
                   accessibilityRole={person.left ? 'text' : 'link'}
-                  accessibilityLabel={nameOf(person)}
+                  accessibilityLabel={labelText(nameOf(person))}
                   accessibilityHint={reference}
                   disabled={person.left === true}
                   onPress={() => router.push(`/exchanges/${person.exchange_id}`)}
