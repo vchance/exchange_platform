@@ -677,6 +677,50 @@
     "waitingLongMoney": "{name} has not confirmed receiving this since you recorded paying on {date}. If they never do, it stays this way. You can ask to close it without agreement; the record then shows this as paid but not confirmed.",
     "closeRequestLapses": "If nothing changes, it closes on {date}."
   },
+  "wallet": {
+    "intro": "Keep this agreement in your phone’s wallet. The pass shows how it stands and links back here; its terms stay in {productName}.",
+    "addToApple": "Add to Apple Wallet",
+    "addToGoogle": "Add to Google Wallet",
+    "adding": "Getting your pass…",
+    "pass": {
+      "description": "{productName} yup {code}",
+      "status": "Status",
+      "reference": "Reference",
+      "nextDue": "Next due",
+      "outstanding": "Still to do",
+      "with": "With",
+      "closedOn": "Closed on",
+      "open": "Open the yup",
+      "note": "This pass shows only how your yup stands. Its terms stay in {productName}, where you sign in to read them.",
+      "void": "This pass is no longer in use."
+    },
+    "status": {
+      "inForce": "In force",
+      "waitingForYou": "Waiting for you",
+      "dueSoon": "Due soon",
+      "overdue": "Overdue",
+      "disputed": "Disputed",
+      "completed": "Completed",
+      "ended": "Ended by agreement",
+      "closed": "Closed",
+      "void": "No longer in use"
+    },
+    "date": "{month} {day}, {year}",
+    "months": {
+      "jan": "Jan",
+      "feb": "Feb",
+      "mar": "Mar",
+      "apr": "Apr",
+      "may": "May",
+      "jun": "Jun",
+      "jul": "Jul",
+      "aug": "Aug",
+      "sep": "Sep",
+      "oct": "Oct",
+      "nov": "Nov",
+      "dec": "Dec"
+    }
+  },
   "record": {
     "historyHeading": "History",
     "historyEmpty": "Nothing has happened yet.",
@@ -903,7 +947,8 @@
     "CLIENT_TOO_OLD": "Update the app to continue.",
     "NOT_FOUND": "We couldn’t find that.",
     "SERVICE_UNAVAILABLE": "The service is temporarily unavailable. Try again shortly.",
-    "INTERNAL": "Something went wrong on our side. Try again."
+    "INTERNAL": "Something went wrong on our side. Try again.",
+    "WALLET_UNAVAILABLE": "Passes for this wallet aren’t available yet."
   },
   "a11y": {
     "openExchange": "Opens this yup.",

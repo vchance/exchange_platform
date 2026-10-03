@@ -148,7 +148,8 @@ In this order. Each step needs only what the steps before it set up.
 
    Google's checker: `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://<domain>&relation=delegate_permission/common.handle_all_urls`. On an Android device with a build installed: `adb shell pm verify-app-links --re-verify app.yuppers`, then `adb shell pm get-app-links app.yuppers` should show the domain as `verified`. On iOS, tap an invitation link in Notes or Messages (not typed into Safari, which never opens an app).
 8. **Store listings.** Create the App Store Connect record and the Play Console listing from the drafts below; fill the App Privacy label and the data-safety form from "What the app collects"; answer the content rating questionnaires (the app has user content, reporting and blocking, and is for people 18 and over); publish the privacy policy and support pages and put their addresses in both stores.
-9. **Production builds.** `eas build --profile production --platform all`. The build number starts at 1 and goes up by one each time; `eas build:version:set` sets it if a store already has a higher one. Upload through each store's own console or `eas submit`, when the owner decides to.
+9. **Wallet passes.** With the Apple and Google accounts, the pass type certificate and the Wallet issuer: [docs/wallet.md](wallet.md), "Once the accounts exist". The app needs nothing more for them; the service's settings turn the buttons on.
+10. **Production builds.** `eas build --profile production --platform all`. The build number starts at 1 and goes up by one each time; `eas build:version:set` sets it if a store already has a higher one. Upload through each store's own console or `eas submit`, when the owner decides to.
 
 ## Store listing drafts
 
@@ -254,6 +255,7 @@ It builds and signs nothing and needs no account. The generated `ios/` and `andr
 
 ## Not verified
 
+- Wallet passes have not been added to a device: on iOS the app opens the pass in Safari rather than in its own sheet ([docs/wallet.md](wallet.md), "What remains").
 - Nothing here has run on a device or a simulator, or been built by EAS. `npx expo prebuild`, `npx expo export` for both platforms, `expo-doctor` and the jest tests (as iOS and as Android) have.
 - Whether iOS hands the app the link's `#token` fragment intact for a universal link, and Android for an app link, is what the system documentation says and what `+native-intent.ts` is written for; it has not been seen on a device.
 - The privacy manifest reasons come from the dependencies' own manifests and a search of their sources; Apple's check at upload is the real test.

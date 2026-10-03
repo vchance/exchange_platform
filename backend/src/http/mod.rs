@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use axum::Router;
 use axum::extract::{MatchedPath, Request, State};
 use axum::http::header::{
     CACHE_CONTROL, CONTENT_SECURITY_POLICY, REFERRER_POLICY, STRICT_TRANSPORT_SECURITY,
@@ -11,6 +10,7 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::get;
+use axum::{Extension, Router};
 use sqlx::PgPool;
 use tracing::Instrument;
 use utoipa::OpenApi;
@@ -21,6 +21,7 @@ use crate::client_version::{self, MinimumClientVersions};
 use crate::domain::Rules;
 use crate::error::{ErrorBody, ErrorCode};
 use crate::metrics::HttpMetrics;
+use crate::wallet::{Wallet, WalletPlatform};
 
 pub mod account;
 pub mod auth;
@@ -33,6 +34,7 @@ pub mod health;
 pub mod record;
 pub mod safety;
 pub mod v1;
+pub mod wallet;
 pub mod web;
 
 pub use client_address::{ClientAddress, TrustedProxies};
@@ -69,8 +71,15 @@ pub struct AppState {
 }
 
 /// The whole service: the API, and the web app if there is one to serve.
-/// API paths are routed first; the web app answers what is left.
+/// API paths are routed first; the web app answers what is left. No Wallet
+/// platform is configured.
 pub fn router(state: AppState, web: Option<WebApp>) -> Router {
+    let wallet = Arc::new(Wallet::off(&state.settings.web_origin));
+    router_with_wallet(state, web, wallet)
+}
+
+/// [`router`], issuing Wallet passes for the platforms `wallet` has.
+pub fn router_with_wallet(state: AppState, web: Option<WebApp>, wallet: Arc<Wallet>) -> Router {
     // People sign on these pages, so the page must be ours and nobody
     // else's frame. HSTS only when the origin is HTTPS, or a development
     // setup over plain HTTP would be locked out of itself.
@@ -86,6 +95,7 @@ pub fn router(state: AppState, web: Option<WebApp>) -> Router {
         )
         .route(web::ASSET_LINKS_PATH, get(web::asset_links))
         .nest("/v1", v1::router())
+        .layer(Extension(wallet))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             client_version::refuse_old_clients,
@@ -144,10 +154,16 @@ async fn observe(State(state): State<AppState>, request: Request, next: Next) ->
         .extensions()
         .get::<MatchedPath>()
         .map(|path| path.as_str().to_owned());
+    // A Wallet device's requests name the device in their path; theirs is
+    // logged as the route's template, which names nothing.
+    let path = match &route {
+        Some(route) if route.starts_with(wallet::DEVICE_ROUTES) => route.as_str(),
+        _ => request.uri().path(),
+    };
     let span = tracing::info_span!(
         "request",
         method = %method,
-        path = request.uri().path(),
+        path = path,
         request_id = %id,
     );
 
@@ -240,8 +256,11 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
         safety::block,
         safety::unblock,
         safety::blocked_people,
+        wallet::apple_pass,
+        wallet::apple_link,
+        wallet::google_link,
     ),
-    components(schemas(ErrorBody, ErrorCode, MinimumClientVersions))
+    components(schemas(ErrorBody, ErrorCode, MinimumClientVersions, WalletPlatform))
 )]
 struct ApiDoc;
 

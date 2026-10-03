@@ -30,6 +30,7 @@ All three come from the same image: the `api` is its default command, the other 
    - `APP_SECRET`: `openssl rand -hex 32`.
    - `SMTP_PASSWORD`, and `SMTP_USERNAME` if the provider treats it as secret.
    - When they are switched on: `SMS_AUTH_TOKEN` for the api, and `EXPO_ACCESS_TOKEN` for the worker if the Expo project has push security on.
+   - Once Wallet passes are wanted: `APPLE_PASS_KEY` and `GOOGLE_WALLET_SERVICE_ACCOUNT` ([docs/wallet.md](wallet.md)).
 
 3. **Settings** (plain environment):
    - `WEB_ORIGIN`: the public HTTPS origin, such as `https://app.example.com`, without a trailing slash. Cookie sessions are honored only from it, emails link into it, and because it is HTTPS every response carries HSTS.
@@ -39,6 +40,7 @@ All three come from the same image: the `api` is its default command, the other 
    - `SMS_DELIVERY` and `PUSH_DELIVERY` stay unset (off) until their accounts exist; "Text messages and push notifications" says how to switch each on.
    - `LOG_FORMAT=json` if a log collector reads the output; `RUST_LOG` stays `info`.
    - `METRICS_ADDR=0.0.0.0:9100` on the api and the worker, if something will scrape them (below).
+   - The Wallet settings, on the api and the worker, once the accounts exist, with `WALLET_DELIVERY=live` ([docs/wallet.md](wallet.md)). Until then, none of them.
 
 4. **Migrate.** Run the image with `/usr/local/bin/migrate` and `MIGRATION_DATABASE_URL`. It exits 0 with `migrations applied`. Safe to run again; every release runs it before the new api and worker start.
 
@@ -98,7 +100,7 @@ A proxy that sets its own request ID ties its logs to the service's that way.
 
 The one exception is the development deliveries, `CODE_DELIVERY=log`, `NOTIFICATION_DELIVERY=log`, `SMS_DELIVERY=log` and `PUSH_DELIVERY=log`, which write each code, email, text message and push notification to the log because that is their job. Even they write a phone number masked (`+1••••••••67`) and a push token by its first characters only. A deployment has to choose `CODE_DELIVERY` and `NOTIFICATION_DELIVERY`, so it never gets the log by default; check that both say `smtp`, and that `SMS_DELIVERY` and `PUSH_DELIVERY` are unset, `twilio` and `expo`.
 
-Useful lines besides requests: `api listening`, `worker started`, `worker shutting down`, `notifications delivered` and `push notifications delivered` (counts per pass), `notification not sent; will retry`, `push notification not sent; will retry`, `notification given up on` and `push notification given up on` (with the outbox ID), `push receipts read` and `push receipts could not be read`, `devices of ended sessions removed`, `push notifications are off (PUSH_DELIVERY)` at the worker's start, `one-time code could not be delivered`, `a code was not sent by SMS: the service's hourly cap is reached`, `timers ran`, `reminders queued`, `database error`, `readiness check failed`.
+Useful lines besides requests: `api listening`, `worker started`, `worker shutting down`, `notifications delivered` and `push notifications delivered` (counts per pass), `notification not sent; will retry`, `push notification not sent; will retry`, `notification given up on` and `push notification given up on` (with the outbox ID), `push receipts read` and `push receipts could not be read`, `devices of ended sessions removed`, `push notifications are off (PUSH_DELIVERY)` at the worker's start, `one-time code could not be delivered`, `a code was not sent by SMS: the service's hourly cap is reached`, `timers ran`, `reminders queued`, `issuing Wallet passes` (at start, naming the platforms), `wallet passes updated`, `wallet pass not updated; will retry` and `wallet pass update given up on` (with the pass's ID), `database error`, `readiness check failed`.
 
 ## Metrics
 
@@ -148,6 +150,7 @@ Starting points; tune them once there is real traffic.
 - **Readiness** failing on every copy: the database is unreachable.
 - **Text messages, which cost money.** `yuppers_sms_codes_this_hour{result="sent"}` against the cap, and its daily sum against the budget: at the default cap of 50 an hour the service can send at most 1,200 a day, about $10 to $20 a day at US prices in 2026 (the provider's per-message price plus carrier fees; check the provider's price list, and international numbers cost several times more). Any `refused` means people asking for a code by phone were turned away: either real demand above the cap, which is the cue to raise `SMS_MAX_PER_HOUR`, or someone sending codes to numbers that are not theirs (SMS pumping), which the provider's fraud tools and its geographic permissions (allow only the countries you serve) are for. `failed` above a few in an hour: the provider is refusing; its error code is in the api's log.
 - **Push.** `yuppers_push_deliveries_total{result="given_up"}` growing, or `yuppers_push_receipt_checks_total{result="error"}` most of the time: Expo is refusing or unreachable; the error code is in the worker's log. A jump in `yuppers_push_devices_removed_total` after a release can mean the app's project or credentials changed and every token stopped working.
+- **Wallet passes**, once on: `wallet pass update given up on` in the worker's log, or rows in `wallet_pass` with `update_status = 'FAILED'` (`last_error` says why; APNs refusing the certificate means it expired or was revoked). And the pass type certificate's expiry date, which the api warns about at start 30 days ahead and refuses to start past.
 - **Refusals** are not errors: `429` is a limit working (too many codes asked for, too many wrong guesses), and `4xx` in general is a person or a client being told no. Watch them for sudden jumps, not as failures.
 
 ## When the worker is down
@@ -157,6 +160,7 @@ Requests keep working: people can sign in, sign and record deliveries. What stop
 - **Notification emails and push notifications** queue in the outbox; nothing is lost. One-time codes, by email or text message, are sent by the api itself, so sign-in is unaffected.
 - **Timers**: unanswered revisions do not expire, close requests do not lapse into closing as unresolved, idle exchanges are not prompted or closed.
 - **Reminders** of contributions due soon or overdue are not sent.
+- **Wallet passes** are not updated; each catches up with the latest face when the worker is back.
 - **Purges**: network addresses and user agents older than 90 days (`DESIGN.md` §14) and old sign-in counts are not removed, so a long outage keeps personal data past its retention period.
 
 To recover:
@@ -229,12 +233,13 @@ CI runs the same steps on every change (the `Backup and restore` job): it fills 
 
 ## Rotating `APP_SECRET`
 
-`APP_SECRET` keys the hashes of one-time codes and the hashes that sign-in limits are counted under. It does not touch sessions, invitation links, signatures or content hashes, and the worker does not use it.
+`APP_SECRET` keys the hashes of one-time codes and the hashes that sign-in limits are counted under, and the tokens of Wallet passes. It does not touch sessions, invitation links, signatures or content hashes, and the worker does not use it.
 
 To rotate it, set the new value and restart every api copy together (a rolling restart works, but while old and new copies both run, a code sent by one is refused by the other). What it invalidates:
 
 - **Codes in flight**: every sign-in, deletion and new-identifier code already sent stops working. People ask for a new one; nobody is signed out.
 - **Sign-in limit counts**: the counts for the current hour and day start again from zero, since they are kept under the old secret's hashes. The old rows are removed by the worker within two days.
+- **Wallet passes**: links to download an Apple pass that are in flight (ten minutes at most) stop working. Passes already on devices keep working, since only their tokens' hashes are checked; one handed out again after the rotation gets a new token, and other devices' copies of that pass then stop updating until it is added again.
 
 Rotate it if it may have leaked: anyone with it and a copy of the database could test guesses at codes offline, and could tell which identifiers a count belongs to.
 

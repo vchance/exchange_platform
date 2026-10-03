@@ -145,6 +145,8 @@ export type {
   SessionCreated,
   SessionHolding,
   Slot,
+  WalletLink,
+  WalletPlatform,
 } from './api'
 export { idempotencyKeys } from './idempotency'
 export type { IdempotencyKeys } from './idempotency'
@@ -213,3 +215,11 @@ export type {
   SafetyPanel,
 } from './use-safety'
 export { deviceTimeZone, dueDateZone, dueOnDateText, timeZoneCity } from './time-zone'
+export {
+  browserWallet,
+  useWalletButton,
+  walletLink,
+  walletOffered,
+  walletPlatforms,
+} from './wallet'
+export type { WalletApi, WalletButton } from './wallet'

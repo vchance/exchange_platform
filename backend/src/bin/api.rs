@@ -7,6 +7,7 @@ use yuppers_backend::domain::Rules;
 use yuppers_backend::http::{self, AppState, Settings, WebApp};
 use yuppers_backend::metrics::{self, HttpMetrics, Text};
 use yuppers_backend::notifications::outbox::DeliveryRules;
+use yuppers_backend::wallet::Wallet;
 use yuppers_backend::{db, shutdown, telemetry};
 
 #[tokio::main]
@@ -32,6 +33,14 @@ async fn main() -> anyhow::Result<()> {
             cap = sms_cap,
             "codes for phone numbers go by text message, at most this many an hour"
         );
+    }
+
+    let wallet = Arc::new(
+        Wallet::new(&config.wallet, &config.web_origin, Some(&config.app_secret))
+            .context("Wallet passes")?,
+    );
+    if !wallet.platforms().is_empty() {
+        tracing::info!(platforms = ?wallet.platforms(), "issuing Wallet passes");
     }
 
     let state = AppState {
@@ -94,7 +103,8 @@ async fn main() -> anyhow::Result<()> {
 
     // With the peer address of each connection, which is the client's unless
     // a trusted proxy header says otherwise.
-    let app = http::router(state, web).into_make_service_with_connect_info::<SocketAddr>();
+    let app = http::router_with_wallet(state, web, wallet)
+        .into_make_service_with_connect_info::<SocketAddr>();
     axum::serve(listener, app)
         .with_graceful_shutdown(async {
             shutdown::signal().await;

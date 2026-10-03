@@ -28,6 +28,7 @@ use yuppers_backend::db;
 use yuppers_backend::domain::Rules;
 use yuppers_backend::http::{self, AppState, Settings, TrustedProxies};
 use yuppers_backend::metrics::HttpMetrics;
+use yuppers_backend::wallet::Wallet;
 
 pub const CONSENT_VERSION: &str = "test-1";
 
@@ -103,6 +104,8 @@ pub struct Reply {
     pub status: StatusCode,
     pub headers: HeaderMap,
     pub body: Value,
+    /// The body as it came, for one that is not JSON.
+    pub bytes: Vec<u8>,
 }
 
 impl Reply {
@@ -161,6 +164,20 @@ impl App {
             code_sender,
             TrustedProxies::none(),
             MinimumClientVersions::default(),
+            None,
+        )
+        .await
+    }
+
+    /// Issuing Wallet passes for the platforms `wallet` has.
+    pub async fn start_with_wallet(database_name: &'static str, wallet: Arc<Wallet>) -> Self {
+        Self::start_configured(
+            database_name,
+            Rules::default(),
+            Arc::new(LogSender),
+            TrustedProxies::none(),
+            MinimumClientVersions::default(),
+            Some(wallet),
         )
         .await
     }
@@ -179,6 +196,7 @@ impl App {
             code_sender,
             proxies,
             MinimumClientVersions::default(),
+            None,
         )
         .await
     }
@@ -194,6 +212,7 @@ impl App {
             Arc::new(LogSender),
             TrustedProxies::none(),
             min_client_versions,
+            None,
         )
         .await
     }
@@ -213,6 +232,7 @@ impl App {
             TrustedProxies::none(),
             MinimumClientVersions::default(),
             (auth, push_notifications),
+            None,
         )
         .await
     }
@@ -223,6 +243,7 @@ impl App {
         code_sender: Arc<dyn CodeSender>,
         proxies: TrustedProxies,
         min_client_versions: MinimumClientVersions,
+        wallet: Option<Arc<Wallet>>,
     ) -> Self {
         Self::start_with_settings(
             database_name,
@@ -231,6 +252,7 @@ impl App {
             proxies,
             min_client_versions,
             (AuthRules::default(), false),
+            wallet,
         )
         .await
     }
@@ -242,6 +264,7 @@ impl App {
         proxies: TrustedProxies,
         min_client_versions: MinimumClientVersions,
         (auth, push_notifications): (AuthRules, bool),
+        wallet: Option<Arc<Wallet>>,
     ) -> Self {
         let (owner_url, app_url) = database(database_name).await;
         let db = connect(app_url).await;
@@ -262,8 +285,12 @@ impl App {
             code_sender,
             metrics: metrics.clone(),
         };
+        let router = match wallet {
+            Some(wallet) => http::router_with_wallet(state, None, wallet),
+            None => http::router(state, None),
+        };
         Self {
-            router: http::router(state, None),
+            router,
             db,
             metrics,
             owner: connect(owner_url).await,
@@ -340,6 +367,7 @@ impl App {
             status,
             headers,
             body: serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+            bytes: bytes.to_vec(),
         }
     }
 

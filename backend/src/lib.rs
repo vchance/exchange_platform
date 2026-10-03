@@ -17,3 +17,4 @@ pub mod outbound;
 pub mod safety;
 pub mod shutdown;
 pub mod telemetry;
+pub mod wallet;

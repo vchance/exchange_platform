@@ -353,6 +353,8 @@ pub struct WorkerConfig {
     pub push_sender: Option<Arc<dyn PushSender>>,
     /// Where to serve the worker's metrics, if anywhere.
     pub metrics_addr: Option<SocketAddr>,
+    /// Wallet passes, for the platforms configured (`crate::wallet::config`).
+    pub wallet: crate::wallet::WalletConfig,
 }
 
 impl WorkerConfig {
@@ -365,6 +367,7 @@ impl WorkerConfig {
             email_sender: email_sender(get)?,
             push_sender: push_sender(get)?,
             metrics_addr: metrics_addr(get)?,
+            wallet: crate::wallet::WalletConfig::from_lookup(get)?,
         })
     }
 }
@@ -448,6 +451,8 @@ pub struct ApiConfig {
     pub push_notifications: bool,
     /// Whether codes for phone numbers go by text message (`SMS_DELIVERY`).
     pub sms: bool,
+    /// Wallet passes, for the platforms configured (`crate::wallet::config`).
+    pub wallet: crate::wallet::WalletConfig,
 }
 
 impl ApiConfig {
@@ -484,6 +489,7 @@ impl ApiConfig {
             auth: auth_rules(get)?,
             push_notifications: push_mode(get)? != PushMode::Off,
             sms: sms_sender(get)?.is_some(),
+            wallet: crate::wallet::WalletConfig::from_lookup(get)?,
         })
     }
 }

@@ -1340,3 +1340,79 @@ async fn text_messages_are_counted_for_the_whole_service_by_keyed_hash() {
         .bind(subject)
     );
 }
+
+#[tokio::test]
+async fn a_wallet_pass_and_its_devices_hold_only_what_the_service_needs() {
+    let mut tx = app().await;
+    let a = agreement(&mut tx).await;
+    let pass = |platform: &'static str, serial: &'static str, token: Option<Vec<u8>>| {
+        sqlx::query(
+            "INSERT INTO wallet_pass (account_id, exchange_id, platform, external_id, auth_token_hash)
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(a.account_b)
+        .bind(a.exchange)
+        .bind(platform)
+        .bind(serial)
+        .bind(token)
+    };
+    let hash = Uuid::new_v4().as_bytes().repeat(2);
+
+    pass("APPLE", "0123abcd", Some(hash.clone()))
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    // One pass per person, exchange and platform, and serials never repeat.
+    refused!(tx, UNIQUE, pass("APPLE", "4567ef", Some(hash.clone())));
+    pass("GOOGLE", "89ab", None)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    // Only a hash, only for Apple, and only serials both platforms accept.
+    refused!(tx, CHECK, pass("APPLE", "x1", Some(b"the-token".to_vec())));
+    refused!(tx, CHECK, pass("GOOGLE", "x2", Some(hash.clone())));
+    refused!(tx, CHECK, pass("APPLE", "has/slash", None));
+    refused!(tx, CHECK, pass("PAPER", "x3", None));
+
+    let id: Uuid = sqlx::query_scalar("SELECT id FROM wallet_pass WHERE external_id = '0123abcd'")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    let register = |device: String, token: &'static str| {
+        sqlx::query(
+            "INSERT INTO wallet_device_registration (wallet_pass_id, device_library_id, push_token)
+             VALUES ($1, $2, $3)",
+        )
+        .bind(id)
+        .bind(device)
+        .bind(token)
+    };
+    register("device-1".to_owned(), "00ff")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    refused!(tx, UNIQUE, register("device-1".to_owned(), "00ff"));
+    refused!(tx, CHECK, register("d".repeat(129), "00ff"));
+    refused!(tx, CHECK, register("device-2".to_owned(), ""));
+
+    // The service marks, updates and revokes passes, and forgets devices;
+    // it never deletes a pass.
+    for statement in [
+        "UPDATE wallet_pass SET update_status = 'PENDING', mark_seq = mark_seq + 1",
+        "UPDATE wallet_pass SET voided_at = now()",
+        "UPDATE wallet_device_registration SET push_token = 'abcd'",
+        "DELETE FROM wallet_device_registration",
+    ] {
+        sqlx::query(statement).execute(&mut *tx).await.unwrap();
+    }
+    refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query("DELETE FROM wallet_pass")
+    );
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query("UPDATE wallet_pass SET update_status = 'SENT'")
+    );
+}

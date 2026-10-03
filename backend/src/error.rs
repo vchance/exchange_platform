@@ -64,6 +64,9 @@ pub enum ErrorCode {
     IdempotencyKeyReused,
     /// The client build is too old to act and must update.
     ClientTooOld,
+    /// Passes for this wallet are not issued here: the platform is not
+    /// configured (DESIGN.md §11).
+    WalletUnavailable,
     NotFound,
     ServiceUnavailable,
     Internal,
@@ -95,7 +98,7 @@ impl From<ErrorCode> for ApiError {
             }
             InvalidCode | Unauthenticated => StatusCode::UNAUTHORIZED,
             WrongActor | AccountSuspended | InvitationNotForYou => StatusCode::FORBIDDEN,
-            NotFound | InvitationUnavailable => StatusCode::NOT_FOUND,
+            NotFound | InvitationUnavailable | WalletUnavailable => StatusCode::NOT_FOUND,
             TooManyRequests | TooManyGuesses => StatusCode::TOO_MANY_REQUESTS,
             StaleRevision
             | ActionNotAllowed

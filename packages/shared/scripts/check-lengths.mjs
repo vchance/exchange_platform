@@ -93,6 +93,9 @@ const TIGHT = {
       'mobile.notifications.turnOn',
       'mobile.notifications.notNow',
       'mobile.notifications.openSettings',
+      'wallet.addToApple',
+      'wallet.addToGoogle',
+      'wallet.adding',
     ],
   },
   // One line in the web header or the mobile navigation bar.
@@ -111,10 +114,24 @@ const TIGHT = {
     ],
   },
   // The tag beside an exchange in the list and on its page. An item's own
-  // status (contributionStatus, moneyStatus) is a sentence that wraps.
+  // status (contributionStatus, moneyStatus) is a sentence that wraps. A
+  // Wallet pass's status is its largest field, on a card the width of a
+  // phone (backend/src/wallet/pass.rs).
   'status tags': {
     max: 28,
-    keys: ['states.*', 'outcomes.*'],
+    keys: ['states.*', 'outcomes.*', 'wallet.status.*'],
+  },
+  // A Wallet pass's labels, above their values in rows of two or three.
+  'wallet pass labels': {
+    max: 20,
+    keys: [
+      'wallet.pass.status',
+      'wallet.pass.reference',
+      'wallet.pass.nextDue',
+      'wallet.pass.outstanding',
+      'wallet.pass.with',
+      'wallet.pass.closedOn',
+    ],
   },
   // Each line of an exchange's card in the mobile list, beside its tag.
   'mobile home card lines': {

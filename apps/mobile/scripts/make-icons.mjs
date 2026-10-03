@@ -1,7 +1,8 @@
 // Draws the Yuppers mark, a speech bubble with a "Y" in it, and writes every
 // image made from it: the web app's favicon and the mobile app's icon, the
-// layers of its Android adaptive icon, and the splash image. The mark is
-// defined once, below, so the images cannot drift apart.
+// layers of its Android adaptive icon, the splash image, and the icon and
+// logo of an Apple Wallet pass (backend/assets/wallet). The mark is defined
+// once, below, so the images cannot drift apart.
 //
 //   node apps/mobile/scripts/make-icons.mjs
 //
@@ -10,13 +11,14 @@
 // two strokes, so the output is the same on every machine.
 
 import { spawnSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const mobile = join(dirname(fileURLToPath(import.meta.url)), '..')
 const assets = join(mobile, 'assets')
 const favicon = join(mobile, '..', 'web', 'public', 'favicon.svg')
+const wallet = join(mobile, '..', '..', 'backend', 'assets', 'wallet')
 
 /** The app's accent colour (apps/web/src/index.css, apps/mobile/src/lib/theme.ts). */
 const BLUE = '#0b57b0'
@@ -50,7 +52,7 @@ function svg(size, body, background) {
 `
 }
 
-function png(name, size, source) {
+function png(name, size, source, directory = assets) {
   const result = spawnSync('rsvg-convert', ['--width', String(size), '--height', String(size), '--format', 'png'], {
     input: source,
     maxBuffer: 64 * 1024 * 1024,
@@ -58,8 +60,8 @@ function png(name, size, source) {
   if (result.error || result.status !== 0) {
     throw new Error(`rsvg-convert failed for ${name}: ${result.error ?? result.stderr}`)
   }
-  writeFileSync(join(assets, name), result.stdout)
-  console.log(`wrote assets/${name} (${size}x${size})`)
+  writeFileSync(join(directory, name), result.stdout)
+  console.log(`wrote ${directory === assets ? 'assets/' : 'backend/assets/wallet/'}${name} (${size}x${size})`)
 }
 
 // The favicon: the mark alone, blue with a white "Y", which reads on light
@@ -79,3 +81,17 @@ png('android-icon-monochrome.png', 432, svg(432, mark({ size: 432, scale: 3.6, b
 
 // The splash image: the mark as in the favicon, on a transparent ground.
 png('splash-icon.png', 1024, svg(1024, mark({ size: 1024, scale: 9, bubble: BLUE, letter: WHITE })))
+
+// An Apple Wallet pass, at the three scales Wallet asks for. The icon stands
+// for the pass in notifications and on the lock screen, so it is the app
+// icon again, 38 points square. The logo sits at the top of the pass, which
+// has the accent colour behind it (backend/src/wallet/apple.rs): the white
+// bubble alone on a transparent ground, 50 points square, within the 160 by
+// 50 Wallet allows.
+mkdirSync(wallet, { recursive: true })
+for (const [suffix, factor] of [['', 1], ['@2x', 2], ['@3x', 3]]) {
+  const icon = 38 * factor
+  png(`icon${suffix}.png`, icon, svg(icon, mark({ size: icon, scale: (icon / 64) * 0.8, bubble: WHITE, letter: BLUE }), BLUE), wallet)
+  const logo = 50 * factor
+  png(`logo${suffix}.png`, logo, svg(logo, mark({ size: logo, scale: logo / 64, bubble: WHITE, letter: BLUE })), wallet)
+}

@@ -338,6 +338,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/exchanges/{id}/wallet/apple": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adds the caller's pass to Apple Wallet: the signed `.pkpass`. A party to
+         *     the exchange only, and only once something is agreed.
+         */
+        post: operations["apple_pass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/wallet/apple/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A link that downloads the caller's Apple pass for a few minutes, without
+         *     a session: opened in Safari, it adds the pass to Wallet. For the app and
+         *     the web page, which hold the session themselves.
+         */
+        post: operations["apple_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exchanges/{id}/wallet/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The "Save to Google Wallet" link for the caller's pass. A party to the
+         *     exchange only, and only once something is agreed.
+         */
+        post: operations["google_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/invitations/claim": {
         parameters: {
             query?: never;
@@ -823,7 +884,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -942,6 +1003,11 @@ export interface components {
             push_notifications: boolean;
             service: string;
             version: string;
+            /**
+             * @description The wallets a pass can be added to here (DESIGN.md §11). Empty until
+             *     a deployment configures one; a client shows no Wallet button then.
+             */
+            wallet_platforms: components["schemas"]["WalletPlatform"][];
         };
         /**
          * @description The oldest version of each client that may still change anything.
@@ -999,6 +1065,12 @@ export interface components {
             A: string;
             B: string;
         };
+        /**
+         * Format: binary
+         * @description A signed Apple pass, a zip archive. Only describes the answer for the
+         *     API description; the handler sends the bytes themselves.
+         */
+        Pkpass: string;
         QuantityDto: {
             /** @description A positive decimal number such as `2` or `1.5`. */
             amount: string;
@@ -1394,6 +1466,20 @@ export interface components {
             /** @description When the signer was removed or left. RFC 3339, UTC. */
             void_since: string;
         };
+        /** @description A link to follow to add a pass. */
+        WalletLink: {
+            /**
+             * @description When the link stops working, RFC 3339. Absent for a link that does
+             *     not expire.
+             */
+            expires_at?: string | null;
+            url: string;
+        };
+        /**
+         * @description A wallet a pass can be added to.
+         * @enum {string}
+         */
+        WalletPlatform: "APPLE" | "GOOGLE";
     };
     responses: never;
     parameters: never;
@@ -2298,6 +2384,183 @@ export interface operations {
             };
             /** @description The revision is not valid */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    apple_pass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pass */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apple.pkpass": components["schemas"]["Pkpass"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account, or Apple Wallet passes are not available (WALLET_UNAVAILABLE) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Nothing has been agreed yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Asked for too often */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    apple_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The link */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WalletLink"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account, or Apple Wallet passes are not available (WALLET_UNAVAILABLE) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Nothing has been agreed yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Asked for too often */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    google_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exchange ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The link */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WalletLink"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description No such exchange for this account, or Google Wallet passes are not available (WALLET_UNAVAILABLE) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Nothing has been agreed yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Asked for too often */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

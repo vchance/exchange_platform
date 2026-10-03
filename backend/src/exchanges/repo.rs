@@ -19,6 +19,7 @@ use crate::domain::revision::{
     Contribution, ContributionId, Due, Kind, Quantity, Revision, RevisionId, Settlement, Slot,
 };
 use crate::notifications::outbox;
+use crate::wallet;
 
 /// A stored revision: what it says, plus what the database knows about it.
 #[derive(Clone, Debug)]
@@ -730,6 +731,10 @@ pub async fn persist(
             }
         }
     }
+
+    // Its Wallet passes are brought up to date by the worker, marked here so
+    // that they are exactly when something happened (`crate::wallet::store`).
+    wallet::store::mark_exchange_changed(conn, before.id).await?;
 
     for (id, status) in &after.statuses {
         if before.exchange.statuses.get(id) != Some(status) {

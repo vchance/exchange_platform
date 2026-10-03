@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use anyhow::Context;
 use time::OffsetDateTime;
 use tokio::sync::watch;
 use yuppers_backend::auth::purge_sign_in_limits;
@@ -18,6 +19,7 @@ use yuppers_backend::metrics::{self, Text, WorkerMetrics};
 use yuppers_backend::notifications::outbox::{self, Delivery, DeliveryRules};
 use yuppers_backend::notifications::push::{self, PushDelivery, ReceiptRules};
 use yuppers_backend::notifications::wording::Wording;
+use yuppers_backend::wallet::delivery::{WalletDelivery, deliver_due as deliver_wallet_updates};
 use yuppers_backend::{db, shutdown, telemetry};
 
 const TICK: Duration = Duration::from_secs(5);
@@ -28,6 +30,9 @@ async fn main() -> anyhow::Result<()> {
     let config = WorkerConfig::from_env()?;
     let db = db::pool(&config.database_url)?;
     let rules = Rules::default();
+    // Wallet pass updates, when a platform is configured (crate::wallet).
+    let wallet =
+        WalletDelivery::from_config(&config.wallet, &config.web_origin).context("Wallet passes")?;
     let delivery = Delivery {
         sender: config.email_sender,
         // Checked now, so wording that cannot say everything stops the
@@ -198,6 +203,19 @@ async fn main() -> anyhow::Result<()> {
                     Ok(0) => {}
                     Ok(removed) => tracing::info!(removed, "devices of ended sessions removed"),
                     Err(error) => tracing::error!(error = %Redacted(&error), "device purge failed"),
+                }
+                if let Some(wallet) = &wallet {
+                    match deliver_wallet_updates(&db, &rules, wallet, OffsetDateTime::now_utc()).await {
+                        Ok(updated) if updated.handled() == 0 => {}
+                        Ok(updated) => tracing::info!(
+                            sent = updated.sent,
+                            unchanged = updated.unchanged,
+                            failed = updated.failed,
+                            given_up = updated.given_up,
+                            "wallet passes updated"
+                        ),
+                        Err(error) => tracing::error!(error = %Redacted(&error), "wallet pass updates failed"),
+                    }
                 }
                 let now = OffsetDateTime::now_utc().unix_timestamp();
                 metrics.pass_finished(u64::try_from(now).unwrap_or(0));

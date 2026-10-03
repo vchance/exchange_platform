@@ -75,7 +75,7 @@ use crate::domain::identity::Identifier;
 use crate::domain::revision::Slot;
 use crate::error::{ApiError, ErrorCode};
 use crate::exchanges::repo;
-use crate::languages;
+use crate::{languages, wallet};
 
 /// Which of the account's identifiers a code is sent to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, ToSchema)]
@@ -345,6 +345,9 @@ async fn attempt(
     .bind(account)
     .execute(&mut *tx)
     .await?;
+    // Its Wallet passes are revoked: each is told once that it is void, and
+    // never updated after (`crate::wallet::store::revoke_for_account`).
+    wallet::store::revoke_for_account(&mut tx, account).await?;
     sqlx::query("DELETE FROM account_block WHERE blocker_account_id = $1")
         .bind(account)
         .execute(&mut *tx)
