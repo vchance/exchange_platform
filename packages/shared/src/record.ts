@@ -201,6 +201,24 @@ export function recordMoments(language: string, timezone: string): (instant: str
 }
 
 /**
+ * Writes a moment as its calendar date in the exchange's own zone, for the
+ * plain summary at the top of a record, which says on what day things
+ * happened and leaves the exact time to the record under it.
+ */
+export function recordDays(language: string, timezone: string): (instant: string) => string {
+  let format: Intl.DateTimeFormat
+  try {
+    format = new Intl.DateTimeFormat(language, { dateStyle: 'long', timeZone: timezone })
+  } catch {
+    format = new Intl.DateTimeFormat(language, { dateStyle: 'long', timeZone: 'UTC' })
+  }
+  return (instant) => {
+    const parsed = new Date(instant)
+    return Number.isNaN(parsed.getTime()) ? instant : format.format(parsed)
+  }
+}
+
+/**
  * How a signer was verified, in the reader's language. A method newer than
  * this build has no wording here and is described by the record itself.
  */

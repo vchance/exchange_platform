@@ -529,11 +529,18 @@
       "share": "Share or save a copy (JSON)",
       "shareHint": "The copy is a file holding everything on this screen, including the terms and both names. Anyone you send it to can read all of it.",
       "shareUnavailable": "This device can’t share or save a file from here. You can download a copy on the web instead.",
-      "shareFailed": "The copy couldn’t be made ready to share. Try again."
+      "shareFailed": "The copy couldn’t be made ready to share. Try again.",
+      "savePdf": "Save as PDF",
+      "savePdfHint": "Makes a PDF of this record, with the summary first, to save or send. Anyone you send it to can read all of it.",
+      "pdfFailed": "The PDF couldn’t be made. Try again."
     },
     "date": {
       "choose": "Choose a date",
       "change": "Due {date}. Change the date."
+    },
+    "invited": {
+      "heading": "Invited to an exchange?",
+      "intro": "You can read a proposal before you sign in. Open the link you were sent, or paste it here."
     }
   },
   "exchange": {
@@ -784,6 +791,49 @@
         "EMAIL_OTP": "A single one-time code sent to an email address. Nothing else about the signer was checked.",
         "PHONE_OTP": "A single one-time code sent by text message to a phone number. Nothing else about the signer was checked."
       }
+    },
+    "summary": {
+      "heading": "In short",
+      "intro": "A plain reading of the full record below. Where the two differ, the record below is what counts.",
+      "between": "Between {a} and {b}.",
+      "givesAgreed": "What {name} agreed to give",
+      "givesLast": "What {name} would have given",
+      "basisAgreement": "From version {number}, the last version both parties signed.",
+      "basisLast": "Nothing was ever signed by both parties. This is what the last version, number {number}, proposed.",
+      "basisNone": "Nothing was ever sent.",
+      "signedBy": "{name} signed it on {date}.",
+      "notSignedBy": "{name} did not sign it.",
+      "inForceFrom": "It came into force on {date}.",
+      "standing": {
+        "DRAFT": "It is a draft that was never sent.",
+        "NEGOTIATING": "Nothing has been agreed yet.",
+        "ACTIVE": "The agreement is in force and is still being carried out.",
+        "COMPLETED": "It was completed on {date}: every required item was confirmed or waived.",
+        "ENDED_BY_AGREEMENT": "It ended by agreement on {date}. Whatever was still outstanding was waived, for both of them.",
+        "UNRESOLVED": "It closed on {date} without agreement, as unresolved. Nobody was released: each item kept the status it had.",
+        "NOT_AGREED": "It closed on {date} without an agreement, so neither of them was bound to anything."
+      },
+      "endedProposedBy": "{proposer} proposed ending it and {accepter} agreed.",
+      "outcome": {
+        "CONFIRMED": "Delivered, and {name} confirmed receiving it.",
+        "WAIVED": "{name} waived it, releasing {provider} from it.",
+        "WAIVED_BY_ENDING": "Waived when the exchange ended by agreement.",
+        "DISPUTED": "{name} disputed it. What each of them said is in the history below.",
+        "CLAIMED": "{name} marked it delivered. {other} has not confirmed it.",
+        "OUTSTANDING": "Not delivered yet.",
+        "OUTSTANDING_CLOSED": "Never marked delivered before the exchange closed."
+      },
+      "moneyOutcome": {
+        "CONFIRMED": "Paid, and {name} confirmed receiving it.",
+        "WAIVED": "{name} waived it, releasing {provider} from paying it.",
+        "WAIVED_BY_ENDING": "Waived when the exchange ended by agreement.",
+        "DISPUTED": "{name} disputed it. What each of them said is in the history below.",
+        "CLAIMED": "{name} recorded paying it. {other} has not confirmed receiving it.",
+        "OUTSTANDING": "Not paid yet.",
+        "OUTSTANDING_CLOSED": "Never recorded as paid before the exchange closed."
+      },
+      "savePdf": "Save as PDF",
+      "savePdfHint": "This opens your browser’s print window. Choose “Save as PDF” as the printer to keep this page, summary and full record, as a file."
     }
   },
   "errors": {
@@ -819,5 +869,71 @@
     "required": "Required.",
     "signNeedsAgreement": "Available once you confirm, above, that you have read these terms and sign them.",
     "earlierAdded": "{count, plural, one {# earlier entry added to the history.} other {# earlier entries added to the history.}}"
+  },
+  "trouble": {
+    "open": "Something isn’t working",
+    "intro": "Choose what fits best. Nothing happens until you pick a way forward and confirm it.",
+    "question": "What is the situation?",
+    "situations": {
+      "THEY_HAVENT": "{name} hasn’t done their part",
+      "CANT_DO_MINE": "I can’t do my part",
+      "BOTH_STOP": "We both want to stop",
+      "DISAGREE": "We disagree about whether something was done"
+    },
+    "explain": {
+      "THEY_HAVENT": "Exchange can’t make anyone do their part. These are the ways forward from here.",
+      "CANT_DO_MINE": "Only {name} can release you from something you agreed to give. These are the ways forward from here.",
+      "BOTH_STOP": "To stop together, one of you proposes ending by agreement and the other accepts.",
+      "DISAGREE": "Exchange records what each of you says. It doesn’t decide who is right. These are the ways forward from here."
+    },
+    "change": "Choose a different situation",
+    "means": {
+      "DISPUTE": "Disputing records that you don’t accept it as done. Nobody is released: {name} can put it right and mark it delivered again.",
+      "WAIVE": "Waiving releases {name} from that one item, for good. Everything else stays as agreed.",
+      "RECLAIM": "Marking it delivered again, with what you did about it, asks {name} to confirm. Nobody is released.",
+      "PROPOSE_END": "If {name} agrees, the exchange ends and both of you are released from everything still outstanding.",
+      "AGREE_END": "{name} has proposed ending. Agreeing ends the exchange now and releases both of you from everything still outstanding.",
+      "REQUEST_CLOSE": "Nobody is released. {name} gets time to respond; then the exchange closes as unresolved and the record keeps each item as it stands.",
+      "AMEND": "A change takes effect only once {name} signs it too. Until then the agreement stays as it is."
+    },
+    "nothingTheyOwe": "{name} has nothing outstanding that you could dispute or waive.",
+    "nothingInDoubt": "Nothing is marked delivered or disputed right now.",
+    "endPending": "You have already proposed ending. {name} hasn’t answered yet.",
+    "closePending": "A request to close without agreement is already open. You’ll find it under “Ending the exchange”.",
+    "amendPending": "A proposed change is already waiting to be signed, above."
+  },
+  "dispute": {
+    "weRecord": "Exchange records what each of you says. It doesn’t decide who is right.",
+    "pointer": "If you can’t settle it between you, “Something isn’t working” shows the ways forward."
+  },
+  "proposalChanges": {
+    "heading": "What this changes",
+    "againstInForce": "Compared with the agreement in force, version {number}.",
+    "againstPrevious": "Compared with version {number}, the one this answers.",
+    "nothing": "No item changes.",
+    "termsChanged": "The written terms changed. Read them in full above.",
+    "kinds": {
+      "ADDED": "Added",
+      "REMOVED": "Removed",
+      "CHANGED": "Changed",
+      "UNCHANGED": "Unchanged"
+    },
+    "unchangedCount": "{count, plural, one {# other item is unchanged.} other {# other items are unchanged.}}",
+    "fields": {
+      "name": "A party’s name",
+      "from": "Who provides it",
+      "type": "Kind",
+      "description": "Description",
+      "quantity": "Quantity",
+      "amount": "Amount",
+      "due": "When it’s due",
+      "criteria": "Done when",
+      "required": "Required or optional"
+    },
+    "fieldChange": "{field}: was {before}, now {after}.",
+    "was": "Was:",
+    "now": "Now:",
+    "notSet": "nothing",
+    "statusAfter": "Once you both sign: {status}"
   }
 }

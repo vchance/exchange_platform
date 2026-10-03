@@ -47,6 +47,15 @@ export function movesFor(status: Status, role: Role): Move[] {
 }
 
 /**
+ * The name of the panel that opens a move on one contribution, so that
+ * anything on the screen can open it: its own button, or the guide for when
+ * something isn't working.
+ */
+export function movePanel(contribution: string, move: Move): string {
+  return `move:${contribution}:${move}`
+}
+
+/**
  * What a move has to say for itself. A dispute must say why, and a claim
  * after a dispute must say what was done about it. A first claim may carry a
  * note; nothing else takes one. `label` is which of the note labels in the

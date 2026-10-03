@@ -529,11 +529,18 @@
       "share": "Compartir o guardar una copia (JSON)",
       "shareHint": "La copia es un archivo con todo lo que hay en esta pantalla, incluidos los términos y los dos nombres. Cualquier persona a la que se la envíes podrá leerlo todo.",
       "shareUnavailable": "Este dispositivo no puede compartir ni guardar un archivo desde aquí. Puedes descargar una copia en la web.",
-      "shareFailed": "No se pudo preparar la copia para compartirla. Inténtalo de nuevo."
+      "shareFailed": "No se pudo preparar la copia para compartirla. Inténtalo de nuevo.",
+      "savePdf": "Guardar como PDF",
+      "savePdfHint": "Crea un PDF de este registro, con el resumen al principio, para guardarlo o enviarlo. Cualquier persona a la que se lo envíes podrá leerlo todo.",
+      "pdfFailed": "No se pudo crear el PDF. Inténtalo de nuevo."
     },
     "date": {
       "choose": "Elegir una fecha",
       "change": "Vence el {date}. Cambiar la fecha."
+    },
+    "invited": {
+      "heading": "¿Te invitaron a un intercambio?",
+      "intro": "Puedes leer una propuesta antes de iniciar sesión. Abre el enlace que te enviaron o pégalo aquí."
     }
   },
   "exchange": {
@@ -784,6 +791,49 @@
         "EMAIL_OTP": "Un solo código de un solo uso enviado a una dirección de correo electrónico. No se comprobó nada más sobre quien firmó.",
         "PHONE_OTP": "Un solo código de un solo uso enviado por mensaje de texto a un número de teléfono. No se comprobó nada más sobre quien firmó."
       }
+    },
+    "summary": {
+      "heading": "En resumen",
+      "intro": "Una lectura sencilla del registro completo que sigue. Si algo no coincide, lo que cuenta es el registro de abajo.",
+      "between": "Entre {a} y {b}.",
+      "givesAgreed": "Lo que {name} acordó dar",
+      "givesLast": "Lo que {name} habría dado",
+      "basisAgreement": "Según la versión {number}, la última que firmaron ambas partes.",
+      "basisLast": "Ambas partes nunca firmaron nada. Esto es lo que proponía la última versión, la número {number}.",
+      "basisNone": "Nunca se envió nada.",
+      "signedBy": "{name} lo firmó el {date}.",
+      "notSignedBy": "{name} no lo firmó.",
+      "inForceFrom": "Entró en vigor el {date}.",
+      "standing": {
+        "DRAFT": "Es un borrador que nunca se envió.",
+        "NEGOTIATING": "Todavía no se ha acordado nada.",
+        "ACTIVE": "El acuerdo está en vigor y todavía se está cumpliendo.",
+        "COMPLETED": "Se completó el {date}: cada elemento obligatorio se confirmó o se dispensó.",
+        "ENDED_BY_AGREEMENT": "Terminó de común acuerdo el {date}. Lo que seguía pendiente se dispensó, para ambas partes.",
+        "UNRESOLVED": "Se cerró el {date} sin acuerdo, sin resolver. Nadie quedó liberado: cada elemento conservó el estado que tenía.",
+        "NOT_AGREED": "Se cerró el {date} sin llegar a un acuerdo, así que ninguna de las partes quedó obligada a nada."
+      },
+      "endedProposedBy": "{proposer} propuso terminarlo y {accepter} aceptó.",
+      "outcome": {
+        "CONFIRMED": "Entregado, y {name} confirmó que lo recibió.",
+        "WAIVED": "{name} lo dispensó y liberó a {provider} de aportarlo.",
+        "WAIVED_BY_ENDING": "Dispensado cuando el intercambio terminó de común acuerdo.",
+        "DISPUTED": "{name} lo disputó. Lo que dijo cada parte está en el historial de abajo.",
+        "CLAIMED": "{name} lo marcó como entregado. {other} no lo ha confirmado.",
+        "OUTSTANDING": "Aún sin entregar.",
+        "OUTSTANDING_CLOSED": "Nunca se marcó como entregado antes de que se cerrara el intercambio."
+      },
+      "moneyOutcome": {
+        "CONFIRMED": "Pagado, y {name} confirmó que lo recibió.",
+        "WAIVED": "{name} lo dispensó y liberó a {provider} de pagarlo.",
+        "WAIVED_BY_ENDING": "Dispensado cuando el intercambio terminó de común acuerdo.",
+        "DISPUTED": "{name} lo disputó. Lo que dijo cada parte está en el historial de abajo.",
+        "CLAIMED": "{name} registró que lo pagó. {other} no ha confirmado que lo recibió.",
+        "OUTSTANDING": "Aún sin pagar.",
+        "OUTSTANDING_CLOSED": "Nunca se registró como pagado antes de que se cerrara el intercambio."
+      },
+      "savePdf": "Guardar como PDF",
+      "savePdfHint": "Se abre la ventana de impresión del navegador. Elige “Guardar como PDF” como impresora para conservar esta página, con el resumen y el registro completo, como archivo."
     }
   },
   "errors": {
@@ -819,5 +869,71 @@
     "required": "Obligatorio.",
     "signNeedsAgreement": "Disponible cuando confirmes, arriba, que leíste estos términos y los firmas.",
     "earlierAdded": "{count, plural, one {# entrada anterior agregada al historial.} other {# entradas anteriores agregadas al historial.}}"
+  },
+  "trouble": {
+    "open": "Algo no está funcionando",
+    "intro": "Elige lo que mejor se ajuste. No pasa nada hasta que elijas una opción y la confirmes.",
+    "question": "¿Cuál es la situación?",
+    "situations": {
+      "THEY_HAVENT": "{name} no ha cumplido con su parte",
+      "CANT_DO_MINE": "No puedo cumplir con mi parte",
+      "BOTH_STOP": "Los dos queremos dejarlo",
+      "DISAGREE": "No estamos de acuerdo en si algo se hizo"
+    },
+    "explain": {
+      "THEY_HAVENT": "Exchange no puede obligar a nadie a cumplir con su parte. Estas son las opciones a partir de aquí.",
+      "CANT_DO_MINE": "Solo {name} puede liberarte de algo que acordaste dar. Estas son las opciones a partir de aquí.",
+      "BOTH_STOP": "Para dejarlo juntos, uno de ustedes propone terminar de común acuerdo y el otro acepta.",
+      "DISAGREE": "Exchange registra lo que dice cada uno. No decide quién tiene razón. Estas son las opciones a partir de aquí."
+    },
+    "change": "Elegir otra situación",
+    "means": {
+      "DISPUTE": "Disputarlo registra que no lo aceptas como hecho. Nadie queda liberado: {name} puede corregirlo y marcarlo como entregado de nuevo.",
+      "WAIVE": "Dispensarlo libera a {name} de ese elemento, para siempre. Todo lo demás sigue como se acordó.",
+      "RECLAIM": "Marcarlo como entregado de nuevo, con lo que hiciste al respecto, le pide a {name} que lo confirme. Nadie queda liberado.",
+      "PROPOSE_END": "Si {name} acepta, el intercambio termina y los dos quedan liberados de todo lo que siga pendiente.",
+      "AGREE_END": "{name} propuso terminar. Aceptar termina el intercambio ahora y los libera a los dos de todo lo que siga pendiente.",
+      "REQUEST_CLOSE": "Nadie queda liberado. {name} tiene un plazo para responder; después, el intercambio se cierra sin resolver y el registro conserva cada elemento tal como esté.",
+      "AMEND": "Un cambio solo entra en vigor cuando {name} también lo firma. Hasta entonces, el acuerdo sigue como está."
+    },
+    "nothingTheyOwe": "{name} no tiene nada pendiente que puedas disputar o dispensar.",
+    "nothingInDoubt": "Ahora mismo no hay nada marcado como entregado ni en disputa.",
+    "endPending": "Ya propusiste terminar. {name} todavía no ha respondido.",
+    "closePending": "Ya hay una solicitud abierta para cerrar sin acuerdo. La encontrarás en “Terminar el intercambio”.",
+    "amendPending": "Ya hay un cambio propuesto esperando firma, más arriba."
+  },
+  "dispute": {
+    "weRecord": "Exchange registra lo que dice cada uno. No decide quién tiene razón.",
+    "pointer": "Si no pueden resolverlo entre ustedes, “Algo no está funcionando” muestra las opciones."
+  },
+  "proposalChanges": {
+    "heading": "Qué cambia",
+    "againstInForce": "Comparado con el acuerdo en vigor, la versión {number}.",
+    "againstPrevious": "Comparado con la versión {number}, a la que responde.",
+    "nothing": "Ningún elemento cambia.",
+    "termsChanged": "Los términos escritos cambiaron. Léelos completos más arriba.",
+    "kinds": {
+      "ADDED": "Nuevo",
+      "REMOVED": "Quitado",
+      "CHANGED": "Cambiado",
+      "UNCHANGED": "Sin cambios"
+    },
+    "unchangedCount": "{count, plural, one {# elemento más no cambia.} other {# elementos más no cambian.}}",
+    "fields": {
+      "name": "El nombre de una parte",
+      "from": "Quién lo aporta",
+      "type": "Tipo",
+      "description": "Descripción",
+      "quantity": "Cantidad",
+      "amount": "Monto",
+      "due": "Cuándo vence",
+      "criteria": "Se da por hecho cuando",
+      "required": "Obligatorio u opcional"
+    },
+    "fieldChange": "{field}: antes {before}, ahora {after}.",
+    "was": "Antes:",
+    "now": "Ahora:",
+    "notSet": "nada",
+    "statusAfter": "Cuando ambos firmen: {status}"
   }
 }

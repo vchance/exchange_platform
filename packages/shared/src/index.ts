@@ -11,6 +11,7 @@ export {
   noteKind,
   readWholeRecord,
   recordFile,
+  recordDays,
   recordMoments,
   termsOfRevision,
   verificationText,
@@ -55,6 +56,7 @@ export {
   isOverdue,
   LONG_WAIT_DAYS,
   moveCommand,
+  movePanel,
   movesFor,
   noteFor,
   otherPartyName,
@@ -68,6 +70,45 @@ export type { Move, MoveNote, Role } from './fulfillment'
 export { isMoney, moneyIds, moveTextWording, moveWording, statusWording } from './money'
 export { amendmentEffects, amendmentRefused, draftEffects } from './amendment'
 export type { AmendmentEffect, ItemEffect } from './amendment'
+export {
+  contributionChanges,
+  fieldChangeText,
+  proposalChanges,
+  useProposalBase,
+} from './changes'
+export type {
+  ChangedField,
+  FieldChange,
+  FieldChangeText,
+  ItemChange,
+  ItemChangeKind,
+  ProposalBase,
+  ProposalChanges,
+} from './changes'
+export { summarizeRecord, summaryText } from './summary'
+export type {
+  RecordSummary,
+  SummaryItem,
+  SummaryOutcome,
+  SummarySide,
+  SummarySignature,
+  SummaryText,
+} from './summary'
+export {
+  TROUBLE_SITUATIONS,
+  troubleOffered,
+  troublePanel,
+  troubleRoute,
+  troubleSituationOf,
+} from './trouble'
+export type {
+  TroubleItem,
+  TroubleNote,
+  TroubleOffer,
+  TroubleRoute,
+  TroubleSituation,
+  TroubleWay,
+} from './trouble'
 export { groupExchanges } from './list'
 export type { GroupedExchanges } from './list'
 export { clientHeader, compareVersions, isClientTooOld, parseVersion } from './client-version'

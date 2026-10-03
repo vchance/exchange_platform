@@ -1,8 +1,11 @@
 import type { components, ErrorCode } from '@exchange/api-client'
 
 import type { AmendmentEffect } from '../amendment'
+import type { ChangedField, ItemChangeKind } from '../changes'
 import type { ProblemCode } from '../draft'
 import type { Move } from '../fulfillment'
+import type { SummaryOutcome } from '../summary'
+import type { TroubleSituation, TroubleWay } from '../trouble'
 
 type Schemas = components['schemas']
 
@@ -506,12 +509,71 @@ export interface Wording {
       shareHint: string
       shareUnavailable: string
       shareFailed: string
+      /** The record as a PDF, summary first, handed to the share sheet. */
+      savePdf: string
+      savePdfHint: string
+      pdfFailed: string
+    }
+    /** On the signed-out first screen: the way to an invitation without an account. */
+    invited: {
+      heading: string
+      intro: string
     }
     date: {
       choose: string
       /** What a screen reader says the date button does. Uses `{date}`. */
       change: string
     }
+  }
+  /**
+   * The guided way out of an agreement in force that isn't working
+   * (DESIGN.md §5.3). Every way it offers is an existing action; `means`
+   * says in one sentence who each one releases from what. `{name}` is the
+   * other party.
+   */
+  trouble: {
+    open: string
+    intro: string
+    question: string
+    situations: Record<TroubleSituation, string>
+    explain: Record<TroubleSituation, string>
+    change: string
+    means: Record<TroubleWay, string>
+    nothingTheyOwe: string
+    nothingInDoubt: string
+    endPending: string
+    closePending: string
+    amendPending: string
+  }
+  /** Said where a dispute is opened or seen: the product records, and does not rule (DESIGN.md §14.1). */
+  dispute: {
+    weRecord: string
+    pointer: string
+  }
+  /**
+   * What a proposal changes, shown to the person asked to sign it: against
+   * the agreement in force for an amendment, or the version it answers for
+   * a counteroffer.
+   */
+  proposalChanges: {
+    heading: string
+    againstInForce: string
+    againstPrevious: string
+    nothing: string
+    termsChanged: string
+    kinds: Record<ItemChangeKind, string>
+    /** Uses `{count}`. */
+    unchangedCount: string
+    fields: Record<ChangedField, string>
+    /** One changed field in the product's words. Uses `{field}`, `{before}` and `{after}`. */
+    fieldChange: string
+    /** Before and after a changed field written in the parties' own words. */
+    was: string
+    now: string
+    /** A field that had, or has, no value. */
+    notSet: string
+    /** Where an amended item would stand. Uses `{status}`. */
+    statusAfter: string
   }
   exchange: {
     title: string
@@ -681,6 +743,33 @@ export interface Wording {
       statements: string
       contentHash: string
       verification: Record<Schemas['VerificationMethod'], string>
+    }
+    /**
+     * The plain summary at the top of the record (DESIGN.md §14.1): who,
+     * what each gives, who signed and when, how it stands or ended, and what
+     * became of each item. Everyone is named, as on the rest of the record.
+     */
+    summary: {
+      heading: string
+      intro: string
+      /** Uses `{a}` and `{b}`. */
+      between: string
+      givesAgreed: string
+      givesLast: string
+      basisAgreement: string
+      basisLast: string
+      basisNone: string
+      signedBy: string
+      notSignedBy: string
+      inForceFrom: string
+      /** By state, or by outcome once closed. A closed one uses `{date}`. */
+      standing: Record<'DRAFT' | 'NEGOTIATING' | 'ACTIVE' | Schemas['OutcomeDto'], string>
+      endedProposedBy: string
+      /** Uses `{name}`, `{provider}` and `{other}` as each needs. */
+      outcome: Record<SummaryOutcome, string>
+      moneyOutcome: Record<SummaryOutcome, string>
+      savePdf: string
+      savePdfHint: string
     }
   }
   /** One entry per error code the API can return. */
