@@ -8,10 +8,13 @@ import { Actions, Button, Heading, Screen } from '../components/ui';
 import { AppProviders, useI18n, useSession } from '../lib/context';
 import { useReduceMotion } from '../lib/accessibility';
 import { installPluralRules } from '../lib/plural-rules';
+import { holdSplash, useSplashUntil, useWindowBackground } from '../lib/splash';
 import { colorsFor, useScheme } from '../lib/theme';
 
 // Before any wording is formatted: the engine lacks the plural rules it needs.
 installPluralRules();
+// The launch screen stays until the app knows who is signed in (`lib/splash.ts`).
+holdSplash();
 
 export default function RootLayout() {
   return (
@@ -30,9 +33,11 @@ export default function RootLayout() {
  */
 function Navigation() {
   const { wording, language } = useI18n();
-  const { outdated } = useSession();
+  const { outdated, ready } = useSession();
   const scheme = useScheme();
   const colors = colorsFor(scheme);
+  useWindowBackground(colors);
+  useSplashUntil(ready);
   const direction = directionOf(language);
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
   // Screens slide in, unless the person has asked for less motion.
