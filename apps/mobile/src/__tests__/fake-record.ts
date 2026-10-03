@@ -19,6 +19,8 @@ export interface RecordAndSafety {
   reportLimitReached: boolean;
   /** Makes the history unreadable, as when the service cannot be reached. */
   historyDown: boolean;
+  /** A record to answer with instead of the one made from the exchange. */
+  record: RecordDocument | null;
 }
 
 const states = new WeakMap<FakeService, RecordAndSafety>();
@@ -27,7 +29,7 @@ const states = new WeakMap<FakeService, RecordAndSafety>();
 export function recordAndSafety(service: FakeService): RecordAndSafety {
   let state = states.get(service);
   if (!state) {
-    state = { blocked: false, reportLimitReached: false, historyDown: false };
+    state = { blocked: false, reportLimitReached: false, historyDown: false, record: null };
     states.set(service, state);
   }
   return state;
@@ -226,7 +228,7 @@ export function answerRecordAndSafety(
     case `GET ${exchange}/history`:
       return state.historyDown ? [503, { code: 'SERVICE_UNAVAILABLE' }] : [200, history(service)];
     case `GET ${exchange}/record`:
-      return [200, recordOf(service)];
+      return [200, state.record ?? recordOf(service)];
     case `POST ${exchange}/reports`:
       return state.reportLimitReached ? [429, { code: 'TOO_MANY_REQUESTS' }] : [204, null];
     case `GET ${exchange}/block`:

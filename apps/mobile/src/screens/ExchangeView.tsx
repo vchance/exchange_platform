@@ -8,6 +8,8 @@ import {
   otherPartyName,
   remainingRequired,
   statusesOf,
+  troublePanel,
+  troubleSituationOf,
   useActions,
   useHistory,
   type Actions as ExchangeActions,
@@ -47,6 +49,8 @@ import { Ending } from './Ending';
 import { ExchangeSafety } from './ExchangeSafety';
 import { Fulfillment } from './Fulfillment';
 import { History } from './History';
+import { ProposalChanges } from './ProposalChanges';
+import { Trouble } from './Trouble';
 
 /** How often an open exchange is checked for what the other party has done. */
 const CHECK_EVERY_MS = 20_000;
@@ -236,10 +240,26 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
             )}
           />
           <Fingerprint hash={inForce.content_hash} />
-          {active && !open && (
+          {active && (
             <Actions>
-              <Button label={w.amend} onPress={revise} />
+              {!open && <Button label={w.amend} onPress={revise} />}
+              {/* One way in to the ways out (DESIGN.md §5.3). */}
+              <Button
+                label={wording.trouble.open}
+                expanded={troubleSituationOf(actions.panel) !== undefined}
+                disabled={actions.busy}
+                onPress={() => actions.open(troublePanel())}
+              />
             </Actions>
+          )}
+          {active && troubleSituationOf(actions.panel) !== undefined && (
+            <Trouble
+              key={actions.panel}
+              exchange={exchange}
+              otherName={otherName}
+              actions={actions}
+              onRevise={revise}
+            />
           )}
         </Card>
       )}
@@ -449,6 +469,9 @@ function OpenRevision({ exchange, revision, otherName, actions, onRevise }: Open
         you={you}
       />
       <Fingerprint hash={revision.content_hash} />
+
+      {/* What it changes, for the person asked to sign it: the author saw this while writing it. */}
+      {!yours && <ProposalChanges exchange={exchange} revision={revision} />}
 
       <Lines>
         <P>{youSigned ? w.signedByYou : w.unsignedByYou}</P>

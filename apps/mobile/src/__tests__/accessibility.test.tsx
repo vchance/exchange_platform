@@ -8,6 +8,8 @@ import {
   EXCHANGE,
   fakeService,
   INVITATION,
+  PAYMENT,
+  REPAIR,
   TOKEN,
   ana,
   type FakeService,
@@ -192,6 +194,16 @@ describe('signing in', () => {
   });
 });
 
+describe('an invitation, before signing in', () => {
+  test('the first screen offers it, as a button that says what it opens', async () => {
+    await open('/', { signedIn: false });
+    await screen.findByText(w.mobile.invited.heading);
+    expect(audit()).toEqual([]);
+    expect(screen.getByRole('header', { name: w.mobile.invited.heading })).toBeTruthy();
+    expect(screen.getByRole('button', { name: w.mobile.openInvitation.title })).toBeTruthy();
+  });
+});
+
 describe('the invitation, as it opens from a link', () => {
   test('reading the proposal and signing in to respond', async () => {
     await open(`/en/i#${INVITATION}`, { signedIn: false });
@@ -321,9 +333,85 @@ describe('the exchange', () => {
 });
 
 describe('the record', () => {
-  test('laid out to be read from top to bottom', async () => {
+  test('laid out to be read from top to bottom, its plain summary first', async () => {
     await open(`/exchanges/${EXCHANGE}/record`, { signedIn: true });
     await screen.findByText(w.mobile.record.share);
+    await screen.findByText(w.record.summary.heading);
     expect(audit()).toEqual([]);
+    expect(screen.getByRole('header', { name: w.record.summary.heading })).toBeTruthy();
+    expect(screen.getByRole('button', { name: w.mobile.record.savePdf })).toBeTruthy();
+  });
+});
+
+describe('when something isn’t working', () => {
+  test('the guide: its question, then the ways forward, each a named button', async () => {
+    await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
+    await screen.findByText('Exchange with Ben Ortiz');
+    const opener = screen.getByRole('button', { name: w.trouble.open });
+    await fireEvent.press(opener);
+    expect(screen.getByRole('button', { name: w.trouble.open, expanded: true })).toBeTruthy();
+    await waitFor(() => expect(focused).toHaveBeenCalledWith(expect.anything(), 'focus'));
+    expect(audit()).toEqual([]);
+
+    focused.mockClear();
+    await fireEvent.press(
+      screen.getByRole('button', { name: w.trouble.situations.THEY_HAVENT.replace('{name}', 'Ben Ortiz') }),
+    );
+    // The screen reader is taken to what the situation means.
+    await waitFor(() => expect(focused).toHaveBeenCalledWith(expect.anything(), 'focus'));
+    expect(audit()).toEqual([]);
+    // An action offered on an item says which item it is.
+    const waive = screen
+      .getAllByRole('button', { name: w.exchange.moneyMoves.WAIVE })
+      .map((button) => button.props.accessibilityHint);
+    expect(waive).toContain('Payment for the repair');
+  });
+
+  test('a disputed item says it is recorded, not decided', async () => {
+    await open(`/exchanges/${EXCHANGE}`, {
+      signedIn: true,
+      prepare: (fake) => {
+        fake.exchange = {
+          ...fake.exchange,
+          contributions: [
+            { id: REPAIR, status: 'DISPUTED' },
+            { id: PAYMENT, status: 'PENDING' },
+          ],
+        };
+      },
+    });
+    await screen.findByText(w.dispute.weRecord);
+    expect(audit()).toEqual([]);
+  });
+});
+
+describe('a proposal waiting to be signed', () => {
+  test('what it changes, above the way to sign', async () => {
+    await open(`/exchanges/${EXCHANGE}`, {
+      signedIn: true,
+      prepare: (fake) => {
+        const inForce = fake.exchange.in_force_revision!;
+        fake.exchange = {
+          ...fake.exchange,
+          open_revision: {
+            ...inForce,
+            id: 'c0000000-0000-4000-8000-000000000002',
+            sequence: 2,
+            author: 'B',
+            accepted_by: ['B'],
+            terms: {
+              ...inForce.terms,
+              contributions: [
+                { ...inForce.terms.contributions[0], description: 'Repair the fence and gate' },
+                inForce.terms.contributions[1],
+              ],
+            },
+          },
+        };
+      },
+    });
+    await screen.findByText(w.proposalChanges.heading);
+    expect(audit()).toEqual([]);
+    expect(screen.getByRole('header', { name: w.proposalChanges.heading })).toBeTruthy();
   });
 });

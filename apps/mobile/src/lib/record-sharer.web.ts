@@ -29,6 +29,12 @@ export const recordSharer: RecordSharer = {
     window.setTimeout(() => URL.revokeObjectURL(address), 1000);
     return 'handed';
   },
+  // A browser makes a PDF from its print window, of the page it shows; the
+  // device's PDF of the record laid out as a page only a device makes.
+  async sharePdf() {
+    window.print();
+    return 'handed';
+  },
   // Nothing is kept: the browser has the download and the page has no copy.
   forget() {},
 };

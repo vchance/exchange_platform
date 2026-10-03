@@ -17,6 +17,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { EventList } from '../components/EventList';
+import { RecordSummary } from '../components/RecordSummary';
 import { TermsView } from '../components/TermsView';
 import {
   Actions,
@@ -34,6 +35,7 @@ import {
   Written,
 } from '../components/ui';
 import { useI18n } from '../lib/context';
+import { recordHtml } from '../lib/record-html';
 import { recordSharer } from '../lib/record-sharer';
 import { api } from '../lib/session';
 import { space, type, useColors } from '../lib/theme';
@@ -41,9 +43,10 @@ import { VoidSignature } from './Claimant';
 
 /**
  * The record of an exchange: how it stands, every version sent and who signed
- * it, and everything that happened, laid out to be read from top to bottom.
- * The copy a party takes away is the same record as a file, handed to the
- * system's share sheet (DESIGN.md §14.1).
+ * it, and everything that happened, laid out to be read from top to bottom,
+ * under a plain summary of it. The copy a party takes away is a PDF of the
+ * same, or the record as a file, handed to the system's share sheet
+ * (DESIGN.md §14.1).
  */
 export function RecordScreen({ id }: { id: string }) {
   const { wording } = useI18n();
@@ -78,7 +81,8 @@ interface RecordProps {
 }
 
 function Record({ record, failure, reload }: RecordProps) {
-  const { wording, fmt, language } = useI18n();
+  const i18n = useI18n();
+  const { wording, fmt, language } = i18n;
   const router = useRouter();
   const w = wording.record;
   const mobile = wording.mobile.record;
@@ -91,7 +95,26 @@ function Record({ record, failure, reload }: RecordProps) {
 
   const [refreshing, setRefreshing] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [problem, setProblem] = useState<'unavailable' | 'failed' | null>(null);
+  const [problem, setProblem] = useState<'unavailable' | 'failed' | 'pdfFailed' | null>(null);
+
+  // The record laid out as a page, summary first, printed by the device to a
+  // PDF and handed to the share sheet, where it can be saved or sent.
+  async function savePdf() {
+    setSharing(true);
+    setProblem(null);
+    try {
+      const outcome = await recordSharer.sharePdf(
+        recordHtml(record, i18n),
+        fmt(w.fileName, { code }),
+        fmt(w.title, { code }),
+      );
+      if (outcome === 'unavailable') setProblem('unavailable');
+    } catch {
+      setProblem('pdfFailed');
+    } finally {
+      setSharing(false);
+    }
+  }
 
   async function share() {
     setSharing(true);
@@ -133,11 +156,21 @@ function Record({ record, failure, reload }: RecordProps) {
         <Hint>{fmt(w.timesIn, { timezone: exchange.timezone })}</Hint>
       </Lines>
       <Actions>
+        <Button
+          variant="primary"
+          label={mobile.savePdf}
+          disabled={sharing}
+          onPress={() => void savePdf()}
+        />
         <Button label={mobile.share} disabled={sharing} onPress={() => void share()} />
       </Actions>
+      <Hint>{mobile.savePdfHint}</Hint>
       <Hint>{mobile.shareHint}</Hint>
       {problem === 'unavailable' && <ErrorNote>{mobile.shareUnavailable}</ErrorNote>}
       {problem === 'failed' && <ErrorNote>{mobile.shareFailed}</ErrorNote>}
+      {problem === 'pdfFailed' && <ErrorNote>{mobile.pdfFailed}</ErrorNote>}
+
+      <RecordSummary record={record} />
 
       <Heading level={2}>{w.summaryHeading}</Heading>
       <Tags>

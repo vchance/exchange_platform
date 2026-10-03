@@ -1,4 +1,5 @@
 import { Directory, File, Paths } from 'expo-file-system';
+import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
@@ -9,6 +10,10 @@ import type { RecordSharer } from './record-sharer.types';
  * takes a file, not text, so the copy is written to the app's own cache
  * directory and that file is handed over. The cache is private to the app;
  * the share sheet gives the app the person picks leave to read that one file.
+ *
+ * The same goes for the record as a PDF, which the device prints from the
+ * record laid out as a page (`record-html.ts`) and which is handed over the
+ * same way.
  *
  * The record holds the agreement's terms and both names, so the copy is not
  * left lying about: there is never more than one, it goes when the next is
@@ -26,13 +31,13 @@ const FOLDER = 'record-copies';
 const folder = () => new Directory(Paths.cache, FOLDER);
 
 /** A file name is a single path segment, whatever the wording made of it. */
-function fileName(name: string): string {
+function fileName(name: string, fallback = 'record.json'): string {
   const safe = Array.from(name, (char) =>
     char === '/' || char === '\\' || char === ':' || char < ' ' ? '-' : char,
   )
     .join('')
     .replace(/^\.+/, '');
-  return safe === '' ? 'record.json' : safe;
+  return safe === '' ? fallback : safe;
 }
 
 function forget(): void {
@@ -60,6 +65,35 @@ export const recordSharer: RecordSharer = {
       await Sharing.shareAsync(copy.uri, {
         mimeType: file.type,
         UTI: 'public.json',
+        dialogTitle: title,
+      });
+    } finally {
+      if (Platform.OS === 'ios') forget();
+    }
+    return 'handed';
+  },
+  async sharePdf(html, name, title) {
+    if (!(await Sharing.isAvailableAsync())) return 'unavailable';
+
+    forget();
+    // The system prints the page to a file of its own naming in the cache;
+    // it is moved into this app's folder under the record's name, so that
+    // it is what the person sees, and so that it is cleared like the other copy.
+    const printed = new File((await Print.printToFileAsync({ html })).uri);
+    const copies = folder();
+    copies.create({ intermediates: true, idempotent: true });
+    const copy = new File(copies, fileName(`${name}.pdf`, 'record.pdf'));
+    try {
+      await printed.move(copy);
+    } catch (error) {
+      if (printed.exists) printed.delete();
+      throw error;
+    }
+
+    try {
+      await Sharing.shareAsync(copy.uri, {
+        mimeType: 'application/pdf',
+        UTI: 'com.adobe.pdf',
         dialogTitle: title,
       });
     } finally {

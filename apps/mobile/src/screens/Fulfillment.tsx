@@ -1,12 +1,14 @@
 import type { components } from '@exchange/api-client';
 import {
   moveCommand,
+  movePanel,
   movesFor,
   moveTextWording,
   moveWording,
   noteFor,
   NOTE_MAX_CHARS,
   statusWording,
+  troublePanel,
   waitingLong,
   type Actions as ExchangeActions,
   type Move,
@@ -14,7 +16,7 @@ import {
 } from '@exchange/shared';
 import { useState } from 'react';
 
-import { Actions, Button, Failure, Notice, P, Panel, TextField } from '../components/ui';
+import { Actions, Button, Failure, Hint, Notice, P, Panel, TextField } from '../components/ui';
 import { useI18n } from '../lib/context';
 
 type Contribution = components['schemas']['ContributionDto'];
@@ -47,7 +49,7 @@ export function Fulfillment({ contribution, status, since, you, otherName, activ
   const money = contribution.type === 'MONEY';
   const role = contribution.from === you ? 'PROVIDER' : 'RECIPIENT';
   const moves = active ? movesFor(status, role) : [];
-  const panelOf = (move: Move) => `move:${contribution.id}:${move}`;
+  const panelOf = (move: Move) => movePanel(contribution.id, move);
   const opened = moves.find((move) => actions.panel === panelOf(move));
   // A claim nobody answers stays a claim (DESIGN.md §5.2). After a while the
   // provider is pointed to the way out, rather than left waiting.
@@ -61,6 +63,25 @@ export function Fulfillment({ contribution, status, since, you, otherName, activ
           {fmt(money ? w.waitingLongMoney : w.waitingLong, { name: otherName, date: moment(since) })}
         </Notice>
       ) : null}
+      {/* A dispute is recorded, never decided (DESIGN.md §14.1). */}
+      {status === 'DISPUTED' && (
+        <>
+          <P>{wording.dispute.weRecord}</P>
+          {active && (
+            <>
+              <Hint>{wording.dispute.pointer}</Hint>
+              <Actions>
+                <Button
+                  variant="link"
+                  label={wording.trouble.open}
+                  disabled={actions.busy}
+                  onPress={() => actions.open(troublePanel('DISAGREE'))}
+                />
+              </Actions>
+            </>
+          )}
+        </>
+      )}
       {moves.length > 0 && (
         <Actions>
           {moves.map((move) => (
@@ -114,6 +135,12 @@ function MovePanel({ move, money, contribution, otherName, actions }: MovePanelP
   return (
     <Panel title={title}>
       <P>{fmt(moveTextWording(wording, move, money), { name: otherName })}</P>
+      {move === 'DISPUTE' && (
+        <>
+          <P>{wording.dispute.weRecord}</P>
+          <Hint>{wording.dispute.pointer}</Hint>
+        </>
+      )}
       {takes && (
         <TextField
           label={w[label]}

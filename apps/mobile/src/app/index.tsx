@@ -5,9 +5,9 @@ import { AccountDeleted } from '../components/AccountDeleted';
 import { Button } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
 import { Gate } from '../screens/AccountSetup';
-import { HomeScreen } from '../screens/HomeScreen';
+import { HomeScreen, InvitedEntry } from '../screens/HomeScreen';
 
-/** The first screen: your exchanges, or the way to sign in. */
+/** The first screen: your exchanges, or the way to sign in and the way to an invitation. */
 export default function Home() {
   const { wording } = useI18n();
   const { account } = useSession();
@@ -30,7 +30,7 @@ export default function Home() {
         }}
       />
       <AccountDeleted />
-      <Gate>
+      <Gate signedOut={<InvitedEntry />}>
         <HomeScreen />
       </Gate>
     </>

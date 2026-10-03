@@ -95,12 +95,12 @@ test('a signed-in person pastes an invitation link into the app', async ({ perso
   await expect(page.getByText(fill(en.claimant.limits, { name: 'Ana' }))).toBeVisible()
 })
 
-test.fixme('a signed-out person pastes an invitation link from the first screen', async ({
+test('a signed-out person pastes an invitation link from the first screen', async ({
   person,
   email,
 }) => {
-  // fixme: signed out, the first screen is sign-in only; "Open an invitation"
-  // appears only once signed in, though the README says it is on the first screen.
+  // Someone invited is usually new and signed out: the first screen offers
+  // the invitation beside signing in, and reading it needs no account.
   const ana = await ApiPerson.signUp('Ana', email('ana'))
   const ben = await person('Ben')
   const { page } = ben
@@ -108,12 +108,17 @@ test.fixme('a signed-out person pastes an invitation link from the first screen'
 
   await page.goto('/')
   await expect(title(page, en.signIn.title)).toBeVisible()
+  await expect(page.getByRole('heading', { name: en.mobile.invited.heading })).toBeVisible()
   await button(page, en.mobile.openInvitation.title).click()
   await page.getByLabel(en.mobile.openInvitation.label, { exact: true }).fill(link)
   await button(page, en.mobile.openInvitation.open).click()
+  // The same reading without an account that the link itself opens.
+  await expect(title(page, en.invitation.title)).toBeVisible()
   await expect(page.getByText('A lamp')).toBeVisible()
   await button(page, en.invitation.respond).click()
   await signIn(ben)
+  await setUpProfile(ben)
+  await expect(page.getByText(fill(en.claimant.limits, { name: 'Ana' }))).toBeVisible()
 })
 
 test('once the agreement is in force, delivery is marked and confirmed from the app', async ({

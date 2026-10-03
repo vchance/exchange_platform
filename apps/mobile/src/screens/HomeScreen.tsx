@@ -132,6 +132,33 @@ export function HomeScreen() {
   );
 }
 
+/**
+ * On the first screen, before signing in: the way to an invitation. Someone
+ * invited is usually new and signed out, and can read a proposal without an
+ * account (DESIGN.md §8); this takes them to the same screen a link opens.
+ */
+export function InvitedEntry() {
+  const { wording } = useI18n();
+  const router = useRouter();
+  const w = wording.mobile;
+  return (
+    <Card>
+      <Heading level={2}>{w.invited.heading}</Heading>
+      <P>{w.invited.intro}</P>
+      <Actions>
+        <Button
+          label={w.openInvitation.title}
+          onPress={() => {
+            // Asking from here means a new one: an invitation looked at earlier is let go.
+            forgetInvitation();
+            router.push('/invitation');
+          }}
+        />
+      </Actions>
+    </Card>
+  );
+}
+
 function Group({ heading, exchanges }: { heading: string; exchanges: readonly ExchangeSummary[] }) {
   if (exchanges.length === 0) return null;
   return (

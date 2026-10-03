@@ -17,6 +17,12 @@ export interface RecordSharer {
    * the file could not be made ready or the sheet could not be shown.
    */
   share(file: RecordFile, title: string): Promise<ShareOutcome>;
+  /**
+   * Prints `html`, the record laid out as a page, to a PDF named `name`
+   * (without its extension) and offers that to the share sheet, where the
+   * person can save it or send it. Rejects when the PDF could not be made.
+   */
+  sharePdf(html: string, name: string, title: string): Promise<ShareOutcome>;
   /** Removes any copy made for sharing that is still on the device. */
   forget(): void;
 }

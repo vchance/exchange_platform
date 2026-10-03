@@ -57,8 +57,11 @@ export function AccountSetup({ headingLevel = 1 }: { headingLevel?: 1 | 2 }) {
   return null;
 }
 
-/** Shows a screen only to a signed-in account that is ready to act; otherwise, the way to become one. */
-export function Gate({ children }: { children: ReactNode }) {
+/**
+ * Shows a screen only to a signed-in account that is ready to act; otherwise, the way to become one.
+ * `signedOut` is shown under the way to sign in, to someone with no account yet.
+ */
+export function Gate({ children, signedOut }: { children: ReactNode; signedOut?: ReactNode }) {
   const { wording } = useI18n();
   const { ready, failure, account, retry } = useSession();
 
@@ -83,6 +86,7 @@ export function Gate({ children }: { children: ReactNode }) {
     return (
       <Screen>
         <AccountSetup />
+        {account ? null : signedOut}
         {/* An account exists from the first sign-in, before it has a name: it can be deleted from here. */}
         {account ? <DeleteAccount account={account} /> : null}
       </Screen>

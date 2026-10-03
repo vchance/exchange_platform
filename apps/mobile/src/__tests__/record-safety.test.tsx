@@ -230,7 +230,8 @@ describe('the record', () => {
     );
     screen.getByText(record.versionStatus.IN_FORCE);
     screen.getByText('Repair the back fence.');
-    screen.getByText('Amount: $450.00');
+    // In the version's terms, and in the plain summary above them.
+    expect(screen.getAllByText('Amount: $450.00')).toHaveLength(2);
     screen.getByText(`Fingerprint of these terms: ${'ab'.repeat(32)}`);
 
     // Each signature is one stop: who signed and when, then what it rests on.

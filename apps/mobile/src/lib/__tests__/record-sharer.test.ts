@@ -1,5 +1,6 @@
 import { recordFile, type RecordDocument } from '@exchange/shared';
 import { Directory, File, Paths } from 'expo-file-system';
+import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
@@ -17,7 +18,10 @@ jest.mock('expo-sharing', () => ({
   shareAsync: jest.fn(async () => {}),
 }));
 
+jest.mock('expo-print', () => ({ printToFileAsync: jest.fn() }));
+
 const sharing = jest.mocked(Sharing);
+const print = jest.mocked(Print);
 const copies = () => new Directory(Paths.cache, 'record-copies');
 
 // Enough of a record to tell one copy from another.
@@ -111,4 +115,53 @@ test('a file name is one path segment, whatever the wording made of it', async (
 test('forgetting when there is nothing to forget does nothing', () => {
   expect(() => recordSharer.forget()).not.toThrow();
   expect(() => recordSharer.forget()).not.toThrow();
+});
+
+describe('the record as a PDF', () => {
+  beforeEach(() => {
+    // The system prints into a file of its own naming in the cache.
+    print.printToFileAsync.mockReset().mockImplementation(async ({ html } = {}) => {
+      const printed = new File(Paths.cache, 'Print', 'F00D.pdf');
+      new Directory(Paths.cache, 'Print').create({ intermediates: true, idempotent: true });
+      printed.create({ overwrite: true });
+      printed.write(`PDF of ${html}`);
+      return { uri: printed.uri, numberOfPages: 1 };
+    });
+  });
+
+  test('the page is printed and the share sheet is given the PDF, under the record’s name', async () => {
+    await expect(
+      recordSharer.sharePdf('<p>the record</p>', 'exchange-record-PVVS-5Q2K', 'Record of exchange PVVS-5Q2K'),
+    ).resolves.toBe('handed');
+    expect(print.printToFileAsync).toHaveBeenCalledWith({ html: '<p>the record</p>' });
+    const [uri, options] = sharing.shareAsync.mock.calls[0];
+    expect(uri).toBe(`${Paths.cache.uri}record-copies/exchange-record-PVVS-5Q2K.pdf`);
+    expect(options).toEqual({
+      mimeType: 'application/pdf',
+      UTI: 'com.adobe.pdf',
+      dialogTitle: 'Record of exchange PVVS-5Q2K',
+    });
+    expect(handed[0].text).toBe('PDF of <p>the record</p>');
+    // Nothing is left where the system printed it.
+    expect(new File(Paths.cache, 'Print', 'F00D.pdf').exists).toBe(false);
+  });
+
+  test('it is cleared like the other copy', async () => {
+    await recordSharer.sharePdf('<p>x</p>', 'exchange-record-PVVS-5Q2K', 'title');
+    if (Platform.OS === 'ios') expect(copies().exists).toBe(false);
+    recordSharer.forget();
+    expect(copies().exists).toBe(false);
+  });
+
+  test('a device that cannot share prints nothing', async () => {
+    sharing.isAvailableAsync.mockResolvedValue(false);
+    await expect(recordSharer.sharePdf('<p>x</p>', 'name', 'title')).resolves.toBe('unavailable');
+    expect(print.printToFileAsync).not.toHaveBeenCalled();
+  });
+
+  test('a PDF that cannot be made is a failure, passed on', async () => {
+    print.printToFileAsync.mockRejectedValue(new Error('no printer'));
+    await expect(recordSharer.sharePdf('<p>x</p>', 'name', 'title')).rejects.toThrow('no printer');
+    expect(sharing.shareAsync).not.toHaveBeenCalled();
+  });
 });
