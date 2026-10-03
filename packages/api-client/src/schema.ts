@@ -1203,8 +1203,8 @@ export interface components {
             web?: string | null;
         };
         /**
-         * @description A report on the proposal behind an invitation link, from someone who need
-         *     not be signed in. The token is their proof of having received it.
+         * @description A report on the proposal behind an invitation link, from someone signed
+         *     in who holds the link. The token is their proof of having received it.
          */
         NewInvitationReport: {
             /** @description As for a report on an exchange. */
@@ -1280,8 +1280,9 @@ export interface components {
             reason: components["schemas"]["ReportReason"];
             /**
              * Format: uuid
-             * @description Who made it. Absent for a report made through an invitation link
-             *     without signing in.
+             * @description Who made it. Every report made now has one; it is absent only for a
+             *     report made through an invitation link without signing in, before
+             *     reporting needed an account.
              */
             reporter_account_id?: string | null;
             /**
@@ -1565,7 +1566,9 @@ export interface components {
             report_id?: string | null;
             /**
              * Format: uuid
-             * @description The reviewer; absent for the owner's command line.
+             * @description The reviewer; absent for the owner's command line: naming and
+             *     removing reviewers, and a suspension lifted by replaying the deletion
+             *     log after a restore, whose note says so.
              */
             staff_account_id?: string | null;
         };

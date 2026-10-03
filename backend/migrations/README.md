@@ -154,6 +154,16 @@ The deletion log ([docs/operations.md](../../docs/operations.md), "Replaying del
 
 The application role may read the log and add to it, never change or remove a row. `backend/tests/schema.rs` checks the grants and that an account appears once; `backend/tests/deletion.rs` the writing and the replay.
 
+## 0016_replay_lifts_suspension
+
+Replaying the deletion log deletes an account that the restored copy holds suspended: a suspended account cannot delete itself, so its suspension was lifted after the backup, and the replay lifts it again and deletes the account in one transaction ([docs/operations.md](../../docs/operations.md), "Replaying deletions"). That lifting goes into `review_event` like any other, but no reviewer did it; the owner did, by running `replay-deletions`.
+
+0014 already records the owner's command line with no reviewer (`staff_account_id` empty), for naming and removing reviewers, and the staff screen shows such an entry as the owner's. This migration replaces 0014's check that only those two actions may lack a reviewer with `review_event_actor`, which also lets `SUSPENSION_LIFTED` lack one, provided it has a note saying why. Every other action of a reviewer still needs the reviewer, and naming or removing one still needs none.
+
+**Why not an account for the system.** A made-up account to stand for the replay would be a row in `account` that can never sign in, that every query about people must leave out, and that the deletion log, the reviewer list and the staff screen would each have to know about. An empty reviewer already means "the owner, from the command line", which is exactly who runs a replay. **Why not a new action.** The event is a suspension lifted; a new name for it would make the history of a suspension read differently depending on who lifted it, and change the API and the staff screen's wording for no gain.
+
+`backend/tests/schema.rs` checks the new rule; `backend/tests/deletion.rs` the replay that uses it.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

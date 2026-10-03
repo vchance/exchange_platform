@@ -3576,7 +3576,7 @@
       },
       "NewInvitationReport": {
         "type": "object",
-        "description": "A report on the proposal behind an invitation link, from someone who need\nnot be signed in. The token is their proof of having received it.",
+        "description": "A report on the proposal behind an invitation link, from someone signed\nin who holds the link. The token is their proof of having received it.",
         "required": [
           "token",
           "reason"
@@ -3776,7 +3776,7 @@
               "null"
             ],
             "format": "uuid",
-            "description": "Who made it. Absent for a report made through an invitation link\nwithout signing in."
+            "description": "Who made it. Every report made now has one; it is absent only for a\nreport made through an invitation link without signing in, before\nreporting needed an account."
           },
           "subject_account_id": {
             "type": [
@@ -4508,7 +4508,7 @@
               "null"
             ],
             "format": "uuid",
-            "description": "The reviewer; absent for the owner's command line."
+            "description": "The reviewer; absent for the owner's command line: naming and\nremoving reviewers, and a suspension lifted by replaying the deletion\nlog after a restore, whose note says so."
           }
         }
       },

@@ -75,11 +75,15 @@ pub fn parse(text: &str) -> Result<Vec<Entry>, BadLine> {
 /// What a replay did, counted.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Summary {
+    /// Live in the restored database, and deleted again; those that were
+    /// suspended there included.
     pub deleted: usize,
+    /// Of those deleted again, the ones suspended in the restored database,
+    /// whose suspension was lifted first (`deletion::replay`). Listed, so
+    /// that whoever restores can tell the reviewers.
+    pub lifted: Vec<Uuid>,
     pub already_deleted: usize,
     pub not_here: usize,
-    /// Suspended in the restored database, and left so.
-    pub suspended: Vec<Uuid>,
     /// Could not be deleted this time (the database refused or was busy).
     /// Replaying again tries them again.
     pub failed: Vec<Uuid>,
@@ -88,7 +92,7 @@ pub struct Summary {
 impl Summary {
     /// Every account in the log is deleted, or was never here.
     pub fn complete(&self) -> bool {
-        self.suspended.is_empty() && self.failed.is_empty()
+        self.failed.is_empty()
     }
 }
 
@@ -96,12 +100,12 @@ impl fmt::Display for Summary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} deleted again, {} already deleted, {} not in this database, {} suspended and left \
-             as they are, {} failed",
+            "{} deleted again ({} of them suspended here, their suspension lifted), {} already \
+             deleted, {} not in this database, {} failed",
             self.deleted,
+            self.lifted.len(),
             self.already_deleted,
             self.not_here,
-            self.suspended.len(),
             self.failed.len()
         )
     }
@@ -137,11 +141,12 @@ pub async fn replay(
                 summary.not_here += 1;
                 report(&format!("{account}: not in this database"));
             }
-            Ok(Replayed::Suspended) => {
-                summary.suspended.push(account);
+            Ok(Replayed::SuspensionLiftedAndDeleted) => {
+                summary.deleted += 1;
+                summary.lifted.push(account);
                 report(&format!(
-                    "{account}: suspended here, so not deleted; deleted {when} in the database \
-                     the log came from"
+                    "{account}: deleted again (deleted {when}); it was suspended here, and the \
+                     suspension was lifted first, in the review history as the owner's"
                 ));
             }
             Err(error) => {
@@ -232,12 +237,17 @@ mod tests {
         assert!(summary.complete());
         assert_eq!(
             summary.to_string(),
-            "2 deleted again, 1 already deleted, 3 not in this database, 0 suspended and left as \
-             they are, 0 failed"
+            "2 deleted again (0 of them suspended here, their suspension lifted), 1 already \
+             deleted, 3 not in this database, 0 failed"
         );
-        summary.suspended.push(ANA.parse().unwrap());
-        assert!(!summary.complete());
-        summary.suspended.clear();
+        // A suspension lifted to delete the account leaves nothing undone.
+        summary.lifted.push(ANA.parse().unwrap());
+        assert!(summary.complete());
+        assert!(
+            summary
+                .to_string()
+                .starts_with("2 deleted again (1 of them suspended here")
+        );
         summary.failed.push(BEN.parse().unwrap());
         assert!(!summary.complete());
     }

@@ -8,10 +8,12 @@
 //! the log is deleted again through the service's own deletion
 //! (`yuppers_backend::deletion::replay`); one already deleted, or one the
 //! database never held, is reported and skipped, so replaying a file twice
-//! changes nothing the second time. It prints a line for each account and a
+//! changes nothing the second time. One suspended in the copy has its
+//! suspension lifted, recorded in the review history as the owner's, and is
+//! deleted in the same transaction. It prints a line for each account and a
 //! count at the end, and exits with status 1 if any account is left
-//! undeleted (suspended in the copy, or a failure), 2 if the file cannot be
-//! read or is damaged, in which case nothing is changed.
+//! undeleted (a failure), 2 if the file cannot be read or is damaged, in
+//! which case nothing is changed.
 
 use std::process::ExitCode;
 

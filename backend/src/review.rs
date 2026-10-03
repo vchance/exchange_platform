@@ -246,8 +246,9 @@ pub struct QueuedReport {
     pub overdue: bool,
     pub reason: ReportReason,
     pub details: Option<String>,
-    /// Who made it. Absent for a report made through an invitation link
-    /// without signing in.
+    /// Who made it. Every report made now has one; it is absent only for a
+    /// report made through an invitation link without signing in, before
+    /// reporting needed an account.
     pub reporter_account_id: Option<Uuid>,
     /// The person reported.
     pub subject_account_id: Option<Uuid>,
@@ -289,7 +290,9 @@ pub struct RelatedReport {
 pub struct ReviewEntry {
     pub id: i64,
     pub action: ReviewAction,
-    /// The reviewer; absent for the owner's command line.
+    /// The reviewer; absent for the owner's command line: naming and
+    /// removing reviewers, and a suspension lifted by replaying the deletion
+    /// log after a restore, whose note says so.
     pub staff_account_id: Option<Uuid>,
     /// RFC 3339.
     pub at: String,
@@ -892,17 +895,38 @@ pub async fn lift(
     account: Uuid,
     body: StaffNote,
 ) -> Result<(), ApiError> {
-    let note = checked_note(Some(body.note), true)?;
+    let Some(note) = checked_note(Some(body.note), true)? else {
+        return Err(ErrorCode::InvalidRequest.into());
+    };
     let mut tx = db.begin().await?;
     within_limit(&mut tx, staff, false, ACTIONS_PER_HOUR).await?;
+    if !lift_suspension(&mut tx, Some(staff), account, &note).await? {
+        return Err(ErrorCode::NotFound.into());
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Lifts a suspension in the caller's transaction and records it in the
+/// audit history, with the note. `staff` is the reviewer who lifted it, or
+/// nobody for the owner: replaying the deletion log lifts the suspension of
+/// an account it deletes (`crate::deletion::replay`; migration 0016 allows
+/// that entry without a reviewer, with a note). Returns whether the account
+/// was suspended.
+pub(crate) async fn lift_suspension(
+    conn: &mut PgConnection,
+    staff: Option<Uuid>,
+    account: Uuid,
+    note: &str,
+) -> Result<bool, sqlx::Error> {
     let lifted =
         sqlx::query("UPDATE account SET status = 'ACTIVE' WHERE id = $1 AND status = 'SUSPENDED'")
             .bind(account)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?
             .rows_affected();
     if lifted == 0 {
-        return Err(ErrorCode::NotFound.into());
+        return Ok(false);
     }
     // Tied to the report that led to the suspension, so that both read
     // together in its history.
@@ -913,21 +937,20 @@ pub async fn lift(
          LIMIT 1",
     )
     .bind(account)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut *conn)
     .await?
     .flatten();
     record_event(
-        &mut tx,
-        Some(staff),
+        conn,
+        staff,
         ReviewAction::SuspensionLifted,
         report,
         None,
         Some(account),
-        note.as_deref(),
+        Some(note),
     )
     .await?;
-    tx.commit().await?;
-    Ok(())
+    Ok(true)
 }
 
 /// Content hidden by review, most recently hidden first.

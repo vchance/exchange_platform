@@ -67,10 +67,19 @@
 //! backup restored later would bring the account back; the log, exported
 //! beside every backup, is what lets `replay` delete it again, through this
 //! same code (docs/operations.md, "Restoring").
+//!
+//! **A suspended account** is never deleted at its own request: it has no
+//! session to ask with, and if one got this far the suspension would stand.
+//! The one exception is a replay. An account the log names was active when
+//! it was deleted, so if the restored copy has it suspended, its suspension
+//! was lifted after the backup; the replay lifts it again, recorded in the
+//! review history as the owner's, and deletes the account in the same
+//! transaction (`replay`).
 
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -81,7 +90,7 @@ use crate::domain::identity::Identifier;
 use crate::domain::revision::Slot;
 use crate::error::{ApiError, ErrorCode};
 use crate::exchanges::repo;
-use crate::{languages, wallet};
+use crate::{languages, review, wallet};
 
 /// Which of the account's identifiers a code is sent to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, ToSchema)]
@@ -151,11 +160,35 @@ pub async fn preview(db: &PgPool, account: Uuid) -> Result<DeletionPreview, ApiE
 const ATTEMPTS: u32 = 6;
 const FIRST_WAIT: std::time::Duration = std::time::Duration::from_millis(20);
 
+/// Who asks for a deletion, which decides how it is proven, what becomes of
+/// a suspended account, and the time in the deletion log.
+#[derive(Clone, Copy)]
+enum Request<'a> {
+    /// The person, with a one-time code, checked and used up in the
+    /// transaction that deletes the account. Logged now.
+    Code(&'a OfferedCode<'a>),
+    /// A caller that confirmed it some other way. Logged now.
+    Confirmed,
+    /// A replay of the deletion log (`replay`): the deletion happened at
+    /// this time, which the log keeps. A suspension is lifted first.
+    Replay(OffsetDateTime),
+}
+
 enum Attempt {
-    Done,
+    Done(Done),
     /// Another transaction held the account row; nothing was changed, and
     /// the code offered with the request, if any, was not used up.
     Busy,
+}
+
+/// What a deletion that went through did.
+#[derive(Clone, Copy)]
+enum Done {
+    Deleted,
+    /// It was suspended, and a replay lifted the suspension and deleted it.
+    LiftedAndDeleted,
+    /// It was gone already: deleted, or never there.
+    Nothing,
 }
 
 /// Deletes the account once the one-time code offered for it checks out.
@@ -176,14 +209,16 @@ pub async fn delete_account_with_code(
     account: Uuid,
     code: &OfferedCode<'_>,
 ) -> Result<(), ApiError> {
-    retry(db, rules, account, Some(code), None).await
+    retry(db, rules, account, Request::Code(code)).await?;
+    Ok(())
 }
 
 /// Deletes the account, for a caller that has confirmed it some other way.
 /// Deleting an account that is already deleted changes nothing and succeeds:
 /// that is what a repeat finds.
 pub async fn delete_account(db: &PgPool, rules: &Rules, account: Uuid) -> Result<(), ApiError> {
-    retry(db, rules, account, None, None).await
+    retry(db, rules, account, Request::Confirmed).await?;
+    Ok(())
 }
 
 /// What `replay` found and did for one account.
@@ -191,13 +226,25 @@ pub async fn delete_account(db: &PgPool, rules: &Rules, account: Uuid) -> Result
 pub enum Replayed {
     /// It was live in this database, and is now deleted.
     Deleted,
+    /// It was suspended in this database. Its suspension was lifted, in the
+    /// review history as the owner's, and it is now deleted, in one
+    /// transaction.
+    SuspensionLiftedAndDeleted,
     /// It was deleted here already. Its line in the log is there too.
     AlreadyDeleted,
     /// This database never held it: it was made after the backup.
     NotHere,
-    /// It is suspended here, and a suspended account is not deleted
-    /// (`attempt`). Left as it is, for a person to look at.
-    Suspended,
+}
+
+/// The note on the review history's entry for a suspension lifted by a
+/// replay, which names no reviewer.
+fn replay_lift_note(deleted_at: OffsetDateTime) -> String {
+    let when = deleted_at.format(&Rfc3339).unwrap_or_default();
+    format!(
+        "Lifted to replay a deletion: the deletion log says this account was deleted at {when}. \
+         A suspended account cannot delete itself, so the suspension had been lifted before \
+         then, after the backup this database was restored from."
+    )
 }
 
 /// Applies again, to a database restored from a backup, a deletion that the
@@ -206,6 +253,14 @@ pub enum Replayed {
 /// every rule runs again: sessions end, identifiers go, exchanges are left
 /// through the rules. Its line in the log keeps the time it first happened.
 /// Replaying an account twice changes nothing the second time.
+///
+/// An account suspended here is deleted too. A suspended account cannot
+/// delete itself, so the one the log names was active when it was deleted:
+/// a reviewer lifted its suspension after the backup, and that lifting was
+/// lost with everything else written since. The replay lifts it again and
+/// deletes the account in the same transaction, as happened, and records
+/// the lifting in the review history with no reviewer, as the owner's
+/// (migration 0016), with a note that says why.
 pub async fn replay(
     db: &PgPool,
     rules: &Rules,
@@ -216,20 +271,21 @@ pub async fn replay(
         .bind(account)
         .fetch_optional(db)
         .await?;
-    match status.as_deref() {
-        None => Ok(Replayed::NotHere),
-        Some("SUSPENDED") => Ok(Replayed::Suspended),
-        Some("DELETED") => {
+    let done = match status.as_deref() {
+        None => return Ok(Replayed::NotHere),
+        Some("DELETED") => Done::Nothing,
+        Some(_) => retry(db, rules, account, Request::Replay(deleted_at)).await?,
+    };
+    Ok(match done {
+        Done::Deleted => Replayed::Deleted,
+        Done::LiftedAndDeleted => Replayed::SuspensionLiftedAndDeleted,
+        Done::Nothing => {
             // Deleted before the backup, whose log already says so; a
             // database older than the log may not.
             log_deletion(db, account, Some(deleted_at)).await?;
-            Ok(Replayed::AlreadyDeleted)
+            Replayed::AlreadyDeleted
         }
-        Some(_) => {
-            retry(db, rules, account, None, Some(deleted_at)).await?;
-            Ok(Replayed::Deleted)
-        }
-    }
+    })
 }
 
 /// Adds the account to the deletion log, unless it is there already.
@@ -256,13 +312,12 @@ async fn retry(
     db: &PgPool,
     rules: &Rules,
     account: Uuid,
-    code: Option<&OfferedCode<'_>>,
-    logged_at: Option<OffsetDateTime>,
-) -> Result<(), ApiError> {
+    request: Request<'_>,
+) -> Result<Done, ApiError> {
     let mut wait = FIRST_WAIT;
     for _ in 0..ATTEMPTS {
-        match attempt(db, rules, account, code, logged_at).await? {
-            Attempt::Done => return Ok(()),
+        match attempt(db, rules, account, request).await? {
+            Attempt::Done(done) => return Ok(done),
             Attempt::Busy => {
                 tokio::time::sleep(wait).await;
                 wait *= 2;
@@ -272,21 +327,18 @@ async fn retry(
     Err(ErrorCode::ServiceUnavailable.into())
 }
 
-/// `logged_at` is the time for the deletion log: now, unless this replays a
-/// deletion that happened earlier.
 async fn attempt(
     db: &PgPool,
     rules: &Rules,
     account: Uuid,
-    code: Option<&OfferedCode<'_>>,
-    logged_at: Option<OffsetDateTime>,
+    request: Request<'_>,
 ) -> Result<Attempt, ApiError> {
     let mut tx = db.begin().await?;
 
     // The code before anything else, so that a refusal is recorded without
     // waiting on the account. It is used up only if this transaction
     // commits; a busy attempt rolls back and leaves it live.
-    if let Some(code) = code
+    if let Request::Code(code) = request
         && let CodeCheck::Refused(error) = code.check(&mut tx).await?
     {
         // The wrong guess is counted, as for any code.
@@ -309,14 +361,23 @@ async fn attempt(
             .bind(account)
             .fetch_optional(&mut *tx)
             .await?;
+    let mut done = Done::Deleted;
     let (email, phone) = match held {
         Some((status, email, phone)) if status == "ACTIVE" => (email, phone),
-        Some((status, ..)) if status == "SUSPENDED" => {
-            // A suspended account has no session to ask with; if one gets
-            // here, the suspension stands and so does the account.
-            return Err(ErrorCode::AccountSuspended.into());
+        Some((status, email, phone)) if status == "SUSPENDED" => {
+            let Request::Replay(deleted_at) = request else {
+                // A suspended account has no session to ask with; if one
+                // gets here, the suspension stands and so does the account.
+                return Err(ErrorCode::AccountSuspended.into());
+            };
+            // Replaying a deletion the log proves (`replay`). Lifted in this
+            // transaction, so the account is never left reinstated and not
+            // deleted.
+            review::lift_suspension(&mut tx, None, account, &replay_lift_note(deleted_at)).await?;
+            done = Done::LiftedAndDeleted;
+            (email, phone)
         }
-        _ => return Ok(Attempt::Done),
+        _ => return Ok(Attempt::Done(Done::Nothing)),
     };
 
     // Working copies of terms never sent, and the name on drafts that were
@@ -453,11 +514,16 @@ async fn attempt(
     .bind(languages::default())
     .execute(&mut *tx)
     .await?;
-    // Committed with the deletion or not at all.
+    // Committed with the deletion or not at all, with the time it first
+    // happened when this replays it.
+    let logged_at = match request {
+        Request::Replay(deleted_at) => Some(deleted_at),
+        Request::Code(_) | Request::Confirmed => None,
+    };
     log_deletion(&mut *tx, account, logged_at).await?;
 
     tx.commit().await?;
-    Ok(Attempt::Done)
+    Ok(Attempt::Done(done))
 }
 
 fn is_lock_not_available(error: &sqlx::Error) -> bool {

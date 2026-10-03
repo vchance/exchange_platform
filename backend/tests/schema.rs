@@ -1576,6 +1576,17 @@ async fn reviewers_are_named_by_the_owner_and_review_history_cannot_be_rewritten
     refused!(tx, CHECK, event(None, "REPORT_VIEWED"));
     refused!(tx, CHECK, event(Some(staff), "STAFF_GRANTED"));
     refused!(tx, CHECK, event(Some(staff), "REPORT_FORGOTTEN"));
+    // The owner also lifts a suspension, replaying the deletion log, and
+    // then says why (0016); without a note, a lifting needs a reviewer.
+    refused!(tx, CHECK, event(None, "SUSPENSION_LIFTED"));
+    sqlx::query(
+        "INSERT INTO review_event (action, account_id, note)
+         VALUES ('SUSPENSION_LIFTED', $1, 'Lifted to replay a deletion.')",
+    )
+    .bind(a.account_a)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
     for statement in [
         "UPDATE review_event SET note = 'changed'",
         "DELETE FROM review_event",

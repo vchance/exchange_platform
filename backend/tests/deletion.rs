@@ -20,6 +20,7 @@ use yuppers_backend::auth::{CodeMessage, CodeSender, Purpose, SendFuture};
 use yuppers_backend::deletion;
 use yuppers_backend::deletion_log;
 use yuppers_backend::domain::Rules;
+use yuppers_backend::error::ErrorCode;
 use yuppers_backend::exchanges::service::run_timers;
 use yuppers_backend::http::TrustedProxies;
 use yuppers_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_due};
@@ -1977,31 +1978,10 @@ async fn replaying_the_log_deletes_again_through_the_rules_and_only_once() {
         .await,
         2
     );
-    // Someone else, suspended in the copy; and someone the copy never held.
-    let cy = app.user("Cy").await;
-    sqlx::query("UPDATE account SET status = 'SUSPENDED' WHERE id = $1")
-        .bind(cy.id)
-        .execute(&app.owner)
-        .await
-        .unwrap();
+    // Someone the copy never held.
     let stranger = Uuid::new_v4();
-    let deleted_at = OffsetDateTime::now_utc().replace_nanosecond(0).unwrap() - Duration::days(3);
-    let text = format!(
-        "# Yuppers deletion log\n{} {}\n{} {}\n{} {}\n",
-        ben.id,
-        deleted_at
-            .format(&time::format_description::well_known::Rfc3339)
-            .unwrap(),
-        cy.id,
-        deleted_at
-            .format(&time::format_description::well_known::Rfc3339)
-            .unwrap(),
-        stranger,
-        deleted_at
-            .format(&time::format_description::well_known::Rfc3339)
-            .unwrap(),
-    );
-    let entries = deletion_log::parse(&text).unwrap();
+    let deleted_at = three_days_ago();
+    let entries = deletion_log::parse(&log_text(&[ben.id, stranger], deleted_at)).unwrap();
 
     let mut lines = Vec::new();
     let summary = deletion_log::replay(&app.db, &app.rules, &entries, |line| {
@@ -2009,12 +1989,12 @@ async fn replaying_the_log_deletes_again_through_the_rules_and_only_once() {
     })
     .await;
     assert_eq!(summary.deleted, 1);
+    assert!(summary.lifted.is_empty());
     assert_eq!(summary.not_here, 1);
-    assert_eq!(summary.suspended, vec![cy.id]);
-    assert!(!summary.complete());
+    assert!(summary.complete());
     assert!(lines[0].starts_with(&format!("{}: deleted again", ben.id)));
-    assert!(lines[1].starts_with(&format!("{}: suspended here", cy.id)));
-    assert_eq!(lines[2], format!("{stranger}: not in this database"));
+    assert!(!lines[0].contains("suspended"), "{}", lines[0]);
+    assert_eq!(lines[1], format!("{stranger}: not in this database"));
 
     // Every rule ran, as when Ben deleted it himself: his sessions are over,
     // his address is free for a new account, and the agreement he was in has
@@ -2042,14 +2022,6 @@ async fn replaying_the_log_deletes_again_through_the_rules_and_only_once() {
     assert_eq!(view["other_party_left"], true);
     // The log keeps the time it first happened.
     assert_eq!(logged_at(app, ben.id).await, Some(deleted_at));
-    // The suspended account is left exactly as it was, and not logged.
-    let status: String = sqlx::query_scalar("SELECT status FROM account WHERE id = $1")
-        .bind(cy.id)
-        .fetch_one(&app.owner)
-        .await
-        .unwrap();
-    assert_eq!(status, "SUSPENDED");
-    assert_eq!(logged_at(app, cy.id).await, None);
 
     // The same file again: nothing more happens.
     let recorded = events(app, &deal.exchange).await;
@@ -2058,4 +2030,185 @@ async fn replaying_the_log_deletes_again_through_the_rules_and_only_once() {
     assert_eq!(again.already_deleted, 1);
     assert_eq!(again.not_here, 1);
     assert_eq!(events(app, &deal.exchange).await, recorded);
+}
+
+/// A time in the past, to the second, as a deletion log carries it.
+fn three_days_ago() -> OffsetDateTime {
+    OffsetDateTime::now_utc().replace_nanosecond(0).unwrap() - Duration::days(3)
+}
+
+fn rfc3339(at: OffsetDateTime) -> String {
+    at.format(&time::format_description::well_known::Rfc3339)
+        .unwrap()
+}
+
+/// A deletion log naming `accounts`, each deleted at `deleted_at`.
+fn log_text(accounts: &[Uuid], deleted_at: OffsetDateTime) -> String {
+    let mut text = "# Yuppers deletion log\n".to_owned();
+    for account in accounts {
+        text.push_str(&format!("{account} {}\n", rfc3339(deleted_at)));
+    }
+    text
+}
+
+/// Suspends `account` as a reviewer would after `reporter` reported the
+/// exchange: the report, the status, its sessions ended, and the review
+/// history's entry. Returns the report.
+async fn suspend_after_report(app: &App, reporter: &User, account: &User, exchange: &str) -> Uuid {
+    let rita = app.user("Rita").await;
+    let report: Uuid = sqlx::query_scalar(
+        "INSERT INTO report (reporter_account_id, subject_exchange_id, subject_account_id, reason)
+         VALUES ($1, $2, $3, 'HARASSMENT') RETURNING id",
+    )
+    .bind(reporter.id)
+    .bind(id(exchange))
+    .bind(account.id)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    for statement in [
+        "UPDATE account SET status = 'SUSPENDED' WHERE id = $1",
+        "DELETE FROM account_session WHERE account_id = $1",
+    ] {
+        sqlx::query(statement)
+            .bind(account.id)
+            .execute(&app.owner)
+            .await
+            .unwrap();
+    }
+    sqlx::query(
+        "INSERT INTO review_event (staff_account_id, action, report_id, exchange_id, account_id, note)
+         VALUES ($1, 'ACCOUNT_SUSPENDED', $2, $3, $4, 'Threats.')",
+    )
+    .bind(rita.id)
+    .bind(report)
+    .bind(id(exchange))
+    .bind(account.id)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    report
+}
+
+/// An entry of the review history: the action, the reviewer, the report
+/// and the note.
+type ReviewRow = (String, Option<Uuid>, Option<Uuid>, Option<String>);
+
+/// The review history's entries about an account, oldest first.
+async fn review_history(app: &App, account: Uuid) -> Vec<ReviewRow> {
+    sqlx::query_as(
+        "SELECT action, staff_account_id, report_id, note FROM review_event
+         WHERE account_id = $1 ORDER BY id",
+    )
+    .bind(account)
+    .fetch_all(&app.owner)
+    .await
+    .unwrap()
+}
+
+async fn status_of(app: &App, account: Uuid) -> String {
+    sqlx::query_scalar("SELECT status FROM account WHERE id = $1")
+        .bind(account)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap()
+}
+
+/// An account the log names and the restored copy holds suspended was
+/// reinstated after the backup and then deleted by its holder: a suspended
+/// account cannot delete itself. The replay lifts the suspension, as the
+/// owner's, and deletes it, in one transaction.
+#[tokio::test]
+async fn replaying_deletes_an_account_suspended_in_the_copy_after_lifting_the_suspension() {
+    let test = start().await;
+    let app = &test.app;
+    let deal = app.active().await;
+    let (ana, ben) = (&deal.ana, &deal.ben);
+    let report = suspend_after_report(app, ana, ben, &deal.exchange).await;
+
+    // Outside a replay, a suspended account is not deleted: the suspension
+    // stands, and so does the account.
+    let refused = deletion::delete_account(&app.db, &app.rules, ben.id)
+        .await
+        .unwrap_err();
+    assert_eq!(refused.code, ErrorCode::AccountSuspended);
+    assert_eq!(status_of(app, ben.id).await, "SUSPENDED");
+
+    let deleted_at = three_days_ago();
+    let entries = deletion_log::parse(&log_text(&[ben.id], deleted_at)).unwrap();
+    let recorded = events(app, &deal.exchange).await;
+    let suspended = review_history(app, ben.id).await;
+
+    // While another transaction refers to his account, the deletion keeps
+    // finding it busy and gives up. The suspension is not lifted either:
+    // the two happen together or not at all.
+    let mut other = app.owner.begin().await.unwrap();
+    sqlx::query("SELECT 1 FROM account WHERE id = $1 FOR KEY SHARE")
+        .bind(ben.id)
+        .execute(&mut *other)
+        .await
+        .unwrap();
+    let mut lines = Vec::new();
+    let busy = deletion_log::replay(&app.db, &app.rules, &entries, |line| {
+        lines.push(line.to_owned())
+    })
+    .await;
+    other.rollback().await.unwrap();
+    assert_eq!(busy.failed, vec![ben.id]);
+    assert_eq!((busy.deleted, busy.lifted.len()), (0, 0));
+    assert!(!busy.complete());
+    assert!(lines[0].contains("FAILED"), "{}", lines[0]);
+    assert_eq!(status_of(app, ben.id).await, "SUSPENDED");
+    assert_eq!(review_history(app, ben.id).await, suspended);
+    assert_eq!(events(app, &deal.exchange).await, recorded);
+    assert_eq!(logged_at(app, ben.id).await, None);
+
+    // Replayed again, with the account free: lifted, then deleted.
+    let mut lines = Vec::new();
+    let summary = deletion_log::replay(&app.db, &app.rules, &entries, |line| {
+        lines.push(line.to_owned())
+    })
+    .await;
+    assert_eq!(summary.deleted, 1);
+    assert_eq!(summary.lifted, vec![ben.id]);
+    assert!(summary.complete());
+    assert!(lines[0].starts_with(&format!("{}: deleted again", ben.id)));
+    assert!(lines[0].contains("suspended here"), "{}", lines[0]);
+    assert!(
+        summary
+            .to_string()
+            .starts_with("1 deleted again (1 of them suspended here"),
+        "{summary}"
+    );
+
+    // Deleted through every rule, as when he deleted it himself.
+    let (status, email): (String, Option<String>) =
+        sqlx::query_as("SELECT status, email FROM account WHERE id = $1")
+            .bind(ben.id)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
+    assert_eq!((status.as_str(), email), ("DELETED", None));
+    let view = app.view(ana, &deal.exchange).await;
+    assert_eq!(view["close_requested_by"], "B");
+    assert_eq!(view["other_party_left"], true);
+    assert_eq!(logged_at(app, ben.id).await, Some(deleted_at));
+
+    // The lifting is in the review history: no reviewer, as the owner's,
+    // tied to the report that led to the suspension, and saying why.
+    let history = review_history(app, ben.id).await;
+    assert_eq!(history.len(), suspended.len() + 1);
+    let (action, staff, lifted_for, note) = history.last().unwrap().clone();
+    assert_eq!(
+        (action.as_str(), staff, lifted_for),
+        ("SUSPENSION_LIFTED", None, Some(report))
+    );
+    let note = note.expect("a lifting by the owner says why");
+    assert!(note.starts_with("Lifted to replay a deletion"), "{note}");
+    assert!(note.contains(&rfc3339(deleted_at)), "{note}");
+
+    // The same file again: already deleted, and nothing more is recorded.
+    let again = deletion_log::replay(&app.db, &app.rules, &entries, |_| {}).await;
+    assert_eq!((again.deleted, again.already_deleted), (0, 1));
+    assert_eq!(review_history(app, ben.id).await, history);
 }
