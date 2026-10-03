@@ -881,10 +881,10 @@
       "DISAGREE": "We disagree about whether something was done"
     },
     "explain": {
-      "THEY_HAVENT": "Exchange can’t make anyone do their part. These are the ways forward from here.",
+      "THEY_HAVENT": "We can’t make anyone do their part. These are the ways forward from here.",
       "CANT_DO_MINE": "Only {name} can release you from something you agreed to give. These are the ways forward from here.",
       "BOTH_STOP": "To stop together, one of you proposes ending by agreement and the other accepts.",
-      "DISAGREE": "Exchange records what each of you says. It doesn’t decide who is right. These are the ways forward from here."
+      "DISAGREE": "We record what each of you says. We don’t decide who is right. These are the ways forward from here."
     },
     "change": "Choose a different situation",
     "means": {
@@ -903,7 +903,7 @@
     "amendPending": "A proposed change is already waiting to be signed, above."
   },
   "dispute": {
-    "weRecord": "Exchange records what each of you says. It doesn’t decide who is right.",
+    "weRecord": "We record what each of you says. We don’t decide who is right.",
     "pointer": "If you can’t settle it between you, “Something isn’t working” shows the ways forward."
   },
   "proposalChanges": {

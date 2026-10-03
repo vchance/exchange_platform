@@ -881,10 +881,10 @@
       "DISAGREE": "No estamos de acuerdo en si algo se hizo"
     },
     "explain": {
-      "THEY_HAVENT": "Exchange no puede obligar a nadie a cumplir con su parte. Estas son las opciones a partir de aquí.",
+      "THEY_HAVENT": "No podemos obligar a nadie a cumplir con su parte. Estas son las opciones a partir de aquí.",
       "CANT_DO_MINE": "Solo {name} puede liberarte de algo que acordaste dar. Estas son las opciones a partir de aquí.",
       "BOTH_STOP": "Para dejarlo juntos, uno de ustedes propone terminar de común acuerdo y el otro acepta.",
-      "DISAGREE": "Exchange registra lo que dice cada uno. No decide quién tiene razón. Estas son las opciones a partir de aquí."
+      "DISAGREE": "Registramos lo que dice cada uno. No decidimos quién tiene razón. Estas son las opciones a partir de aquí."
     },
     "change": "Elegir otra situación",
     "means": {
@@ -903,7 +903,7 @@
     "amendPending": "Ya hay un cambio propuesto esperando firma, más arriba."
   },
   "dispute": {
-    "weRecord": "Exchange registra lo que dice cada uno. No decide quién tiene razón.",
+    "weRecord": "Registramos lo que dice cada uno. No decidimos quién tiene razón.",
     "pointer": "Si no pueden resolverlo entre ustedes, “Algo no está funcionando” muestra las opciones."
   },
   "proposalChanges": {
