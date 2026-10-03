@@ -97,6 +97,7 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
           input={codeInput}
           label={wording.signIn.codeLabel}
           hint={wording.signIn.codeHint}
+          required
           error={deletion.codeMissing ? w.codeRequired : null}
           inputMode="numeric"
           autoComplete="one-time-code"

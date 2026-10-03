@@ -46,6 +46,7 @@ export function Consent({ signLabel, busy, failure, onSign, onCancel, cancelLabe
           testID="consent-sign"
           variant="primary"
           label={signLabel}
+          hint={agreed ? undefined : wording.a11y.signNeedsAgreement}
           disabled={!agreed || busy}
           onPress={() => {
             // The button is disabled until the switch is on; this is the same rule again.

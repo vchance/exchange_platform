@@ -102,7 +102,7 @@ function MovePanel({ move, money, contribution, otherName, actions }: MovePanelP
   const w = wording.exchange;
   const [note, setNote] = useState('');
   const [missing, setMissing] = useState(false);
-  const { takes, label } = noteFor(move);
+  const { takes, needs, label } = noteFor(move);
   const title = moveWording(wording, move, money);
 
   function submit() {
@@ -118,6 +118,7 @@ function MovePanel({ move, money, contribution, otherName, actions }: MovePanelP
         <TextField
           label={w[label]}
           hint={w.noteRecord}
+          required={needs}
           error={missing ? w.noteRequired : null}
           multiline
           maxLength={NOTE_MAX_CHARS}

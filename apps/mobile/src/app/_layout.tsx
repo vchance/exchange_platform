@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Actions, Button, Heading, Screen } from '../components/ui';
 import { AppProviders, useI18n, useSession } from '../lib/context';
+import { useReduceMotion } from '../lib/accessibility';
 import { installPluralRules } from '../lib/plural-rules';
 import { colorsFor, useScheme } from '../lib/theme';
 
@@ -34,6 +35,8 @@ function Navigation() {
   const colors = colorsFor(scheme);
   const direction = directionOf(language);
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+  // Screens slide in, unless the person has asked for less motion.
+  const reduceMotion = useReduceMotion();
 
   return (
     <ThemeProvider
@@ -60,6 +63,7 @@ function Navigation() {
               headerTitleStyle: { color: colors.text },
               headerStyle: { backgroundColor: colors.surface },
               contentStyle: { backgroundColor: colors.background },
+              animation: reduceMotion ? 'none' : 'default',
             }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="account" options={{ title: wording.nav.account }} />

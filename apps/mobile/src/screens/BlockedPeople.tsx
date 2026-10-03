@@ -51,7 +51,7 @@ export function BlockedPeople() {
                 {/* Their name, as written, leads to the exchange that names them,
                     unless the reader has left it: then it only names them. */}
                 <Pressable
-                  accessibilityRole={person.left ? undefined : 'link'}
+                  accessibilityRole={person.left ? 'text' : 'link'}
                   accessibilityLabel={nameOf(person)}
                   accessibilityHint={reference}
                   disabled={person.left === true}

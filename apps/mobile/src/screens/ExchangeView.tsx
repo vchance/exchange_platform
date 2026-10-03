@@ -37,6 +37,7 @@ import {
   Tags,
   Written,
 } from '../components/ui';
+import { focusKeeper, useReduceMotion } from '../lib/accessibility';
 import { useI18n } from '../lib/context';
 import { api } from '../lib/session';
 import { type, useColors } from '../lib/theme';
@@ -69,7 +70,9 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
   const { wording, fmt } = useI18n();
   const router = useRouter();
   const w = wording.exchange;
-  const actions = useActions(api, exchange, onChange, reload);
+  // A panel cancelled gives the screen reader's focus back to what opened it.
+  const actions = useActions(api, exchange, onChange, reload, focusKeeper);
+  const reduceMotion = useReduceMotion();
 
   const you = exchange.you;
   const open = exchange.open_revision ?? null;
@@ -137,8 +140,8 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
   const refused = actions.panel === null ? actions.failure : null;
   const scroll = useRef<ScrollView>(null);
   useEffect(() => {
-    if (refused) scroll.current?.scrollTo({ y: 0 });
-  }, [refused]);
+    if (refused) scroll.current?.scrollTo({ y: 0, animated: !reduceMotion });
+  }, [refused, reduceMotion]);
 
   const statuses = statusesOf(exchange);
   const since = new Map(exchange.contributions.map((item) => [item.id, item.since ?? null]));

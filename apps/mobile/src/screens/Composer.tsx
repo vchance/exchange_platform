@@ -49,6 +49,7 @@ import {
   Choice,
   ErrorNote,
   Failure,
+  FieldErrorsAnnounced,
   Heading,
   Hint,
   Notice,
@@ -58,6 +59,7 @@ import {
   TextField,
   Written,
 } from '../components/ui';
+import { useReduceMotion } from '../lib/accessibility';
 import { useI18n, useSession } from '../lib/context';
 import { api } from '../lib/session';
 
@@ -125,6 +127,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
   const [discarding, setDiscarding] = useState(false);
   const [discardFailure, setDiscardFailure] = useState<ErrorCode | null>(null);
   const scroll = useRef<ScrollView>(null);
+  const reduceMotion = useReduceMotion();
 
   // The working copy was started from terms that have since been replaced.
   const stale = base !== null && draft.base !== base.id;
@@ -201,7 +204,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
       return;
     }
     // What needs fixing is summed up at the top and marked on each field.
-    scroll.current?.scrollTo({ y: 0 });
+    scroll.current?.scrollTo({ y: 0, animated: !reduceMotion });
   }
 
   // ---- Sending -------------------------------------------------------------------
@@ -319,284 +322,293 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
 
   return (
     <Screen key={`edit-${generation}`} scroll={scroll}>
-      <Heading>{title}</Heading>
-      <P>{kind === 'first' ? w.introFirst : kind === 'amend' ? w.introAmend : w.introCounter}</P>
-      {kind === 'amend' && <P>{w.effectsSteer}</P>}
+      {/* What needs fixing is announced once, as a count at the top; each
+          field's own error is read when the person gets to it. */}
+      <FieldErrorsAnnounced value={false}>
+        <Heading>{title}</Heading>
+        <P>{kind === 'first' ? w.introFirst : kind === 'amend' ? w.introAmend : w.introCounter}</P>
+        {kind === 'amend' && <P>{w.effectsSteer}</P>}
 
-      {conflict && <ErrorNote>{w.conflict}</ErrorNote>}
-      {stale && base && (
-        <Notice>
-          <P>{w.staleDraft}</P>
-          <Actions>
-            <Button label={w.staleDraftKeep} onPress={() => change({ base: base.id })} />
-            <Button
-              label={w.staleDraftDiscard}
-              onPress={() => {
-                edit(draftFromTerms(base.terms, base.id, digits));
-                setGeneration((count) => count + 1);
-                setChecked(false);
-              }}
-            />
-          </Actions>
-        </Notice>
-      )}
-      {problems.length > 0 && (
-        <ErrorNote>{fmt(w.problemsSummary, { count: problems.length })}</ErrorNote>
-      )}
-
-      <Heading level={2}>{w.partiesLegend}</Heading>
-      <TextField
-        label={w.yourName}
-        error={errorFor(you === 'A' ? 'partyA' : 'partyB')}
-        maxLength={100}
-        defaultValue={nameOf(you)}
-        onChangeText={(name) => setName(you, name)}
-      />
-      <TextField
-        label={w.otherName}
-        error={errorFor(other === 'A' ? 'partyA' : 'partyB')}
-        maxLength={100}
-        defaultValue={nameOf(other)}
-        onChangeText={(name) => setName(other, name)}
-      />
-
-      <TextField
-        label={w.termsLabel}
-        hint={w.termsHint}
-        multiline
-        defaultValue={draft.terms}
-        onChangeText={(terms) => change({ terms })}
-      />
-
-      <Heading level={2}>{w.itemsHeading}</Heading>
-      {draft.contributions.map((item, index) => {
-        const number = index + 1;
-        const fixed = locked.has(item.id);
-        const minor =
-          item.type === 'MONEY' && item.amount ? toMinorUnits(item.amount, digits) : null;
-        const candidates = draft.contributions
-          .map((candidate, position) => ({ candidate, position }))
-          .filter(({ candidate }) => candidate.id !== item.id)
-          .map(({ candidate, position }) => ({
-            value: candidate.id,
-            label: candidate.description.trim()
-              ? fmt(w.itemOption, {
-                  number: position + 1,
-                  description: candidate.description.trim(),
-                })
-              : fmt(w.itemOptionBlank, { number: position + 1 }),
-          }));
-        const effect = effectOf(item.id);
-        const refused = effect?.effect === 'LOCKED' || effect?.effect === 'REUSED';
-        return (
-          <Card key={item.id}>
-            <Heading level={3}>{fmt(w.itemLegend, { number })}</Heading>
-            {fixed && <Notice quiet>{w.locked}</Notice>}
-            {/* What the amendment does to this item, as it is being written. */}
-            {effect && !fixed ? (
-              refused ? (
-                <ErrorNote>{w.effects[effect.effect]}</ErrorNote>
-              ) : (
-                <Hint>{w.effects[effect.effect]}</Hint>
-              )
-            ) : null}
-
-            <Choice<Slot>
-              label={w.fromLabel}
-              value={item.from}
-              options={fromOptions}
-              disabled={fixed}
-              onChange={(from) => changeItem(item.id, { from })}
-            />
-            <Choice<ContributionType>
-              label={w.typeLabel}
-              value={item.type}
-              options={typeOptions}
-              disabled={fixed}
-              onChange={(type) => changeItem(item.id, { type })}
-            />
-
-            <TextField
-              label={w.descriptionLabel}
-              error={errorFor('description', item.id)}
-              multiline
-              disabled={fixed}
-              defaultValue={item.description}
-              onChangeText={(description) => changeItem(item.id, { description })}
-            />
-
-            {item.type === 'MONEY' ? (
-              <>
-                <DecimalField
-                  key="amount"
-                  label={fmt(w.amountLabel, { currency: exchange.currency })}
-                  error={errorFor('amount', item.id)}
-                  disabled={fixed}
-                  value={item.amount}
-                  onChange={(amount) => changeItem(item.id, { amount })}
-                />
-                {/* What the typed number will be signed as. */}
-                {minor !== null && (
-                  <Hint>{fmt(w.amountPreview, { amount: money(minor, exchange.currency) })}</Hint>
-                )}
-                {/* Money is paid outside the product and only recorded here (DESIGN.md §11). */}
-                <Hint>{w.moneyOutside}</Hint>
-              </>
-            ) : (
-              <>
-                <DecimalField
-                  key="quantity"
-                  label={w.quantityLabel}
-                  error={errorFor('quantity', item.id)}
-                  disabled={fixed}
-                  value={item.quantity}
-                  onChange={(quantity) => changeItem(item.id, { quantity })}
-                />
-                <TextField
-                  label={w.unitLabel}
-                  maxLength={40}
-                  disabled={fixed}
-                  autoCapitalize="none"
-                  defaultValue={item.unit}
-                  onChangeText={(unit) => changeItem(item.id, { unit })}
-                />
-              </>
-            )}
-
-            <Choice<DraftDue['kind']>
-              label={w.dueLabel}
-              value={item.due.kind}
-              options={dueOptions}
-              disabled={fixed}
-              onChange={(due) => {
-                if (due !== item.due.kind) changeItem(item.id, { due: dueOf(due) });
-              }}
-            />
-            {item.due.kind === 'DATE' && (
-              <DateField
-                label={w.dateLabel}
-                error={errorFor('date', item.id)}
-                value={item.due.date}
-                today={today}
-                disabled={fixed}
-                onChange={(date) => changeItem(item.id, { due: { kind: 'DATE', date } })}
-              />
-            )}
-            {item.due.kind === 'AFTER_CONTRIBUTION' && (
-              <Choice
-                label={w.afterLabel}
-                hint={item.due.contribution === '' ? w.afterChoose : undefined}
-                error={errorFor('after', item.id)}
-                value={item.due.contribution || null}
-                options={candidates}
-                disabled={fixed}
-                onChange={(contribution) =>
-                  changeItem(item.id, { due: { kind: 'AFTER_CONTRIBUTION', contribution } })
-                }
-              />
-            )}
-
-            <TextField
-              label={w.criteriaLabel}
-              multiline
-              disabled={fixed}
-              defaultValue={item.criteria}
-              onChangeText={(criteria) => changeItem(item.id, { criteria })}
-            />
-
-            <Check
-              label={w.requiredLabel}
-              value={item.required}
-              disabled={fixed}
-              onChange={(required) => changeItem(item.id, { required })}
-            />
-
+        {conflict && <ErrorNote>{w.conflict}</ErrorNote>}
+        {stale && base && (
+          <Notice>
+            <P>{w.staleDraft}</P>
             <Actions>
+              <Button label={w.staleDraftKeep} onPress={() => change({ base: base.id })} />
               <Button
-                label={fmt(w.remove, { number })}
-                disabled={fixed}
-                onPress={() =>
-                  change({
-                    contributions: latest.current.contributions.filter(
-                      (candidate) => candidate.id !== item.id,
-                    ),
-                  })
-                }
+                label={w.staleDraftDiscard}
+                onPress={() => {
+                  edit(draftFromTerms(base.terms, base.id, digits));
+                  setGeneration((count) => count + 1);
+                  setChecked(false);
+                }}
               />
             </Actions>
-          </Card>
-        );
-      })}
-
-      {/* Items of the agreement this change removes, named as the agreement wrote them. */}
-      {dropped.length > 0 && (
-        <Notice quiet>
-          <P>{fmt(w.removedCount, { count: dropped.length })}</P>
-          {dropped.map((item) => (
-            <View key={item.id}>
-              <Written>{item.description}</Written>
-              <Hint>{w.effects[item.effect]}</Hint>
-            </View>
-          ))}
-        </Notice>
-      )}
-
-      {general.map((problem) => (
-        <ErrorNote key={problem.code}>{problemText(problem)}</ErrorNote>
-      ))}
-      <Actions>
-        <Button label={w.addYours} onPress={() => addItem(you)} />
-        <Button label={w.addTheirs} onPress={() => addItem(other)} />
-      </Actions>
-
-      <TextField
-        label={w.noteLabel}
-        hint={w.noteHint}
-        error={errorFor('note')}
-        multiline
-        defaultValue={draft.note}
-        onChangeText={(note) => change({ note })}
-      />
-
-      {saveState === 'saving' && <Hint>{w.saving}</Hint>}
-      {saveState === 'saved' && <Hint>{w.saved}</Hint>}
-      {saveState === 'failed' && <ErrorNote>{w.saveFailed}</ErrorNote>}
-
-      <Actions>
-        <Button variant="primary" label={w.review} disabled={stale || busy} onPress={review} />
-        <Button
-          label={kind === 'first' ? wording.nav.exchanges : wording.common.cancel}
-          onPress={onLeave}
-        />
-        {/* A draft never sent can be thrown away; afterwards it is closed and out of the list. */}
-        {kind === 'first' && (
-          <Button
-            label={w.discard}
-            expanded={discarding}
-            disabled={busy}
-            onPress={() => setDiscarding(true)}
-          />
+          </Notice>
         )}
-      </Actions>
-      {discarding && (
-        <Panel title={w.discard}>
-          <P>{w.discardText}</P>
-          <Failure code={discardFailure} />
-          <Actions>
+        {problems.length > 0 && (
+          <ErrorNote>{fmt(w.problemsSummary, { count: problems.length })}</ErrorNote>
+        )}
+
+        <Heading level={2}>{w.partiesLegend}</Heading>
+        <TextField
+          label={w.yourName}
+          required
+          error={errorFor(you === 'A' ? 'partyA' : 'partyB')}
+          maxLength={100}
+          defaultValue={nameOf(you)}
+          onChangeText={(name) => setName(you, name)}
+        />
+        <TextField
+          label={w.otherName}
+          required
+          error={errorFor(other === 'A' ? 'partyA' : 'partyB')}
+          maxLength={100}
+          defaultValue={nameOf(other)}
+          onChangeText={(name) => setName(other, name)}
+        />
+
+        <TextField
+          label={w.termsLabel}
+          hint={w.termsHint}
+          multiline
+          defaultValue={draft.terms}
+          onChangeText={(terms) => change({ terms })}
+        />
+
+        <Heading level={2}>{w.itemsHeading}</Heading>
+        {draft.contributions.map((item, index) => {
+          const number = index + 1;
+          const fixed = locked.has(item.id);
+          const minor =
+            item.type === 'MONEY' && item.amount ? toMinorUnits(item.amount, digits) : null;
+          const candidates = draft.contributions
+            .map((candidate, position) => ({ candidate, position }))
+            .filter(({ candidate }) => candidate.id !== item.id)
+            .map(({ candidate, position }) => ({
+              value: candidate.id,
+              label: candidate.description.trim()
+                ? fmt(w.itemOption, {
+                    number: position + 1,
+                    description: candidate.description.trim(),
+                  })
+                : fmt(w.itemOptionBlank, { number: position + 1 }),
+            }));
+          const effect = effectOf(item.id);
+          const refused = effect?.effect === 'LOCKED' || effect?.effect === 'REUSED';
+          return (
+            <Card key={item.id}>
+              <Heading level={3}>{fmt(w.itemLegend, { number })}</Heading>
+              {fixed && <Notice quiet>{w.locked}</Notice>}
+              {/* What the amendment does to this item, as it is being written. */}
+              {effect && !fixed ? (
+                refused ? (
+                  <ErrorNote>{w.effects[effect.effect]}</ErrorNote>
+                ) : (
+                  <Hint>{w.effects[effect.effect]}</Hint>
+                )
+              ) : null}
+
+              <Choice<Slot>
+                label={w.fromLabel}
+                value={item.from}
+                options={fromOptions}
+                disabled={fixed}
+                onChange={(from) => changeItem(item.id, { from })}
+              />
+              <Choice<ContributionType>
+                label={w.typeLabel}
+                value={item.type}
+                options={typeOptions}
+                disabled={fixed}
+                onChange={(type) => changeItem(item.id, { type })}
+              />
+
+              <TextField
+                label={w.descriptionLabel}
+                required
+                error={errorFor('description', item.id)}
+                multiline
+                disabled={fixed}
+                defaultValue={item.description}
+                onChangeText={(description) => changeItem(item.id, { description })}
+              />
+
+              {item.type === 'MONEY' ? (
+                <>
+                  <DecimalField
+                    key="amount"
+                    label={fmt(w.amountLabel, { currency: exchange.currency })}
+                    required
+                    error={errorFor('amount', item.id)}
+                    disabled={fixed}
+                    value={item.amount}
+                    onChange={(amount) => changeItem(item.id, { amount })}
+                  />
+                  {/* What the typed number will be signed as. */}
+                  {minor !== null && (
+                    <Hint>{fmt(w.amountPreview, { amount: money(minor, exchange.currency) })}</Hint>
+                  )}
+                  {/* Money is paid outside the product and only recorded here (DESIGN.md §11). */}
+                  <Hint>{w.moneyOutside}</Hint>
+                </>
+              ) : (
+                <>
+                  <DecimalField
+                    key="quantity"
+                    label={w.quantityLabel}
+                    error={errorFor('quantity', item.id)}
+                    disabled={fixed}
+                    value={item.quantity}
+                    onChange={(quantity) => changeItem(item.id, { quantity })}
+                  />
+                  <TextField
+                    label={w.unitLabel}
+                    maxLength={40}
+                    disabled={fixed}
+                    autoCapitalize="none"
+                    defaultValue={item.unit}
+                    onChangeText={(unit) => changeItem(item.id, { unit })}
+                  />
+                </>
+              )}
+
+              <Choice<DraftDue['kind']>
+                label={w.dueLabel}
+                value={item.due.kind}
+                options={dueOptions}
+                disabled={fixed}
+                onChange={(due) => {
+                  if (due !== item.due.kind) changeItem(item.id, { due: dueOf(due) });
+                }}
+              />
+              {item.due.kind === 'DATE' && (
+                <DateField
+                  label={w.dateLabel}
+                  error={errorFor('date', item.id)}
+                  value={item.due.date}
+                  today={today}
+                  disabled={fixed}
+                  onChange={(date) => changeItem(item.id, { due: { kind: 'DATE', date } })}
+                />
+              )}
+              {item.due.kind === 'AFTER_CONTRIBUTION' && (
+                <Choice
+                  label={w.afterLabel}
+                  hint={item.due.contribution === '' ? w.afterChoose : undefined}
+                  error={errorFor('after', item.id)}
+                  value={item.due.contribution || null}
+                  options={candidates}
+                  disabled={fixed}
+                  onChange={(contribution) =>
+                    changeItem(item.id, { due: { kind: 'AFTER_CONTRIBUTION', contribution } })
+                  }
+                />
+              )}
+
+              <TextField
+                label={w.criteriaLabel}
+                multiline
+                disabled={fixed}
+                defaultValue={item.criteria}
+                onChangeText={(criteria) => changeItem(item.id, { criteria })}
+              />
+
+              <Check
+                label={w.requiredLabel}
+                value={item.required}
+                disabled={fixed}
+                onChange={(required) => changeItem(item.id, { required })}
+              />
+
+              <Actions>
+                <Button
+                  label={fmt(w.remove, { number })}
+                  disabled={fixed}
+                  onPress={() =>
+                    change({
+                      contributions: latest.current.contributions.filter(
+                        (candidate) => candidate.id !== item.id,
+                      ),
+                    })
+                  }
+                />
+              </Actions>
+            </Card>
+          );
+        })}
+
+        {/* Items of the agreement this change removes, named as the agreement wrote them. */}
+        {dropped.length > 0 && (
+          <Notice quiet>
+            <P>{fmt(w.removedCount, { count: dropped.length })}</P>
+            {dropped.map((item) => (
+              <View key={item.id}>
+                <Written>{item.description}</Written>
+                <Hint>{w.effects[item.effect]}</Hint>
+              </View>
+            ))}
+          </Notice>
+        )}
+
+        {general.map((problem) => (
+          <ErrorNote key={problem.code}>{problemText(problem)}</ErrorNote>
+        ))}
+        <Actions>
+          <Button label={w.addYours} onPress={() => addItem(you)} />
+          <Button label={w.addTheirs} onPress={() => addItem(other)} />
+        </Actions>
+
+        <TextField
+          label={w.noteLabel}
+          hint={w.noteHint}
+          error={errorFor('note')}
+          multiline
+          defaultValue={draft.note}
+          onChangeText={(note) => change({ note })}
+        />
+
+        {saveState === 'saving' && <Hint>{w.saving}</Hint>}
+        {saveState === 'saved' && <Hint>{w.saved}</Hint>}
+        {saveState === 'failed' && <ErrorNote>{w.saveFailed}</ErrorNote>}
+
+        <Actions>
+          <Button variant="primary" label={w.review} disabled={stale || busy} onPress={review} />
+          <Button
+            label={kind === 'first' ? wording.nav.exchanges : wording.common.cancel}
+            onPress={onLeave}
+          />
+          {/* A draft never sent can be thrown away; afterwards it is closed and out of
+              the list. */}
+          {kind === 'first' && (
             <Button
-              variant="primary"
-              label={w.confirmDiscard}
+              label={w.discard}
+              expanded={discarding}
               disabled={busy}
-              onPress={() => void discard()}
+              onPress={() => setDiscarding(true)}
             />
-            <Button
-              label={wording.common.cancel}
-              disabled={busy}
-              onPress={() => setDiscarding(false)}
-            />
-          </Actions>
-        </Panel>
-      )}
+          )}
+        </Actions>
+        {discarding && (
+          <Panel title={w.discard}>
+            <P>{w.discardText}</P>
+            <Failure code={discardFailure} />
+            <Actions>
+              <Button
+                variant="primary"
+                label={w.confirmDiscard}
+                disabled={busy}
+                onPress={() => void discard()}
+              />
+              <Button
+                label={wording.common.cancel}
+                disabled={busy}
+                onPress={() => setDiscarding(false)}
+              />
+            </Actions>
+          </Panel>
+        )}
+      </FieldErrorsAnnounced>
     </Screen>
   );
 }
@@ -636,6 +648,7 @@ interface DecimalFieldProps {
   /** A plain decimal, empty for none, `null` when what is typed is not a number. */
   value: string | null;
   onChange(value: string | null): void;
+  required?: boolean;
 }
 
 /**
@@ -643,13 +656,14 @@ interface DecimalFieldProps {
  * stays on screen as typed; the working copy gets the plain form, or `null`
  * while it cannot be read as a number.
  */
-function DecimalField({ label, error, disabled, value, onChange }: DecimalFieldProps) {
+function DecimalField({ label, error, disabled, required, value, onChange }: DecimalFieldProps) {
   const { language } = useI18n();
   const [text, setText] = useState(() => (value ? decimalForInput(value, language) : ''));
   return (
     <TextField
       label={label}
       error={error}
+      required={required}
       disabled={disabled}
       inputMode="decimal"
       autoComplete="off"
