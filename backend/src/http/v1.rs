@@ -47,7 +47,15 @@ pub fn router() -> Router<AppState> {
 #[derive(Serialize, ToSchema)]
 pub struct Meta {
     pub service: String,
+    /// The package version, such as `0.1.0`.
     pub version: String,
+    /// The git commit the running build was made from, in full, or
+    /// `unknown` when the build did not say. Also in every response's
+    /// `X-Yuppers-Version` header, shortened to seven characters.
+    pub commit: String,
+    /// When the running build was made, as an RFC 3339 time in UTC; null
+    /// when the build did not say.
+    pub built_at: Option<String>,
     /// The oldest build of each client that may still change anything. A
     /// client below its minimum shows that it must be updated; its changes
     /// are refused with `CLIENT_TOO_OLD`. Absent for a client with no minimum.
@@ -68,7 +76,9 @@ pub async fn meta(
 ) -> Json<Meta> {
     Json(Meta {
         service: env!("CARGO_PKG_NAME").to_owned(),
-        version: env!("CARGO_PKG_VERSION").to_owned(),
+        version: state.settings.build.version.to_owned(),
+        commit: state.settings.build.commit().to_owned(),
+        built_at: state.settings.build.built_at().map(str::to_owned),
         minimum_client_versions: state.settings.min_client_versions.clone(),
         push_notifications: state.settings.push_notifications,
         wallet_platforms: wallet.platforms(),

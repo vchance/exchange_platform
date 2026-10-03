@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 
-import { clientIdentity } from './client-identity';
+import { appBuild, clientIdentity } from './client-identity';
 import { API_URL } from './config';
 import { recordSharer } from './record-sharer';
 import { tokenStore } from './token-store';
@@ -27,6 +27,14 @@ let token: string | null = null;
 export const CLIENT: ClientIdentity | undefined = clientIdentity(Platform.OS, {
   native: Application.nativeApplicationVersion,
   config: Constants.expoConfig?.version,
+});
+
+/** This build, for the version line at the foot of the account screen. */
+export const APP_BUILD = appBuild({
+  native: Application.nativeApplicationVersion,
+  config: Constants.expoConfig?.version,
+  nativeBuild: Application.nativeBuildVersion,
+  commit: Constants.expoConfig?.extra?.commit,
 });
 
 /** The calls the screens make: the same ones as the web app, with a token session. */

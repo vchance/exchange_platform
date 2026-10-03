@@ -2,6 +2,8 @@
 
 How to run the service: the first deployment, what to check and watch, backups and the restore drill, rotating the secret, and what to do when the worker stops. Nothing here assumes a particular host. A deployment is a managed PostgreSQL database, a container platform that can run one image three ways, a reverse proxy or load balancer that terminates TLS, and an SMTP account; for codes to phone numbers, an SMS provider's account, and for push notifications, an Expo project ("Text messages and push notifications", below). `.env.example` documents every setting with its default; README, "Deploying", says what the image is.
 
+The first deployment is on Render: [docs/deploy-render.md](deploy-render.md) is that checklist, with `render.yaml` the Blueprint. What follows holds there as anywhere, with the differences that page names (one-off commands, backups, reaching the database).
+
 ## The processes
 
 | Process | Runs | Listens on |
@@ -22,7 +24,7 @@ All three come from the same image: the `api` is its default command, the other 
    CREATE DATABASE yuppers OWNER exchange;
    ```
 
-   On a managed service the owner may be the role the service gives you; what matters is that the API and worker never connect as it. `exchange_app` must exist before the first migration, which grants to it, and must have exactly that name: the migrations name it, and they are never edited once applied. (The roles predate the name Yuppers; the database's name is free.) Require TLS to the database if the service offers it (`?sslmode=require` on both connection strings).
+   On a managed service the owner may be the role the service gives you; what matters is that the API and worker never connect as it. Where nobody can run `psql` before the first deploy, `migrate` can create `exchange_app` itself: `MIGRATE_CREATE_APP_ROLE=true` with the password in `APP_DB_PASSWORD` creates it if it does not exist, and refuses a role that can do more than log in (README, "Deploying"; [docs/deploy-render.md](deploy-render.md)). `exchange_app` must exist before the first migration, which grants to it, and must have exactly that name: the migrations name it, and they are never edited once applied. (The roles predate the name Yuppers; the database's name is free.) Require TLS to the database if the service offers it (`?sslmode=require` on both connection strings).
 
 2. **Secrets.** In the platform's secret store, never in the image or the repository:
    - `DATABASE_URL`: `exchange_app`'s connection string, for the api and the worker.
@@ -50,7 +52,7 @@ All three come from the same image: the `api` is its default command, the other 
 
 7. **TLS at the proxy.** The proxy or load balancer terminates HTTPS for `WEB_ORIGIN`'s host and forwards plain HTTP to port 8080, adding the header named in `TRUSTED_PROXY_HEADER`. Redirect HTTP to HTTPS there. Do not route the metrics port through it.
 
-8. **Check it.** `https://<origin>/healthz` and `/readyz` answer 204; the home page loads; sign in with a real address and the code arrives; an exchange between two test accounts sends both their notification emails within a few seconds. Each response carries an `X-Request-Id`.
+8. **Check it.** `https://<origin>/healthz` and `/readyz` answer 204; `/v1/meta` and the `X-Yuppers-Version` header name the commit just deployed ("What is deployed"); the home page loads; sign in with a real address and the code arrives; an exchange between two test accounts sends both their notification emails within a few seconds. Each response carries an `X-Request-Id`.
 
 ## Text messages and push notifications
 
@@ -80,6 +82,18 @@ With SMS off, a code for a phone number is refused as unavailable, as before; si
 | `GET /readyz` | 204 when the database answers, 503 when not | readiness: send traffic only when it passes |
 
 The api starts without a database and answers `/readyz` with 503 until it can reach one, so a database outage takes copies out of rotation rather than restarting them in a loop. The worker has no health path; with `METRICS_ADDR` set, its `/metrics` answers while it runs, and `yuppers_worker_last_pass_timestamp_seconds` says when it last went round its jobs (every 5 seconds).
+
+## What is deployed
+
+Every build carries the git commit it was made from and when it was made (the image's `GIT_SHA` and `BUILD_TIME` build arguments; README, "Deploying"). To tell what is running:
+
+- **The API**: `curl https://<origin>/v1/meta` gives `version` (the package's), `commit` (in full) and `built_at`.
+- **Any response** carries `X-Yuppers-Version: <the commit's first seven characters>`, a page or an asset as much as an API call: `curl -sI https://<origin>/healthz | grep -i x-yuppers-version`. During a rolling deploy two values can answer for a minute.
+- **The logs**: each process's first line is `build`, with `process` (`api`, `worker`, `migrate`), `version`, `commit` and `built_at`. So the worker, which has no address, says what it runs too.
+- **The metrics**: `yuppers_build_info{version="0.1.0",commit="..."} 1` on each process's metrics listener.
+- **The web app**: the account screen and the staff screen end with "Version 0.1.0 (abc1234)", the commit the web build was made from, and each request names it (`X-Client-Version: web/0.1.0+abc1234`). The apps show "Version 0.1.0 (build 12, abc1234)", the store build number and, for an EAS build, its commit.
+
+**Matching it to a commit and a CI run.** The commit is the repository's: `https://github.com/vchance/yuppers/commit/<commit>`, whose checks list the CI run that tested it (or `gh run list --commit <commit>`). The `Container image` job of that run built an image from the same commit and checked that `/v1/meta` reports it. `unknown` means the build was given no commit: a local `cargo build`, or a platform that passed none, which is worth fixing before relying on it. On Render, the service's Events page names the commit each deploy built, and the process also reads `RENDER_GIT_COMMIT` when the build had none ([docs/deploy-render.md](deploy-render.md)).
 
 ## Logs
 
@@ -130,6 +144,12 @@ From the worker:
 | `yuppers_worker_timer_changes_total` | counter | expiries, lapsed close requests, inactivity prompts and closures |
 | `yuppers_worker_reminders_queued_total` | counter | |
 | `yuppers_worker_last_pass_timestamp_seconds` | gauge | when the last pass over all jobs ended |
+
+From both, always:
+
+| Metric | Type | |
+|---|---|---|
+| `yuppers_build_info` | gauge, always 1 | `version`, `commit`: the running build ("What is deployed") |
 
 From both, once Apple Wallet passes are configured:
 
@@ -334,6 +354,7 @@ Rotate it if it may have leaked: anyone with it and a copy of the database could
 1. Take a backup.
 2. Run `migrate` from the new image.
 3. Roll out the worker and the api from the new image.
+4. Check that `/v1/meta` names the new commit ("What is deployed").
 
 Between steps 2 and 3 the old processes run against the new schema for a few minutes. A release whose migration the old processes cannot live with says so in its notes, and then the old processes are stopped before step 2.
 

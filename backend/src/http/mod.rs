@@ -17,6 +17,7 @@ use utoipa::OpenApi;
 use uuid::Uuid;
 
 use crate::auth::{AuthRules, CodeSender};
+use crate::build_info::{self, BuildInfo};
 use crate::client_version::{self, MinimumClientVersions};
 use crate::domain::Rules;
 use crate::error::{ErrorBody, ErrorCode};
@@ -60,6 +61,9 @@ pub struct Settings {
     /// Whether push notifications are sent (`PUSH_DELIVERY`), so that the
     /// apps offer them only when they will arrive.
     pub push_notifications: bool,
+    /// Which build this is, for `GET /v1/meta` and the `X-Yuppers-Version`
+    /// header (`crate::build_info`).
+    pub build: BuildInfo,
 }
 
 #[derive(Clone)]
@@ -182,6 +186,15 @@ async fn observe(State(state): State<AppState>, request: Request, next: Next) ->
     });
     if let Ok(value) = HeaderValue::from_str(&id) {
         response.headers_mut().insert(REQUEST_ID, value);
+    }
+    // On every response, so whatever a person or a proxy captured, a page as
+    // much as an API call or a health check, says which build answered.
+    // Seven characters, and nothing the public repository and `/v1/meta`
+    // do not already say.
+    if let Ok(value) = HeaderValue::from_str(state.settings.build.short_commit()) {
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static(build_info::HEADER), value);
     }
     response
 }

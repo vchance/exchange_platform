@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
+use yuppers_backend::build_info::BuildInfo;
 use yuppers_backend::config::ApiConfig;
 use yuppers_backend::domain::Rules;
 use yuppers_backend::http::{self, AppState, Settings, WebApp};
@@ -13,6 +14,7 @@ use yuppers_backend::{db, shutdown, telemetry};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     telemetry::init()?;
+    BuildInfo::current().log_start("api");
     let config = ApiConfig::from_env()?;
     if !config.proxies.trusts_a_header() {
         tracing::warn!(
@@ -55,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
             min_client_versions: config.min_client_versions,
             app_links: config.app_links,
             push_notifications: config.push_notifications,
+            build: BuildInfo::current().clone(),
         }),
         code_sender: config.code_sender,
         metrics: Arc::new(HttpMetrics::default()),
@@ -85,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
             let (requests, db, wallet) = (requests.clone(), db.clone(), wallet.clone());
             async move {
                 let mut text = Text::new();
+                BuildInfo::current().render_metrics(&mut text);
                 requests.render(&mut text);
                 wallet.render_metrics(&mut text);
                 metrics::render_pool(&mut text, &db);

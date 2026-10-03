@@ -9,6 +9,16 @@ test('a client names itself as kind and version', () => {
   expect(clientHeader({ name: 'ios', version: '1.4.0' })).toBe('ios/1.4.0')
 })
 
+test('a client may add the commit it was built from, which the version check ignores', () => {
+  const commit = '0123456789abcdef0123456789abcdef01234567'
+  expect(clientHeader({ name: 'web', version: '0.1.0', commit })).toBe('web/0.1.0+0123456')
+  expect(clientHeader({ name: 'web', version: '0.1.0', commit: 'unknown' })).toBe('web/0.1.0')
+  expect(clientHeader({ name: 'web', version: '0.1.0', commit: null })).toBe('web/0.1.0')
+  const minimums = { web: '2.1', ios: null, android: null }
+  expect(isClientTooOld(minimums, { name: 'web', version: '2.0.5', commit })).toBe(true)
+  expect(isClientTooOld(minimums, { name: 'web', version: '2.1.0', commit })).toBe(false)
+})
+
 test('versions are dotted whole numbers compared part by part', () => {
   expect(parseVersion('1.4.0')).toEqual([1, 4, 0])
   expect(parseVersion(' 2 ')).toEqual([2])

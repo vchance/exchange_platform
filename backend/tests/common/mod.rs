@@ -302,6 +302,7 @@ impl App {
                 min_client_versions,
                 app_links: Default::default(),
                 push_notifications,
+                build: Default::default(),
             }),
             code_sender,
             metrics: metrics.clone(),

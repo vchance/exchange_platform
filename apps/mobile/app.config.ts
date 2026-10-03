@@ -132,9 +132,25 @@ export function withPushCredentials(config: ExpoConfig, googleServicesFile: stri
   return { ...config, android: { ...config.android, googleServicesFile: file } };
 }
 
+/**
+ * The git commit the build is made from, for the account screen's version
+ * line ("Version 0.1.0 (build 12, abc1234)"). EAS sets
+ * `EAS_BUILD_GIT_COMMIT_HASH` on its build workers; `GIT_SHA` stands in for
+ * a build made elsewhere. Kept in `extra.commit`, which the app reads from
+ * its bundled config; nothing when neither is a commit, so a local build
+ * never fails for want of one.
+ */
+export function withBuildCommit(config: ExpoConfig, env: Record<string, string | undefined>): ExpoConfig {
+  const commit = [env.EAS_BUILD_GIT_COMMIT_HASH, env.GIT_SHA]
+    .map((value) => value?.trim() ?? '')
+    .find((value) => /^[0-9a-fA-F]{7,64}$/.test(value));
+  if (!commit) return config;
+  return { ...config, extra: { ...config.extra, commit: commit.toLowerCase() } };
+}
+
 export default function appConfig({ config }: ConfigContext): ExpoConfig {
   checkReleaseSettings(process.env);
   // `config` is app.json's `expo` object; it always has a name and a slug.
   const linked = withAppLinks(config as ExpoConfig, appLinkDomain(process.env.EXPO_PUBLIC_WEB_URL));
-  return withPushCredentials(linked, process.env.GOOGLE_SERVICES_JSON);
+  return withBuildCommit(withPushCredentials(linked, process.env.GOOGLE_SERVICES_JSON), process.env);
 }

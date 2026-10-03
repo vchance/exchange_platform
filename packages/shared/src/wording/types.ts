@@ -227,6 +227,15 @@ export interface Wording {
     saved: string
     emailLabel: string
     phoneLabel: string
+    /**
+     * Which build of the app this is, shown small at the foot of the account
+     * screen (`versionText` in `build.ts`): the version and the commit it was
+     * built from, and on the apps the store build number too.
+     */
+    version: string
+    versionOnly: string
+    versionBuild: string
+    versionBuildCommit: string
   }
   /**
    * Deleting the account: what it does and does not delete, said before it

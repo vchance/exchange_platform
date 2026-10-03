@@ -1,5 +1,5 @@
 import { createApiClient } from '@yuppers/api-client'
-import { createExchangeApi, type ClientIdentity } from '@yuppers/shared'
+import { createExchangeApi, type BuildIdentity, type ClientIdentity } from '@yuppers/shared'
 
 export { ApiFailure, failureCode } from '@yuppers/shared'
 export type {
@@ -10,8 +10,17 @@ export type {
   Slot,
 } from '@yuppers/shared'
 
-/** Which client this is and which build, named to the service on every request. */
-export const WEB_CLIENT: ClientIdentity = { name: 'web', version: __WEB_VERSION__ }
+/**
+ * This build: the package's version, and the commit it was built from when
+ * the build said (`GIT_SHA`, vite.config.ts); `null` otherwise.
+ */
+export const WEB_BUILD: BuildIdentity = { version: __WEB_VERSION__, commit: __WEB_COMMIT__ }
+
+/**
+ * Which client this is and which build, named to the service on every
+ * request: `web/0.1.0+abc1234` (`clientHeader`).
+ */
+export const WEB_CLIENT: ClientIdentity = { name: 'web', version: __WEB_VERSION__, commit: __WEB_COMMIT__ }
 
 // Same origin: the dev server proxies API paths to the Rust service, and in
 // production the service serves the app. The session is an HTTP-only cookie

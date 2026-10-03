@@ -8,7 +8,10 @@
 //! by default: nothing is refused until a deployment says so.
 //!
 //! A version is dotted whole numbers, compared part by part, with a missing
-//! part counting as zero: `1.4` and `1.4.0` are the same. A header that does
+//! part counting as zero: `1.4` and `1.4.0` are the same. A client may add
+//! the commit it was built from after a `+`, as semantic versioning writes
+//! build metadata (`web/1.4.0+abc1234`); like build metadata, it plays no
+//! part in the comparison. A header that does
 //! not read as `client/version`, or names a client this service does not
 //! know, is ignored rather than refused: it cannot be the one an old client
 //! of ours sent.
@@ -59,10 +62,13 @@ impl MinimumClientVersions {
     }
 }
 
-/// `web/1.2.3` into `("web", "1.2.3")`.
+/// `web/1.2.3` into `("web", "1.2.3")`, and `web/1.2.3+abc1234` too.
 fn parse_header(header: &str) -> Option<(&str, &str)> {
     let (client, version) = header.trim().split_once('/')?;
     let client = client.trim();
+    let version = version
+        .split_once('+')
+        .map_or(version, |(version, _)| version);
     let version = version.trim();
     (!client.is_empty() && !version.is_empty()).then_some((client, version))
 }
@@ -158,6 +164,18 @@ mod tests {
         assert!(minimums.is_too_old("web/2.0.5"));
         assert!(!minimums.is_too_old("web/2.1.0"));
         assert!(!minimums.is_too_old("web/3"));
+    }
+
+    #[test]
+    fn the_commit_after_a_plus_plays_no_part() {
+        let minimums = required();
+        assert!(minimums.is_too_old("web/2.0.5+abc1234"));
+        assert!(!minimums.is_too_old("web/2.1.0+abc1234"));
+        assert!(minimums.is_too_old("ios/1.3+unknown"));
+        assert!(
+            !minimums.is_too_old("web/+abc1234"),
+            "no version, not refused"
+        );
     }
 
     #[test]

@@ -17,6 +17,7 @@ use axum::http::{HeaderMap, Method, Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 use yuppers_backend::auth::{AuthRules, LogSender};
+use yuppers_backend::build_info::BuildInfo;
 use yuppers_backend::db;
 use yuppers_backend::http::{self, AppLinks, AppState, Settings, TrustedProxies, WebApp};
 
@@ -65,6 +66,15 @@ fn service(web_origin: &str, web: Option<WebApp>) -> Router {
 }
 
 fn service_with_links(web_origin: &str, web: Option<WebApp>, app_links: AppLinks) -> Router {
+    service_with_build(web_origin, web, app_links, BuildInfo::default())
+}
+
+fn service_with_build(
+    web_origin: &str,
+    web: Option<WebApp>,
+    app_links: AppLinks,
+    build: BuildInfo,
+) -> Router {
     let state = AppState {
         // Never connected to: nothing here needs a database.
         db: db::pool("postgres://nobody@127.0.0.1:1/nothing").unwrap(),
@@ -78,6 +88,7 @@ fn service_with_links(web_origin: &str, web: Option<WebApp>, app_links: AppLinks
             min_client_versions: Default::default(),
             app_links,
             push_notifications: false,
+            build,
         }),
         code_sender: Arc::new(LogSender),
         metrics: Default::default(),
@@ -536,5 +547,60 @@ async fn the_web_app_is_compressed_for_clients_that_ask_and_the_api_never_is() {
             response.headers().get("content-encoding").is_none(),
             "{path} was compressed"
         );
+    }
+}
+
+/// A build made from a known commit at a known time.
+fn known_build() -> BuildInfo {
+    BuildInfo::resolve(
+        Some("89abcdef0123456789abcdef0123456789abcdef"),
+        Some("2026-10-03T12:00:00Z"),
+        &|_| None,
+    )
+}
+
+#[tokio::test]
+async fn meta_names_the_commit_and_build_time_when_the_build_says() {
+    let app = service_with_build("https://app.test", None, AppLinks::default(), known_build());
+    let reply = get(&app, "/v1/meta").await;
+    assert_eq!(reply.status, StatusCode::OK);
+    let meta: serde_json::Value = serde_json::from_str(&reply.body).unwrap();
+    assert_eq!(meta["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(meta["commit"], "89abcdef0123456789abcdef0123456789abcdef");
+    assert_eq!(meta["built_at"], "2026-10-03T12:00:00Z");
+    assert_eq!(reply.header("x-yuppers-version"), "89abcde");
+}
+
+#[tokio::test]
+async fn meta_says_unknown_when_the_build_does_not() {
+    let app = service("https://app.test", None);
+    let reply = get(&app, "/v1/meta").await;
+    let meta: serde_json::Value = serde_json::from_str(&reply.body).unwrap();
+    assert_eq!(meta["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(meta["commit"], "unknown");
+    assert!(meta["built_at"].is_null(), "{meta}");
+    assert_eq!(reply.header("x-yuppers-version"), "unknown");
+}
+
+#[tokio::test]
+async fn every_response_names_the_build() {
+    let build = Build::write();
+    let web = WebApp::open(build.path()).unwrap();
+    let app = service_with_build(
+        "https://app.test",
+        Some(web),
+        AppLinks::default(),
+        known_build(),
+    );
+    for path in [
+        "/healthz",
+        "/",
+        "/en/i",
+        "/assets/index-DCaXBRW7.js",
+        "/v1/nothing",
+        "/.well-known/assetlinks.json",
+    ] {
+        let reply = get(&app, path).await;
+        assert_eq!(reply.header("x-yuppers-version"), "89abcde", "{path}");
     }
 }

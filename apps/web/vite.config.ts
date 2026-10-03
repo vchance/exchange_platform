@@ -13,6 +13,15 @@ const { version } = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
 ) as { version: string }
 
+// The commit the build is made from, when its environment says: GIT_SHA from
+// the Dockerfile's build argument or CI, or RENDER_GIT_COMMIT on Render. Shown
+// on the account and staff screens and sent with the version. Never read
+// from git itself, so a build from a plain copy of the source still works.
+const commitFromEnvironment = [process.env.GIT_SHA, process.env.RENDER_GIT_COMMIT]
+  .map((value) => value?.trim() ?? '')
+  .find((value) => /^[0-9a-fA-F]{7,64}$/.test(value))
+const commit = commitFromEnvironment ? commitFromEnvironment.toLowerCase() : null
+
 // The Rust service in development. In production the web app is static files
 // served from the same origin as the API. Set API_PROXY_TARGET when the
 // service listens somewhere other than its default address; whatever origin
@@ -29,7 +38,7 @@ const manifest = fileURLToPath(new URL('./.build/manifest.json', import.meta.url
 export default defineConfig({
   plugins: [react(), entryPagesPlugin(wording), manifestOutPlugin(manifest)],
   build: { manifest: MANIFEST_IN_BUILD },
-  define: { __WEB_VERSION__: JSON.stringify(version) },
+  define: { __WEB_VERSION__: JSON.stringify(version), __WEB_COMMIT__: JSON.stringify(commit) },
   server: {
     proxy: {
       '/v1': api,

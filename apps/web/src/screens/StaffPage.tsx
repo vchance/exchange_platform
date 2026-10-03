@@ -6,6 +6,7 @@ import { useI18n, useSession } from '../app/context'
 import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
+import { BuildVersion } from '../components/BuildVersion'
 import { EventList } from '../components/EventList'
 import { Panel } from '../components/Panel'
 import { ErrorNote, Failure, Field, Notice, PageHeading, Written } from '../components/ui'
@@ -164,6 +165,7 @@ function Queue() {
 
       <Suspensions />
       <Hidden />
+      <BuildVersion />
     </>
   )
 }

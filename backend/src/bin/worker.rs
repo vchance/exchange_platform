@@ -10,6 +10,7 @@ use anyhow::Context;
 use time::OffsetDateTime;
 use tokio::sync::watch;
 use yuppers_backend::auth::purge_sign_in_limits;
+use yuppers_backend::build_info::BuildInfo;
 use yuppers_backend::config::WorkerConfig;
 use yuppers_backend::domain::Rules;
 use yuppers_backend::error::Redacted;
@@ -27,6 +28,7 @@ const TICK: Duration = Duration::from_secs(5);
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     telemetry::init()?;
+    BuildInfo::current().log_start("worker");
     let config = WorkerConfig::from_env()?;
     let db = db::pool(&config.database_url)?;
     let rules = Rules::default();
@@ -63,6 +65,7 @@ async fn main() -> anyhow::Result<()> {
             let (jobs, db, passes) = (jobs.clone(), db.clone(), passes.clone());
             async move {
                 let mut text = Text::new();
+                BuildInfo::current().render_metrics(&mut text);
                 jobs.render(&mut text);
                 if let Some(passes) = &passes {
                     passes.render_metrics(&mut text);

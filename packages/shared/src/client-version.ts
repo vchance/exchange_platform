@@ -1,5 +1,7 @@
 import type { Meta } from '@yuppers/api-client'
 
+import { shortCommit } from './build'
+
 /*
  * Whether this build of a client is too old to act (`CLIENT_TOO_OLD`). The
  * service says in `GET /v1/meta` how old each client may be, and each client
@@ -16,11 +18,19 @@ export interface ClientIdentity {
   name: ClientName
   /** Dotted whole numbers, such as `1.4.0`. */
   version: string
+  /** The git commit the build was made from, when the build says. */
+  commit?: string | null
 }
 
-/** The header's value: `ios/1.4.0`. */
+/**
+ * The header's value: `ios/1.4.0`, or with the build's commit after a `+`,
+ * as semantic versioning writes build metadata: `web/1.4.0+abc1234`. The
+ * service compares the version only, so the commit never changes whether a
+ * client is too old.
+ */
 export function clientHeader(client: ClientIdentity): string {
-  return `${client.name}/${client.version}`
+  const commit = shortCommit(client.commit)
+  return `${client.name}/${client.version}${commit ? `+${commit}` : ''}`
 }
 
 export function parseVersion(text: string): number[] | null {

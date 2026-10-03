@@ -2,10 +2,12 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { BuildVersion } from '../components/BuildVersion';
 import { NotificationsSetting } from '../components/Notifications';
 import { Actions, Button, Heading, Label, Screen } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
 import { openHelp } from '../lib/help';
+import { APP_BUILD } from '../lib/session';
 import { space, type, useColors } from '../lib/theme';
 import { ProfileForm } from './AccountSetup';
 import { BlockedPeople } from './BlockedPeople';
@@ -67,6 +69,7 @@ export function AccountScreen() {
         <Button label={wording.nav.signOut} disabled={leaving} onPress={() => void leave()} />
       </Actions>
       <DeleteAccount account={account} />
+      <BuildVersion build={APP_BUILD} />
     </Screen>
   );
 }

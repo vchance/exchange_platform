@@ -3,7 +3,8 @@
 //!
 //!     replay-deletions FILE
 //!
-//! Connects with `DATABASE_URL`, as the application role, so that it can do
+//! Connects with `DATABASE_URL` (or `DATABASE_HOST`, `DATABASE_NAME` and
+//! `APP_DB_PASSWORD`; `.env.example`), as the application role, so that it can do
 //! nothing a person deleting their own account could not. Each account in
 //! the log is deleted again through the service's own deletion
 //! (`yuppers_backend::deletion::replay`); one already deleted, or one the
@@ -17,7 +18,6 @@
 
 use std::process::ExitCode;
 
-use anyhow::Context;
 use yuppers_backend::domain::Rules;
 use yuppers_backend::{db, deletion_log, telemetry};
 
@@ -46,7 +46,8 @@ async fn main() -> anyhow::Result<ExitCode> {
         }
     };
 
-    let url = std::env::var("DATABASE_URL").context("set DATABASE_URL")?;
+    // DATABASE_URL, or the parts a platform gives (`config::database_url_from_env`).
+    let url = yuppers_backend::config::database_url_from_env()?;
     let pool = db::pool(&url)?;
     println!("replaying {} deletions from {file}", entries.len());
     let summary = deletion_log::replay(&pool, &Rules::default(), &entries, |line| {

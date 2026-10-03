@@ -225,13 +225,28 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The Render Blueprint (render.yaml, docs/deploy-render.md) against the
+      # JSON schema Render publishes for it. Reads the public schema only;
+      # nothing here has a Render account.
+      - name: Render Blueprint is valid
+        run: pipx run check-jsonschema==0.38.2 --schemafile https://render.com/schema/render.yaml.json render.yaml
+
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # The build says which commit it is and when it was made
+      # (docs/operations.md, "What is deployed"); the smoke check reads it back.
+      - name: Build time
+        id: build-time
+        run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Build the image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           load: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build-time.outputs.value }}
           # The name docker-compose.yml uses, so it runs this build.
           tags: yuppers:local
           cache-from: type=gha
@@ -246,6 +261,9 @@ jobs:
       # The API answers once the migrations have run and it has started; the
       # web app's entry page comes from the build inside the image.
       - name: Smoke check
+        env:
+          COMMIT: ${{ github.sha }}
+          BUILT_AT: ${{ steps.build-time.outputs.value }}
         run: |
           for _ in $(seq 1 60); do
             if curl --silent --fail --output /dev/null http://127.0.0.1:8080/healthz; then break; fi
@@ -280,6 +298,19 @@ jobs:
           asset="$(curl --silent --fail http://127.0.0.1:8080/ | grep --only-matching '/assets/[^"]*\.js' | head -1)"
           test -n "$asset"
           curl --silent --fail --head "http://127.0.0.1:8080$asset" | grep --ignore-case --quiet '^cache-control: public, max-age=31536000, immutable'
+          # The image names the commit it was built from, in /v1/meta and in
+          # every response's X-Yuppers-Version, and the web app it serves
+          # was built with the same commit.
+          meta="$(curl --silent --fail http://127.0.0.1:8080/v1/meta)"
+          test "$(echo "$meta" | jq -r .commit)" = "$COMMIT" || { echo "::error::/v1/meta says $meta, not $COMMIT"; exit 1; }
+          test "$(echo "$meta" | jq -r .built_at)" = "$BUILT_AT" || { echo "::error::/v1/meta says $meta, not built at $BUILT_AT"; exit 1; }
+          curl --silent --fail --head http://127.0.0.1:8080/healthz | grep --ignore-case --quiet "^x-yuppers-version: ${COMMIT:0:7}"
+          curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet "^x-yuppers-version: ${COMMIT:0:7}"
+          # Read whole before searching, so grep stopping early cannot fail curl.
+          scripts="$(for script in $(curl --silent --fail http://127.0.0.1:8080/ | grep --only-matching '/assets/[^"]*\.js'); do
+            curl --silent --fail "http://127.0.0.1:8080$script"
+          done)"
+          grep --quiet "$COMMIT" <<< "$scripts" || { echo "::error::the web app was not built with $COMMIT"; exit 1; }
           # Every response names its request, and a plain request ID sent in
           # is the one returned.
           curl --silent --fail --head --header 'X-Request-Id: ci-smoke-1' http://127.0.0.1:8080/healthz | grep --ignore-case --quiet '^x-request-id: ci-smoke-1'
@@ -287,6 +318,7 @@ jobs:
           # the public one, where /metrics is just another page of the app.
           curl --silent --fail http://127.0.0.1:9100/metrics | grep --quiet '^yuppers_http_requests_total{route="/healthz",method="GET",status="2xx"}'
           curl --silent --fail http://127.0.0.1:9100/metrics | grep --quiet '^yuppers_database_up 1'
+          curl --silent --fail http://127.0.0.1:9100/metrics | grep --quiet "^yuppers_build_info{version=\"[0-9.]*\",commit=\"$COMMIT\"} 1"
           if curl --silent http://127.0.0.1:8080/metrics | grep --quiet yuppers_http_requests_total; then
             echo "::error::metrics are served on the public port"
             exit 1
@@ -296,6 +328,7 @@ jobs:
         run: |
           sleep 5
           docker compose --profile full logs worker | grep --quiet 'worker started'
+          docker compose --profile full logs worker | grep --quiet "commit=\"${{ github.sha }}\""
           curl --silent --fail http://127.0.0.1:9101/metrics | grep --quiet '^yuppers_worker_runs_total{job="timers",result="ok"} [1-9]'
           docker compose --profile full stop --timeout 20 worker
           docker compose --profile full logs worker | grep --quiet 'worker shutting down'
@@ -370,7 +403,11 @@ jobs:
         working-directory: backend
         run: cargo build --locked --bin api --bin migrate --bin staff
 
+      # With a commit, so the update check below runs with the header the
+      # deployed app sends (web/<version>+<commit>).
       - name: Build the web app
+        env:
+          GIT_SHA: ${{ github.sha }}
         run: npm run build:web
 
       - name: Apply the migrations
