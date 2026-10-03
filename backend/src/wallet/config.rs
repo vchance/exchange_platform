@@ -10,6 +10,13 @@
 //! | `GOOGLE_WALLET_ISSUER_ID` | the issuer ID |
 //! | `GOOGLE_WALLET_SERVICE_ACCOUNT` | the service account's JSON key file, a path or the JSON |
 //! | `WALLET_DELIVERY` | `log` or `live`: how the worker sends pass updates. Required once a platform is on |
+//! | `WALLET_STATUS_ON_FACE` | `detailed` (the default) or `neutral`: how much the status line says |
+//!
+//! Two problems with Apple's certificates take Apple off, with an error in
+//! the log, rather than stopping the process: a WWDR certificate that has
+//! expired or did not issue the pass type certificate, and a pass type
+//! certificate that has expired (`super::Wallet::apple`). Google and
+//! everything else go on.
 
 use std::sync::Arc;
 
@@ -18,7 +25,7 @@ use time::OffsetDateTime;
 
 use super::apple::{AppleSettings, Signer};
 use super::google::{GoogleIssuer, ServiceAccount};
-use super::pem;
+use super::{StatusOnFace, pem};
 
 /// Reads a setting: the environment in production, a table in the tests.
 pub type Lookup<'a> = &'a dyn Fn(&str) -> Option<String>;
@@ -40,6 +47,7 @@ pub struct WalletConfig {
     pub google: Option<GoogleIssuer>,
     /// Set whenever a platform is.
     pub delivery: Option<UpdateDelivery>,
+    pub status_on_face: StatusOnFace,
 }
 
 impl WalletConfig {
@@ -56,10 +64,18 @@ impl WalletConfig {
             Some("live") => Some(UpdateDelivery::Live),
             Some(other) => bail!("WALLET_DELIVERY={other} is not supported; use `live` or `log`"),
         };
+        let status_on_face = match optional(get, "WALLET_STATUS_ON_FACE").as_deref() {
+            None | Some("detailed") => StatusOnFace::Detailed,
+            Some("neutral") => StatusOnFace::Neutral,
+            Some(other) => {
+                bail!("WALLET_STATUS_ON_FACE={other} is not supported; use `detailed` or `neutral`")
+            }
+        };
         Ok(Self {
             apple,
             google,
             delivery,
+            status_on_face,
         })
     }
 }
@@ -146,12 +162,26 @@ fn apple(get: Lookup<'_>) -> anyhow::Result<Option<AppleSettings>> {
             team.unwrap_or_default()
         );
     }
-    let expires = signer.not_after();
     let now = OffsetDateTime::now_utc();
-    if expires <= now {
-        bail!("APPLE_PASS_CERT expired on {expires}; renew it (docs/wallet.md)");
+    // The WWDR certificate must be valid and must have issued the pass type
+    // certificate, or Wallet refuses every pass. Apple is off then; the rest
+    // of the service is not stopped by it.
+    if let Err(problem) = signer.check_issuer(now) {
+        tracing::error!(
+            problem,
+            "APPLE_WWDR_CERT does not vouch for APPLE_PASS_CERT: Apple Wallet passes are off (docs/wallet.md)"
+        );
+        return Ok(None);
     }
-    if expires - now < time::Duration::days(30) {
+    // An expired pass type certificate takes Apple off too, here and
+    // whenever it expires while the process runs (`super::Wallet::apple`).
+    let expires = signer.not_after();
+    if expires <= now {
+        tracing::error!(
+            %expires,
+            "APPLE_PASS_CERT has expired: Apple Wallet passes are off until it is renewed (docs/wallet.md)"
+        );
+    } else if expires - now < time::Duration::days(30) {
         tracing::warn!(%expires, "APPLE_PASS_CERT expires within 30 days; renew it (docs/wallet.md)");
     }
     Ok(Some(AppleSettings {

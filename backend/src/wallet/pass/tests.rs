@@ -114,6 +114,7 @@ fn context() -> PassContext {
         other_party_alias: None,
         link: "https://app.test/exchanges/7".to_owned(),
         due_soon_days: 2,
+        status_on_face: StatusOnFace::Detailed,
     }
 }
 
@@ -399,4 +400,40 @@ fn the_face_changes_only_when_what_it_shows_changes() {
     later.version += 1;
     later.close_requested_at = Some("2026-10-02T10:00:00Z".to_owned());
     assert_eq!(render(&later, &context(), en), before);
+}
+
+#[test]
+fn a_neutral_status_line_says_in_force_and_no_date_whatever_presses() {
+    let wording = wording();
+    let en = wording.language("en");
+    let neutral = |today, seen: &ExchangeView| {
+        render(
+            seen,
+            &PassContext {
+                today,
+                status_on_face: StatusOnFace::Neutral,
+                ..context()
+            },
+            en,
+        )
+    };
+    let mut seen = view();
+    for today in [
+        date!(2026 - 10 - 06),
+        date!(2026 - 10 - 09),
+        date!(2026 - 10 - 20),
+    ] {
+        let model = neutral(today, &seen);
+        assert_eq!(model.standing, Standing::InForce);
+        assert_eq!(model.status.value, "In force");
+        assert_eq!(model.next_due, None);
+        assert!(model.outstanding.is_some());
+    }
+    set(&mut seen, REPAIR, Status::Disputed);
+    assert_eq!(
+        neutral(date!(2026 - 10 - 06), &seen).standing,
+        Standing::InForce
+    );
+    // The detailed line, the default, says it.
+    assert_eq!(render(&seen, &context(), en).standing, Standing::Disputed);
 }

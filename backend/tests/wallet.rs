@@ -2,8 +2,8 @@
 //! pass web service from a device's side, the Google save link, updates
 //! reaching devices through the worker, and revocation when an account is
 //! deleted. With throwaway credentials made by the test run
-//! (`src/wallet/testkit.rs`); nothing reaches Apple or Google: the worker's
-//! senders here record what they were given.
+//! (`src/wallet/testkit.rs`); nothing reaches Apple or Google: the senders
+//! here record what they were given, and stand in for Google's objects.
 
 mod common;
 #[path = "../src/wallet/testkit.rs"]
@@ -25,7 +25,9 @@ use yuppers_backend::domain::Rules;
 use yuppers_backend::wallet::apple::push::{PassPush, PushFuture, PushOutcome};
 use yuppers_backend::wallet::config::WalletConfig;
 use yuppers_backend::wallet::delivery::{UpdateRules, WalletDelivery, deliver_due};
-use yuppers_backend::wallet::google::objects::{PatchFuture, PatchOutcome, WalletObjects};
+use yuppers_backend::wallet::google::objects::{
+    CreateFuture, PatchFuture, PatchOutcome, WalletObjects,
+};
 use yuppers_backend::wallet::{Wallet, store};
 
 const DB: &str = "yuppers_test_wallet";
@@ -42,18 +44,29 @@ fn wallet(keep: Option<&[&str]>) -> Arc<Wallet> {
         })
         .collect();
     let config = WalletConfig::from_lookup(&|name| settings.get(name).cloned()).unwrap();
+    Arc::new(Wallet::new(&config, "https://app.test").unwrap())
+}
+
+/// Both platforms, with `recorder` standing in for Google's objects.
+fn wallet_using(recorder: &Arc<Recorder>) -> Arc<Wallet> {
+    let config = WalletConfig::from_lookup(&|name| settings_table().get(name).cloned()).unwrap();
     Arc::new(
-        Wallet::new(
-            &config,
-            "https://app.test",
-            Some(b"test-secret-test-secret-test-secret"),
-        )
-        .unwrap(),
+        Wallet::new(&config, "https://app.test")
+            .unwrap()
+            .with_google_objects(recorder.clone()),
     )
 }
 
+fn settings_table() -> HashMap<&'static str, String> {
+    testkit::settings().into_iter().collect()
+}
+
 async fn app() -> App {
-    App::start_with_wallet(DB, wallet(None)).await
+    app_using(&Arc::new(Recorder::default())).await
+}
+
+async fn app_using(recorder: &Arc<Recorder>) -> App {
+    App::start_with_wallet(DB, wallet_using(recorder)).await
 }
 
 async fn wallet_post(app: &App, user: &User, exchange: &str, platform: &str) -> common::Reply {
@@ -86,14 +99,22 @@ fn pass_json(reply: &common::Reply) -> Value {
         reply.headers["content-type"],
         "application/vnd.apple.pkpass"
     );
+    // It carries an authentication token: nothing on the way keeps a copy.
+    assert_eq!(reply.headers["cache-control"], "no-store");
     serde_json::from_slice(&unzip(&reply.bytes)["pass.json"]).unwrap()
 }
 
-/// What the worker's senders were asked to do.
+/// What the senders were asked to do, standing in for APNs and for
+/// Google's objects.
 #[derive(Default)]
 struct Recorder {
     pushes: Mutex<Vec<String>>,
+    /// Updates to objects Google has.
     patches: Mutex<Vec<(String, Value)>>,
+    /// The objects Google has, by ID, as last written.
+    objects: Mutex<HashMap<String, Value>>,
+    /// Classes created.
+    classes: Mutex<Vec<String>>,
 }
 
 impl PassPush for Recorder {
@@ -108,11 +129,31 @@ impl PassPush for Recorder {
 impl WalletObjects for Recorder {
     fn patch<'a>(&'a self, object_id: &'a str, object: &'a Value) -> PatchFuture<'a> {
         Box::pin(async move {
+            let mut objects = self.objects.lock().unwrap();
+            let Some(held) = objects.get_mut(object_id) else {
+                // As Google answers for an object it does not have: 404.
+                return Ok(PatchOutcome::NotSaved);
+            };
+            *held = object.clone();
             self.patches
                 .lock()
                 .unwrap()
                 .push((object_id.to_owned(), object.clone()));
             Ok(PatchOutcome::Updated)
+        })
+    }
+
+    fn upsert<'a>(&'a self, class: &'a Value, object: &'a Value) -> CreateFuture<'a> {
+        Box::pin(async move {
+            self.classes
+                .lock()
+                .unwrap()
+                .push(class["id"].as_str().unwrap().to_owned());
+            self.objects
+                .lock()
+                .unwrap()
+                .insert(object["id"].as_str().unwrap().to_owned(), object.clone());
+            Ok(())
         })
     }
 }
@@ -124,16 +165,21 @@ static WORKER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Runs the worker's Wallet pass once, with `recorder` as both platforms.
 async fn run_worker(app: &App, recorder: &Arc<Recorder>) {
+    // The lease of an earlier run in this test may still hold a pass; the
+    // run looks from far enough ahead that it has run out.
+    let later = OffsetDateTime::now_utc() + time::Duration::minutes(5);
+    run_worker_at(app, recorder, later).await;
+}
+
+/// The same, as if it were `at`.
+async fn run_worker_at(app: &App, recorder: &Arc<Recorder>, at: OffsetDateTime) {
     let delivery = WalletDelivery {
-        wallet: wallet(None),
+        wallet: wallet_using(recorder),
         apple: Some(recorder.clone()),
         google: Some(recorder.clone()),
         rules: UpdateRules::default(),
     };
-    // The lease of an earlier run in this test may still hold a pass; the
-    // run looks from far enough ahead that it has run out.
-    let later = OffsetDateTime::now_utc() + time::Duration::minutes(5);
-    deliver_due(&app.db, &Rules::default(), &delivery, later)
+    deliver_due(&app.db, &Rules::default(), &delivery, at)
         .await
         .unwrap();
 }
@@ -383,7 +429,18 @@ async fn the_pass_web_service_from_a_device() {
     let reply = device(
         &app,
         Method::GET,
-        "/v1/devices/unknown/registrations/x",
+        &format!("/v1/devices/unknown/registrations/{pass_type}"),
+        None,
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT);
+    // Another pass type is never ours.
+    let reply = device(
+        &app,
+        Method::GET,
+        &format!("/v1/devices/{device_id}/registrations/pass.other.type"),
         None,
         None,
         &[],
@@ -492,7 +549,7 @@ async fn the_pass_web_service_from_a_device() {
 }
 
 #[tokio::test]
-async fn a_download_link_gives_the_pass_without_a_session_for_a_while() {
+async fn a_download_link_gives_the_pass_without_a_session_once_for_a_while() {
     let app = app().await;
     let deal = app.active().await;
     let link = wallet_post(&app, &deal.ben, &deal.exchange, "apple/link")
@@ -504,15 +561,189 @@ async fn a_download_link_gives_the_pass_without_a_session_for_a_while() {
         .strip_prefix("https://app.test")
         .expect("on the web origin");
     assert!(path.starts_with("/v1/wallet/apple/pass?token="));
-    let json = pass_json(&app.call(None, Method::GET, path, None, &[]).await);
-    assert_eq!(json["passTypeIdentifier"], testkit::PASS_TYPE_ID);
 
     // One character of the token changed.
     let at = path.find("token=").unwrap() + 10;
     let changed = if &path[at..=at] == "A" { "B" } else { "A" };
     let forged = format!("{}{changed}{}", &path[..at], &path[at + 1..]);
-    let reply = app.call(None, Method::GET, &forged, None, &[]).await;
-    assert_eq!(reply.status, StatusCode::NOT_FOUND);
+    let refused = app.call(None, Method::GET, &forged, None, &[]).await;
+    refused.refused(StatusCode::NOT_FOUND, "NOT_FOUND");
+
+    let json = pass_json(&app.call(None, Method::GET, path, None, &[]).await);
+    assert_eq!(json["passTypeIdentifier"], testkit::PASS_TYPE_ID);
+    // Used once, it is used up, and told so as an unknown link is.
+    let again = app.call(None, Method::GET, path, None, &[]).await;
+    assert_eq!((again.status, &again.body), (refused.status, &refused.body));
+
+    // An expired link, the same.
+    let link = wallet_post(&app, &deal.ben, &deal.exchange, "apple/link")
+        .await
+        .ok();
+    let path = link["url"].as_str().unwrap()["https://app.test".len()..].to_owned();
+    sqlx::query("UPDATE wallet_download_link SET expires_at = now() WHERE used_at IS NULL")
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    let expired = app.call(None, Method::GET, &path, None, &[]).await;
+    assert_eq!(
+        (expired.status, &expired.body),
+        (refused.status, &refused.body)
+    );
+}
+
+#[tokio::test]
+async fn handing_out_a_pass_again_rotates_its_token_and_the_latest_three_work() {
+    let app = app().await;
+    let deal = app.active().await;
+    let mut tokens = Vec::new();
+    let mut serial = String::new();
+    for _ in 0..4 {
+        let (found, token) = ben_apple_pass(&app, &deal).await;
+        serial = found;
+        tokens.push(token);
+    }
+    let distinct: std::collections::HashSet<&String> = tokens.iter().collect();
+    assert_eq!(distinct.len(), 4, "a new token each time");
+    let latest = format!("/v1/passes/{}/{serial}", testkit::PASS_TYPE_ID);
+    let status = |token: String| {
+        let (app, latest) = (&app, &latest);
+        async move {
+            device(app, Method::GET, latest, Some(&token), None, &[])
+                .await
+                .status
+        }
+    };
+    assert_eq!(status(tokens[0].clone()).await, StatusCode::UNAUTHORIZED);
+    for token in &tokens[1..] {
+        assert_eq!(status(token.clone()).await, StatusCode::OK);
+    }
+    // What a device fetches carries the token it asked with.
+    let reply = device(&app, Method::GET, &latest, Some(&tokens[3]), None, &[]).await;
+    assert_eq!(pass_json(&reply)["authenticationToken"], tokens[3]);
+    // Only hashes are stored.
+    let stored: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM wallet_auth_token t JOIN wallet_pass p ON p.id = t.wallet_pass_id
+         WHERE p.external_id = $1",
+    )
+    .bind(&serial)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(stored, 3);
+}
+
+async fn register_device(app: &App, serial: &str, token: &str, device_id: &str) -> StatusCode {
+    let registration = format!(
+        "/v1/devices/{device_id}/registrations/{}/{serial}",
+        testkit::PASS_TYPE_ID
+    );
+    device(
+        app,
+        Method::POST,
+        &registration,
+        Some(token),
+        Some(json!({ "pushToken": "beef" })),
+        &[],
+    )
+    .await
+    .status
+}
+
+async fn devices_of(app: &App, serial: &str) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT device_library_id FROM wallet_device_registration r
+         JOIN wallet_pass p ON p.id = r.wallet_pass_id
+         WHERE p.external_id = $1 ORDER BY device_library_id",
+    )
+    .bind(serial)
+    .fetch_all(&app.owner)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_pass_on_as_many_devices_as_it_may_be_takes_a_new_one_in_place_of_the_oldest() {
+    let app = app().await;
+    let deal = app.active().await;
+    let (serial, token) = ben_apple_pass(&app, &deal).await;
+    // Twenty devices already, heard from a minute apart; dev-00 longest ago.
+    sqlx::query(
+        "INSERT INTO wallet_device_registration
+             (wallet_pass_id, device_library_id, push_token, updated_at)
+         SELECT p.id, 'dev-' || lpad(n::text, 2, '0'), 'beef', now() - (20 - n) * interval '1 minute'
+         FROM wallet_pass p, generate_series(0, 19) n WHERE p.external_id = $1",
+    )
+    .bind(&serial)
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(
+        register_device(&app, &serial, &token, "dev-new").await,
+        StatusCode::CREATED
+    );
+    let devices = devices_of(&app, &serial).await;
+    assert_eq!(devices.len(), 20);
+    assert!(devices.contains(&"dev-new".to_owned()));
+    assert!(!devices.contains(&"dev-00".to_owned()), "{devices:?}");
+}
+
+#[tokio::test]
+async fn new_devices_are_limited_per_pass_per_hour() {
+    let app = app().await;
+    let deal = app.active().await;
+    let (serial, token) = ben_apple_pass(&app, &deal).await;
+    for n in 0..10 {
+        assert_eq!(
+            register_device(&app, &serial, &token, &format!("dev-{n}")).await,
+            StatusCode::CREATED
+        );
+    }
+    assert_eq!(
+        register_device(&app, &serial, &token, "dev-10").await,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    // A device registered already is not a new one.
+    assert_eq!(
+        register_device(&app, &serial, &token, "dev-3").await,
+        StatusCode::OK
+    );
+    // Another pass counts apart.
+    let (ana_serial, ana_token) = {
+        let json = pass_json(&wallet_post(&app, &deal.ana, &deal.exchange, "apple").await);
+        (
+            json["serialNumber"].as_str().unwrap().to_owned(),
+            json["authenticationToken"].as_str().unwrap().to_owned(),
+        )
+    };
+    assert_eq!(
+        register_device(&app, &ana_serial, &ana_token, "dev-10").await,
+        StatusCode::CREATED
+    );
+}
+
+#[tokio::test]
+async fn the_device_log_is_small_and_limited_per_address() {
+    let app = app().await;
+    let log = |body: Value| {
+        let app = &app;
+        async move {
+            device(app, Method::POST, "/v1/log", None, Some(body), &[])
+                .await
+                .status
+        }
+    };
+    let heavy = json!({ "logs": ["x".repeat(9 * 1024)] });
+    assert_eq!(log(heavy).await, StatusCode::PAYLOAD_TOO_LARGE);
+    for _ in 0..10 {
+        assert_eq!(
+            log(json!({ "logs": vec!["a line"; 50] })).await,
+            StatusCode::OK
+        );
+    }
+    assert_eq!(
+        log(json!({ "logs": ["a line"] })).await,
+        StatusCode::TOO_MANY_REQUESTS
+    );
 }
 
 /// The claims of a JWT whose signature holds under the test service
@@ -532,102 +763,112 @@ fn verified_claims(jwt: &str) -> Value {
     serde_json::from_slice(&URL_SAFE_NO_PAD.decode(claims).unwrap()).unwrap()
 }
 
+/// The claims of `user`'s save link for the deal.
+async fn google_claims(app: &App, user: &User, exchange: &str) -> Value {
+    let reply = wallet_post(app, user, exchange, "google").await.ok();
+    let url = reply["url"].as_str().unwrap().to_owned();
+    let jwt = url
+        .strip_prefix("https://pay.google.com/gp/v/save/")
+        .expect("a save link");
+    verified_claims(jwt)
+}
+
+async fn delivered_hash(app: &App, serial: &str) -> Option<Vec<u8>> {
+    sqlx::query_scalar("SELECT delivered_hash FROM wallet_pass WHERE external_id = $1")
+        .bind(serial)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap()
+}
+
 #[tokio::test]
-async fn the_google_link_is_signed_and_carries_this_partys_object() {
+async fn the_google_link_names_only_this_partys_object_made_at_google_first() {
     let _worker = WORKER.lock().await;
-    let app = app().await;
+    let google = Arc::new(Recorder::default());
+    let app = app_using(&google).await;
     let deal = app.active().await;
-    let link = |user| {
-        let (app, deal) = (&app, &deal);
-        async move {
-            let reply = wallet_post(app, user, &deal.exchange, "google").await.ok();
-            let url = reply["url"].as_str().unwrap().to_owned();
-            let jwt = url
-                .strip_prefix("https://pay.google.com/gp/v/save/")
-                .expect("a save link")
-                .to_owned();
-            verified_claims(&jwt)
-        }
-    };
-    let ben = link(&deal.ben).await;
+    let ben = google_claims(&app, &deal.ben, &deal.exchange).await;
     assert_eq!(ben["iss"], testkit::CLIENT_EMAIL);
     assert_eq!(
         (ben["aud"].as_str(), ben["typ"].as_str()),
         (Some("google"), Some("savetowallet"))
     );
     assert_eq!(ben["origins"], json!(["https://app.test"]));
-    let object = &ben["payload"]["genericObjects"][0];
-    let id = object["id"].as_str().unwrap();
+    // The link carries the object's ID and class, and no face.
+    let named = &ben["payload"]["genericObjects"][0];
+    let id = named["id"].as_str().unwrap().to_owned();
     assert!(id.starts_with(&format!("{}.", testkit::ISSUER_ID)));
-    assert_eq!(object["classId"], ben["payload"]["genericClasses"][0]["id"]);
+    assert_eq!(
+        ben["payload"],
+        json!({ "genericObjects": [{ "id": id, "classId": named["classId"] }] })
+    );
+    // The object was made at Google before the link was handed out.
+    let object = google.objects.lock().unwrap()[&id].clone();
+    assert_eq!(object["classId"], named["classId"]);
+    assert_eq!(
+        google.classes.lock().unwrap().first(),
+        named["classId"].as_str().map(str::to_owned).as_ref()
+    );
     assert_eq!(object["state"], "ACTIVE");
     assert_eq!(object["header"]["defaultValue"]["value"], "In force");
     assert_eq!(
         object["linksModuleData"]["uris"][0]["uri"],
         format!("https://app.test/exchanges/{}", deal.exchange)
     );
-    let text = ben.to_string();
+    let text = object.to_string();
     for secret in ["Ana", "Ben", "Ruiz", "fence", "40000"] {
-        assert!(!text.contains(secret), "{secret} is in the link: {text}");
+        assert!(!text.contains(secret), "{secret} is in the object: {text}");
     }
 
     // The same object every time for Ben; another one for Ana.
-    let again = link(&deal.ben).await;
-    assert_eq!(again["payload"]["genericObjects"][0]["id"], id);
-    let ana = link(&deal.ana).await;
-    assert_ne!(ana["payload"]["genericObjects"][0]["id"], id);
+    let again = google_claims(&app, &deal.ben, &deal.exchange).await;
+    assert_eq!(again["payload"]["genericObjects"][0]["id"], id.as_str());
+    let ana = google_claims(&app, &deal.ana, &deal.exchange).await;
+    assert_ne!(ana["payload"]["genericObjects"][0]["id"], id.as_str());
 
     // A change reaches the object through the worker.
     app.act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
         .await
         .ok();
-    let recorder = Arc::new(Recorder::default());
-    run_worker(&app, &recorder).await;
-    let patches = recorder.patches.lock().unwrap();
-    let (_, patched) = patches
-        .iter()
-        .find(|(object, _)| object == id)
-        .expect("Ben's object patched");
+    run_worker(&app, &google).await;
     assert_eq!(
-        patched["header"]["defaultValue"]["value"],
+        google.objects.lock().unwrap()[&id]["header"]["defaultValue"]["value"],
         "Waiting for you"
     );
+
+    // Google no longer having the object (404): the face is not counted as
+    // delivered, so the next update or link carries it.
+    let serial = id.rsplit('.').next().unwrap().to_owned();
+    let before = delivered_hash(&app, &serial).await;
+    google.objects.lock().unwrap().remove(&id);
+    app.act(&deal.ben, &deal.exchange, deal.repair, "CONFIRM")
+        .await
+        .ok();
+    run_worker(&app, &google).await;
+    assert_eq!(delivered_hash(&app, &serial).await, before);
+    assert_eq!(pass_status(&app, &serial).await.0, "CURRENT");
+    // The next link makes it again, with the face as it is now.
+    google_claims(&app, &deal.ben, &deal.exchange).await;
+    assert_eq!(
+        google.objects.lock().unwrap()[&id]["header"]["defaultValue"]["value"],
+        "In force"
+    );
+    assert_ne!(delivered_hash(&app, &serial).await, before);
 }
 
 #[tokio::test]
 async fn deleting_an_account_revokes_its_passes() {
     let _worker = WORKER.lock().await;
-    let app = app().await;
+    let google = Arc::new(Recorder::default());
+    let app = app_using(&google).await;
     let deal = app.active().await;
     let (serial, token) = ben_apple_pass(&app, &deal).await;
-    let google = wallet_post(&app, &deal.ben, &deal.exchange, "google")
-        .await
-        .ok();
-    let object_id = {
-        let jwt = google["url"]
+    let object_id =
+        google_claims(&app, &deal.ben, &deal.exchange).await["payload"]["genericObjects"][0]["id"]
             .as_str()
-            .unwrap()
-            .rsplit('/')
-            .next()
             .unwrap()
             .to_owned();
-        verified_claims(&jwt)["payload"]["genericObjects"][0]["id"]
-            .as_str()
-            .unwrap()
-            .to_owned()
-    };
     let pass_type = testkit::PASS_TYPE_ID;
-    let registration = format!("/v1/devices/dev-ben/registrations/{pass_type}/{serial}");
-    let reply = device(
-        &app,
-        Method::POST,
-        &registration,
-        Some(&token),
-        Some(json!({ "pushToken": "beef" })),
-        &[],
-    )
-    .await;
-    assert_eq!(reply.status, StatusCode::CREATED);
     let (ana_serial, _) = {
         let json = pass_json(&wallet_post(&app, &deal.ana, &deal.exchange, "apple").await);
         (json["serialNumber"].as_str().unwrap().to_owned(), ())
@@ -647,25 +888,11 @@ async fn deleting_an_account_revokes_its_passes() {
         ("PENDING".to_owned(), false)
     );
 
-    let recorder = Arc::new(Recorder::default());
-    run_worker(&app, &recorder).await;
-    // Ben's device was told once, then forgotten.
-    assert!(recorder.pushes.lock().unwrap().contains(&"beef".to_owned()));
-    let devices: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM wallet_device_registration r JOIN wallet_pass p ON p.id = r.wallet_pass_id
-         WHERE p.account_id = $1",
-    )
-    .bind(deal.ben.id)
-    .fetch_one(&app.owner)
-    .await
-    .unwrap();
-    assert_eq!(devices, 0);
-    // Google's object is made inactive and stripped.
-    let patches = recorder.patches.lock().unwrap().clone();
-    let (_, object) = patches
-        .iter()
-        .find(|(id, _)| *id == object_id)
-        .expect("Ben's Google object patched");
+    run_worker(&app, &google).await;
+    // Google's object is made inactive and stripped. It exists at Google,
+    // made when the link was, and the link names only it: using the link
+    // now saves this inactive object, never a live one.
+    let object = google.objects.lock().unwrap()[&object_id].clone();
     assert_eq!(object["state"], "INACTIVE");
     assert_eq!(object["linksModuleData"]["uris"], json!([]));
     assert!(!object.to_string().contains(&deal.exchange));
@@ -689,7 +916,8 @@ async fn deleting_an_account_revokes_its_passes() {
         "{text}"
     );
     assert_eq!(json["generic"]["auxiliaryFields"], json!([]));
-    // A void pass takes no device, and its devices hear nothing more.
+    // A void pass takes no device, and is never updated again.
+    let registration = format!("/v1/devices/dev-late/registrations/{pass_type}/{serial}");
     let reply = device(
         &app,
         Method::POST,
@@ -700,16 +928,6 @@ async fn deleting_an_account_revokes_its_passes() {
     )
     .await;
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
-    let reply = device(
-        &app,
-        Method::GET,
-        "/v1/devices/dev-ben/registrations/x",
-        None,
-        None,
-        &[],
-    )
-    .await;
-    assert_eq!(reply.status, StatusCode::NO_CONTENT);
     app.command(
         &deal.ana,
         &deal.exchange,
@@ -721,6 +939,266 @@ async fn deleting_an_account_revokes_its_passes() {
         pass_status(&app, &serial).await,
         ("CURRENT".to_owned(), true)
     );
+}
+
+#[tokio::test]
+async fn a_voided_pass_reaches_the_device_by_apples_two_steps_then_its_registration_goes() {
+    let _worker = WORKER.lock().await;
+    let recorder = Arc::new(Recorder::default());
+    let app = app_using(&recorder).await;
+    let deal = app.active().await;
+    let (serial, token) = ben_apple_pass(&app, &deal).await;
+    let pass_type = testkit::PASS_TYPE_ID;
+    let device_id = "dev-two-steps";
+    assert_eq!(
+        register_device(&app, &serial, &token, device_id).await,
+        StatusCode::CREATED
+    );
+
+    // The device's first sync: the list, then the pass.
+    let list = format!("/v1/devices/{device_id}/registrations/{pass_type}");
+    let reply = device(&app, Method::GET, &list, None, None, &[]).await;
+    assert_eq!(reply.body["serialNumbers"], json!([serial]));
+    let tag = reply.body["lastUpdated"].as_str().unwrap().to_owned();
+    let latest = format!("/v1/passes/{pass_type}/{serial}");
+    let reply = device(&app, Method::GET, &latest, Some(&token), None, &[]).await;
+    assert_eq!(pass_json(&reply)["voided"], Value::Null);
+    let modified = reply.headers["last-modified"].to_str().unwrap().to_owned();
+
+    yuppers_backend::deletion::delete_account(&app.db, &app.rules, deal.ben.id)
+        .await
+        .unwrap();
+    run_worker(&app, &recorder).await;
+    // The push wakes the device...
+    assert!(recorder.pushes.lock().unwrap().contains(&"beef".to_owned()));
+    assert_eq!(devices_of(&app, &serial).await, [device_id]);
+    // ...which asks what changed since its tag, and is told this pass...
+    let reply = device(
+        &app,
+        Method::GET,
+        &format!("{list}?passesUpdatedSince={tag}"),
+        None,
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(reply.body["serialNumbers"], json!([serial]));
+    // ...and fetches it: the void face.
+    let reply = device(
+        &app,
+        Method::GET,
+        &latest,
+        Some(&token),
+        None,
+        &[("if-modified-since", &modified)],
+    )
+    .await;
+    let json = pass_json(&reply);
+    assert_eq!(json["voided"], true);
+    assert_eq!(
+        json["generic"]["primaryFields"][0]["value"],
+        "No longer in use"
+    );
+
+    // Kept a while for the fetch, then forgotten: nothing more is ever sent.
+    run_worker(&app, &recorder).await;
+    assert_eq!(devices_of(&app, &serial).await, [device_id]);
+    let later = OffsetDateTime::now_utc() + time::Duration::days(2);
+    run_worker_at(&app, &recorder, later).await;
+    assert!(devices_of(&app, &serial).await.is_empty());
+    let reply = device(&app, Method::GET, &list, None, None, &[]).await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn a_device_never_told_of_the_void_is_forgotten_after_a_month() {
+    let _worker = WORKER.lock().await;
+    let recorder = Arc::new(Recorder::default());
+    let app = app_using(&recorder).await;
+    let deal = app.active().await;
+    let (serial, token) = ben_apple_pass(&app, &deal).await;
+    register_device(&app, &serial, &token, "dev-away").await;
+    yuppers_backend::deletion::delete_account(&app.db, &app.rules, deal.ben.id)
+        .await
+        .unwrap();
+    run_worker(&app, &recorder).await;
+    let in_a_week = OffsetDateTime::now_utc() + time::Duration::days(7);
+    run_worker_at(&app, &recorder, in_a_week).await;
+    assert_eq!(devices_of(&app, &serial).await, ["dev-away"]);
+    let in_a_month = OffsetDateTime::now_utc() + time::Duration::days(31);
+    run_worker_at(&app, &recorder, in_a_month).await;
+    assert!(devices_of(&app, &serial).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_suspended_accounts_passes_are_not_updated() {
+    let _worker = WORKER.lock().await;
+    let recorder = Arc::new(Recorder::default());
+    let app = app_using(&recorder).await;
+    let deal = app.active().await;
+    let (serial, token) = ben_apple_pass(&app, &deal).await;
+    register_device(&app, &serial, &token, "dev-suspended").await;
+    let latest = format!("/v1/passes/{}/{serial}", testkit::PASS_TYPE_ID);
+    let reply = device(&app, Method::GET, &latest, Some(&token), None, &[]).await;
+    let modified = reply.headers["last-modified"].to_str().unwrap().to_owned();
+
+    // Marked, then suspended before the worker gets to it.
+    app.act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
+        .await
+        .ok();
+    sqlx::query("UPDATE account SET status = 'SUSPENDED' WHERE id = $1")
+        .bind(deal.ben.id)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    run_worker(&app, &recorder).await;
+    assert!(recorder.pushes.lock().unwrap().is_empty());
+    assert_eq!(
+        pass_status(&app, &serial).await,
+        ("CURRENT".to_owned(), false)
+    );
+    // Later changes do not mark it, and the device is told nothing new.
+    app.command(
+        &deal.ana,
+        &deal.exchange,
+        json!({ "type": "PROPOSE_END", "note": null }),
+    )
+    .await
+    .ok();
+    assert_eq!(pass_status(&app, &serial).await.0, "CURRENT");
+    let list = format!(
+        "/v1/devices/dev-suspended/registrations/{}",
+        testkit::PASS_TYPE_ID
+    );
+    let reply = device(&app, Method::GET, &list, None, None, &[]).await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT);
+    let reply = device(
+        &app,
+        Method::GET,
+        &latest,
+        Some(&token),
+        None,
+        &[("if-modified-since", &modified)],
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::NOT_MODIFIED);
+    let reply = device(&app, Method::GET, &latest, Some(&token), None, &[]).await;
+    assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        register_device(&app, &serial, &token, "dev-new").await,
+        StatusCode::UNAUTHORIZED
+    );
+    // It is not voided: that is for deletion.
+    assert!(!pass_status(&app, &serial).await.1);
+}
+
+/// An agreement in force in `timezone` whose repair, owed by Ana, is due on
+/// `due`, with the payment after it.
+async fn due_on(app: &App, timezone: &str, due: time::Date) -> Deal {
+    let ana = app.user("Ana").await;
+    let ben = app.user("Ben").await;
+    let view = app
+        .post(&ana, "/v1/exchanges", json!({ "timezone": timezone }))
+        .await
+        .ok();
+    let exchange = view["id"].as_str().unwrap().to_owned();
+    let (repair, payment) = (Uuid::new_v4(), Uuid::new_v4());
+    let mut terms = common::fence_job(repair, payment);
+    terms["contributions"][0]["due"] = json!({ "kind": "DATE", "date": due.to_string() });
+    let sent = app.send(&ana, &exchange, terms).await.ok();
+    let revision = sent["exchange"]["open_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let invitation = sent["invitation_token"].as_str().unwrap().to_owned();
+    app.post(
+        &ben,
+        "/v1/invitations/claim",
+        json!({ "token": invitation }),
+    )
+    .await
+    .ok();
+    app.command(&ana, &exchange, json!({ "type": "CONFIRM_COUNTERPARTY" }))
+        .await
+        .ok();
+    let view = app
+        .command(&ben, &exchange, common::accept(&revision))
+        .await
+        .ok();
+    assert_eq!(view["state"], "ACTIVE");
+    Deal {
+        ana,
+        ben,
+        exchange,
+        repair,
+        payment,
+        revision,
+        invitation,
+    }
+}
+
+#[tokio::test]
+async fn faces_that_change_with_the_date_are_sent_once_a_day_in_the_exchanges_timezone() {
+    let _worker = WORKER.lock().await;
+    let recorder = Arc::new(Recorder::default());
+    let app = app_using(&recorder).await;
+    // Kiritimati is fourteen hours ahead of UTC: its day starts at 10:00 UTC
+    // the day before.
+    let due = OffsetDateTime::now_utc().date() + time::Duration::days(10);
+    let deal = due_on(&app, "Pacific/Kiritimati", due).await;
+    let (serial, token) = ben_apple_pass(&app, &deal).await;
+    register_device(&app, &serial, &token, "dev-dated").await;
+    let object_id =
+        google_claims(&app, &deal.ben, &deal.exchange).await["payload"]["genericObjects"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+    let status_at_google = || {
+        recorder.objects.lock().unwrap()[&object_id]["header"]["defaultValue"]["value"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let at = |date: time::Date, hour: u8| date.with_hms(hour, 0, 0).unwrap().assume_utc();
+    let days = time::Duration::days;
+
+    // Four days before, in Kiritimati: in force, as at issue.
+    run_worker_at(&app, &recorder, at(due - days(4), 0)).await;
+    assert_eq!(status_at_google(), "In force");
+    let pushes = recorder.pushes.lock().unwrap().len();
+    // The same day again: nothing is even looked at.
+    run_worker_at(&app, &recorder, at(due - days(4), 1)).await;
+    assert_eq!(pass_status(&app, &serial).await.0, "CURRENT");
+    assert_eq!(recorder.pushes.lock().unwrap().len(), pushes);
+
+    // 11:00 UTC three days before is already two days before in Kiritimati:
+    // due soon there, though not yet in UTC.
+    run_worker_at(&app, &recorder, at(due - days(3), 11)).await;
+    assert_eq!(status_at_google(), "Due soon");
+    assert_eq!(recorder.pushes.lock().unwrap().len(), pushes + 1);
+    let patches = recorder.patches.lock().unwrap().len();
+    run_worker_at(&app, &recorder, at(due - days(3), 12)).await;
+    assert_eq!(recorder.patches.lock().unwrap().len(), patches);
+
+    // The next day there: still due soon, so nothing is sent.
+    run_worker_at(&app, &recorder, at(due - days(2), 11)).await;
+    assert_eq!(recorder.patches.lock().unwrap().len(), patches);
+    assert_eq!(recorder.pushes.lock().unwrap().len(), pushes + 1);
+
+    // The day after the due date there: overdue.
+    run_worker_at(&app, &recorder, at(due, 11)).await;
+    assert_eq!(status_at_google(), "Overdue");
+    assert_eq!(recorder.pushes.lock().unwrap().len(), pushes + 2);
+
+    // Once delivered, nothing on a date is pending, and no day marks it.
+    app.act(&deal.ana, &deal.exchange, deal.repair, "CLAIM")
+        .await
+        .ok();
+    run_worker_at(&app, &recorder, at(due, 12)).await;
+    let pushes = recorder.pushes.lock().unwrap().len();
+    run_worker_at(&app, &recorder, at(due + days(1), 12)).await;
+    assert_eq!(recorder.pushes.lock().unwrap().len(), pushes);
 }
 
 #[tokio::test]

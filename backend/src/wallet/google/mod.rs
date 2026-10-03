@@ -1,10 +1,17 @@
 //! Google Wallet: the "Save to Google Wallet" link (DESIGN.md §11).
 //!
-//! The link is `https://pay.google.com/gp/v/save/<JWT>`, the JWT signed with
-//! the issuer's service account key (RS256) and carrying the generic pass
-//! class and this party's object for this exchange; Google creates both when
-//! the person saves the pass. A change is then patched into the object
-//! through the Google Wallet API ([`objects`]).
+//! When the link is asked for, the generic pass class and this party's
+//! object for this exchange are created (or brought up to date) through the
+//! Google Wallet API ([`objects`]). The link is then
+//! `https://pay.google.com/gp/v/save/<JWT>`, the JWT signed with the issuer's
+//! service account key (RS256) and naming only that object's ID and class:
+//! it carries no face, so a link used late saves the object as it is then,
+//! and a link to a pass voided since saves the void, inactive object; it
+//! cannot create a live one. Changes are patched into the object.
+//!
+//! Google documents no expiry (`exp`) for a save link's JWT, so a link works
+//! for as long as Google accepts it; naming an existing object is what keeps
+//! an old link harmless.
 //!
 //! The pass is a Generic pass, the type Google offers any issuer once its
 //! account may publish. DESIGN.md §11 leaves open whether to ask for the
@@ -129,7 +136,7 @@ impl GoogleIssuer {
         format!("{}.{serial}", self.issuer_id)
     }
 
-    /// The generic class, as the save link creates it.
+    /// The generic class, as it is created.
     pub fn class(&self) -> Value {
         json!({
             "id": self.class_id(),
@@ -138,8 +145,8 @@ impl GoogleIssuer {
         })
     }
 
-    /// The generic object for `model`: what the save link creates and what
-    /// an update patches in.
+    /// The generic object for `model`: what is created when the link is made
+    /// and what an update patches in.
     pub fn object(&self, model: &PassModel, serial: &str) -> Value {
         let text =
             |value: &str| json!({ "defaultValue": { "language": model.language, "value": value } });
@@ -184,11 +191,11 @@ impl GoogleIssuer {
         })
     }
 
-    /// The "Save to Google Wallet" link for `model`, made at `now`, for a
-    /// page served from `origin`.
+    /// The "Save to Google Wallet" link for the object of `serial`, which
+    /// must already exist at Google ([`objects::WalletObjects::upsert`]),
+    /// made at `now`, for a page served from `origin`.
     pub fn save_url(
         &self,
-        model: &PassModel,
         serial: &str,
         origin: &str,
         now: OffsetDateTime,
@@ -200,8 +207,7 @@ impl GoogleIssuer {
             "iat": now.unix_timestamp(),
             "origins": [origin],
             "payload": {
-                "genericClasses": [self.class()],
-                "genericObjects": [self.object(model, serial)],
+                "genericObjects": [{ "id": self.object_id(serial), "classId": self.class_id() }],
             },
         });
         Ok(format!("{SAVE_URL}{}", self.account.sign_jwt(&claims)?))

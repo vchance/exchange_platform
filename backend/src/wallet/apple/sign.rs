@@ -110,6 +110,108 @@ impl Signer {
         OffsetDateTime::UNIX_EPOCH + after
     }
 
+    /// Whether the WWDR certificate vouches for the pass type certificate at
+    /// `now`: one of the intermediates is valid then, is named as the pass
+    /// type certificate's issuer, and its key verifies that certificate's
+    /// signature. Says what is wrong if not.
+    pub fn check_issuer(&self, now: OffsetDateTime) -> Result<(), String> {
+        let issuer_name = &self.certificate.tbs_certificate.issuer;
+        let mut problem = format!(
+            "the pass type certificate was issued by {issuer_name}, which APPLE_WWDR_CERT does not hold"
+        );
+        for issuer in self
+            .intermediates
+            .iter()
+            .filter(|intermediate| intermediate.tbs_certificate.subject == *issuer_name)
+        {
+            match self.issued_by(issuer, now) {
+                Ok(()) => return Ok(()),
+                Err(found) => problem = found,
+            }
+        }
+        Err(problem)
+    }
+
+    /// Whether `issuer` is valid at `now` and signed the certificate.
+    fn issued_by(&self, issuer: &Certificate, now: OffsetDateTime) -> Result<(), String> {
+        let validity = &issuer.tbs_certificate.validity;
+        let instant =
+            |time: x509_cert::time::Time| OffsetDateTime::UNIX_EPOCH + time.to_unix_duration();
+        if instant(validity.not_after) <= now {
+            return Err(format!(
+                "the WWDR certificate expired on {}",
+                instant(validity.not_after)
+            ));
+        }
+        if instant(validity.not_before) > now {
+            return Err("the WWDR certificate is not valid yet".to_owned());
+        }
+        let tbs = self
+            .certificate
+            .tbs_certificate
+            .to_der()
+            .map_err(|_| "the pass type certificate cannot be encoded again".to_owned())?;
+        let signature = self
+            .certificate
+            .signature
+            .as_bytes()
+            .ok_or("the pass type certificate's signature is not whole bytes")?;
+        let spki = &issuer.tbs_certificate.subject_public_key_info;
+        let key = spki
+            .subject_public_key
+            .as_bytes()
+            .ok_or("the WWDR certificate's key is not whole bytes")?;
+        let curve = spki
+            .algorithm
+            .parameters
+            .as_ref()
+            .and_then(|parameters| parameters.decode_as::<ObjectIdentifier>().ok());
+        let algorithm: &dyn ring::signature::VerificationAlgorithm =
+            match (self.certificate.signature_algorithm.oid, curve) {
+                (oid, _) if oid == rfc5912::SHA_256_WITH_RSA_ENCRYPTION => {
+                    &ring::signature::RSA_PKCS1_2048_8192_SHA256
+                }
+                (oid, _) if oid == rfc5912::SHA_384_WITH_RSA_ENCRYPTION => {
+                    &ring::signature::RSA_PKCS1_2048_8192_SHA384
+                }
+                (oid, _) if oid == rfc5912::SHA_512_WITH_RSA_ENCRYPTION => {
+                    &ring::signature::RSA_PKCS1_2048_8192_SHA512
+                }
+                (oid, Some(curve)) if oid == rfc5912::ECDSA_WITH_SHA_256 => {
+                    if curve == rfc5912::SECP_256_R_1 {
+                        &ring::signature::ECDSA_P256_SHA256_ASN1
+                    } else if curve == rfc5912::SECP_384_R_1 {
+                        &ring::signature::ECDSA_P384_SHA256_ASN1
+                    } else {
+                        return Err(format!(
+                            "the WWDR certificate's curve {curve} is not supported"
+                        ));
+                    }
+                }
+                (oid, Some(curve)) if oid == rfc5912::ECDSA_WITH_SHA_384 => {
+                    if curve == rfc5912::SECP_256_R_1 {
+                        &ring::signature::ECDSA_P256_SHA384_ASN1
+                    } else if curve == rfc5912::SECP_384_R_1 {
+                        &ring::signature::ECDSA_P384_SHA384_ASN1
+                    } else {
+                        return Err(format!(
+                            "the WWDR certificate's curve {curve} is not supported"
+                        ));
+                    }
+                }
+                (oid, _) => {
+                    return Err(format!(
+                        "the pass type certificate's signature algorithm {oid} is not supported"
+                    ));
+                }
+            };
+        ring::signature::UnparsedPublicKey::new(algorithm, key)
+            .verify(&tbs, signature)
+            .map_err(|_| {
+                "the WWDR certificate's key did not sign the pass type certificate".to_owned()
+            })
+    }
+
     /// The detached signature of `manifest`, as DER, made at `at`.
     pub fn sign(&self, manifest: &[u8], at: OffsetDateTime) -> anyhow::Result<Vec<u8>> {
         let digest = Sha256::digest(manifest);

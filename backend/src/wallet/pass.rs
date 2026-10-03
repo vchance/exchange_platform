@@ -22,6 +22,7 @@
 use serde::Serialize;
 use time::Date;
 
+use super::StatusOnFace;
 use super::wording::{Language, fill};
 use crate::domain::contribution::Status;
 use crate::exchanges::dto::{DueDto, ExchangeView, OutcomeDto, StateDto};
@@ -117,6 +118,8 @@ pub struct PassContext {
     /// How many days before its date a contribution is due soon, the same
     /// lead the reminders use (`Rules::due_soon_lead`).
     pub due_soon_days: i64,
+    /// How much the status line says (`WALLET_STATUS_ON_FACE`).
+    pub status_on_face: StatusOnFace,
 }
 
 /// The face of `view`'s pass for the party viewing it, in `language`.
@@ -196,6 +199,16 @@ pub fn render(view: &ExchangeView, context: &PassContext, language: &Language) -
         // that is over reads as closed.
         _ => Standing::Closed,
     };
+    let neutral = context.status_on_face == StatusOnFace::Neutral;
+    // Neutral: an agreement in force reads as in force, whatever presses.
+    let standing = match standing {
+        Standing::WaitingForYou | Standing::Disputed | Standing::Overdue | Standing::DueSoon
+            if neutral =>
+        {
+            Standing::InForce
+        }
+        standing => standing,
+    };
 
     let words = &language.status;
     let status_word = match standing {
@@ -223,7 +236,7 @@ pub fn render(view: &ExchangeView, context: &PassContext, language: &Language) -
         status: field("status", &labels.status, status_word),
         reference: Some(field("reference", &labels.reference, &view.display_code)),
         next_due: next_due
-            .filter(|_| active)
+            .filter(|_| active && !neutral)
             .map(|due| field("next-due", &labels.next_due, &language.date(due))),
         outstanding: (active && !still_open.is_empty()).then(|| {
             field(

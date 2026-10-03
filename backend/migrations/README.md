@@ -116,6 +116,19 @@ The application role may read, add, change and remove rows in both new tables: t
 
 `backend/tests/schema.rs` checks the keys, the checks and the cascade as the application role; `backend/tests/push.rs` and `backend/tests/sms.rs` drive them through the API and the worker.
 
+## 0012_wallet_tokens
+
+Wallet passes after review (`DESIGN.md` §11, [docs/wallet.md](../../docs/wallet.md)).
+
+- **`wallet_auth_token`**: an Apple pass's authentication tokens, by their SHA-256 only (32 bytes, each once). A token is random and new each time the pass is handed out, and the service keeps the latest three; the one hash each pass had in `wallet_pass.auth_token_hash` moves here, so passes already on devices keep working, and that column is dropped.
+- **`wallet_download_link`**: a link that downloads an Apple pass without a session, by its token's SHA-256, until it expires and only once (`used_at`). The worker removes those that expired a day ago.
+- **`wallet_pass`** gains `face_date`, the day in the exchange's timezone that the face last delivered was drawn for, from which the worker marks passes whose "Due soon" or "Overdue" may have changed, and the hourly count of new device registrations.
+- **`wallet_device_registration`** gains `void_listed_at`: when the device was told that its voided pass changed. The registration is removed a day after, or 30 days after the voiding.
+
+The application role may read, add, change and remove rows in both new tables: they are working data. Neither holds a token, only hashes.
+
+`backend/tests/schema.rs` checks the checks and the grants; `backend/tests/wallet.rs` everything through the API and the worker.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

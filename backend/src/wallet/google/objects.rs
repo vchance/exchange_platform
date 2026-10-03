@@ -1,10 +1,18 @@
-//! Updating a saved Google Wallet pass: the generic object is patched
-//! through the Google Wallet API, with an access token for the issuer's
-//! service account (the OAuth 2.0 JWT bearer grant).
+//! Google Wallet objects through the Google Wallet API, with an access token
+//! for the issuer's service account (the OAuth 2.0 JWT bearer grant): the
+//! class and the object are created when a save link is made, so the link
+//! names an object that already exists, and the object is patched as the
+//! exchange changes.
+//!
+//! What Google says when it refuses is reduced to the HTTP status and its
+//! error code and reason ([`describe_refusal`]), as for the other providers:
+//! its message can quote what was sent, and it goes into logs and
+//! `wallet_pass.last_error`.
 
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, bail};
@@ -23,21 +31,26 @@ use crate::wallet::net;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PatchOutcome {
     Updated,
-    /// Google has no such object: the person never saved the pass. There is
-    /// nothing to update; the link they may still use carries the latest.
+    /// Google has no such object. Nothing is updated, and the face is not
+    /// counted as delivered, so the next update tries again.
     NotSaved,
 }
 
 pub type PatchFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<PatchOutcome>> + Send + 'a>>;
+pub type CreateFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>>;
 
-/// Writes a generic object's new state to Google.
+/// Writes generic classes and objects to Google.
 pub trait WalletObjects: Send + Sync {
+    /// Writes an object's new state.
     fn patch<'a>(&'a self, object_id: &'a str, object: &'a Value) -> PatchFuture<'a>;
+    /// Makes sure the class exists, and creates the object, or writes its
+    /// state when it exists already.
+    fn upsert<'a>(&'a self, class: &'a Value, object: &'a Value) -> CreateFuture<'a>;
 }
 
 /// Development delivery (`WALLET_DELIVERY=log`): writes that an object would
-/// have been updated to the worker's log, with its state and size. Not what
-/// it says, which includes the alias of the other party.
+/// have been written to the log, with its state and size. Not what it says,
+/// which includes the alias of the other party.
 pub struct LogObjects;
 
 impl WalletObjects for LogObjects {
@@ -52,6 +65,17 @@ impl WalletObjects for LogObjects {
             Ok(PatchOutcome::Updated)
         })
     }
+
+    fn upsert<'a>(&'a self, _class: &'a Value, object: &'a Value) -> CreateFuture<'a> {
+        Box::pin(async move {
+            tracing::info!(
+                object = object["id"].as_str().unwrap_or(""),
+                state = object["state"].as_str().unwrap_or(""),
+                "google wallet object created (development delivery)"
+            );
+            Ok(())
+        })
+    }
 }
 
 /// The Google Wallet API.
@@ -60,7 +84,7 @@ pub const API_ORIGIN: &str = "https://walletobjects.googleapis.com";
 /// classes and objects, nothing else.
 pub const SCOPE: &str = "https://www.googleapis.com/auth/wallet_object.issuer";
 
-/// Patches objects through the Google Wallet API.
+/// Writes classes and objects through the Google Wallet API.
 pub struct ApiObjects {
     client: net::HttpsClient,
     account: Arc<ServiceAccount>,
@@ -68,6 +92,8 @@ pub struct ApiObjects {
     timeout: Duration,
     /// The access token and when to stop using it.
     token: Mutex<Option<(String, OffsetDateTime)>>,
+    /// Set once the class is known to exist.
+    class_exists: AtomicBool,
 }
 
 impl ApiObjects {
@@ -78,6 +104,7 @@ impl ApiObjects {
             origin: API_ORIGIN.to_owned(),
             timeout: Duration::from_secs(20),
             token: Mutex::new(None),
+            class_exists: AtomicBool::new(false),
         })
     }
 
@@ -93,14 +120,9 @@ impl ApiObjects {
         let request = token_request(&self.account, now)?;
         let answer = net::send(&self.client, request, self.timeout).await?;
         if answer.status != StatusCode::OK {
-            // Google's error names the problem and holds nothing secret.
             bail!(
-                "the access token was refused: {} {}",
-                answer.status,
-                String::from_utf8_lossy(&answer.body)
-                    .chars()
-                    .take(300)
-                    .collect::<String>()
+                "the access token was refused: {}",
+                describe_refusal(answer.status, &answer.body)
             );
         }
         #[derive(Deserialize)]
@@ -113,6 +135,33 @@ impl ApiObjects {
         let until = now + time::Duration::seconds((granted.expires_in - 60).max(0));
         *held = Some((granted.access_token.clone(), until));
         Ok(granted.access_token)
+    }
+
+    async fn send(&self, request: Request<Full<Bytes>>) -> anyhow::Result<net::Answer> {
+        let answer = net::send(&self.client, request, self.timeout).await?;
+        if answer.status == StatusCode::UNAUTHORIZED {
+            // Asked for again on the next try.
+            *self.token.lock().await = None;
+            bail!("the Wallet API refused the access token");
+        }
+        Ok(answer)
+    }
+
+    /// Creates `body` under `kind` (`genericClass`, `genericObject`).
+    /// Returns false when it exists already.
+    async fn insert(&self, kind: &str, body: &Value) -> anyhow::Result<bool> {
+        let token = self.access_token().await?;
+        let answer = self
+            .send(insert_request(&self.origin, &token, kind, body)?)
+            .await?;
+        match answer.status {
+            status if status.is_success() => Ok(true),
+            StatusCode::CONFLICT => Ok(false),
+            status => bail!(
+                "the Wallet API did not create the {kind}: {}",
+                describe_refusal(status, &answer.body)
+            ),
+        }
     }
 }
 
@@ -141,6 +190,13 @@ pub fn token_request(
         .body(Full::new(Bytes::from(body)))?)
 }
 
+fn valid_id(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
 /// The request that patches one object.
 pub fn patch_request(
     origin: &str,
@@ -148,11 +204,7 @@ pub fn patch_request(
     object_id: &str,
     object: &Value,
 ) -> anyhow::Result<Request<Full<Bytes>>> {
-    if object_id.is_empty()
-        || !object_id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-    {
+    if !valid_id(object_id) {
         bail!("an object ID is letters, digits, dots, underscores and hyphens");
     }
     Ok(Request::builder()
@@ -165,28 +217,99 @@ pub fn patch_request(
         .body(Full::new(Bytes::from(serde_json::to_vec(object)?)))?)
 }
 
+/// The request that creates a class or an object (`kind` is `genericClass`
+/// or `genericObject`).
+pub fn insert_request(
+    origin: &str,
+    access_token: &str,
+    kind: &str,
+    body: &Value,
+) -> anyhow::Result<Request<Full<Bytes>>> {
+    if !matches!(kind, "genericClass" | "genericObject")
+        || !body["id"].as_str().is_some_and(valid_id)
+    {
+        bail!(
+            "a generic class or object, with an ID of letters, digits, dots, underscores and hyphens"
+        );
+    }
+    Ok(Request::builder()
+        .method(Method::POST)
+        .uri(format!("{origin}/walletobjects/v1/{kind}"))
+        .header("authorization", format!("Bearer {access_token}"))
+        .header("content-type", "application/json")
+        .body(Full::new(Bytes::from(serde_json::to_vec(body)?)))?)
+}
+
+/// What a refusal from Google may say in a log: the HTTP status, and the
+/// error's code and reason when Google gave them as short codes, never its
+/// message. The Wallet API answers `{"error": {"code", "status", "errors":
+/// [{"reason"}], "message"}}`, the token endpoint `{"error",
+/// "error_description"}`.
+pub fn describe_refusal(status: StatusCode, body: &[u8]) -> String {
+    let body: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+    let error = &body["error"];
+    let code = |value: &Value| {
+        value
+            .as_str()
+            .filter(|text| {
+                (1..=64).contains(&text.len())
+                    && text
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            })
+            .map(str::to_owned)
+    };
+    let mut parts: Vec<String> = Vec::new();
+    for found in [
+        code(error),
+        code(&error["status"]),
+        code(&error["errors"][0]["reason"]),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !parts.contains(&found) {
+            parts.push(found);
+        }
+    }
+    if parts.is_empty() {
+        format!("HTTP {}", status.as_u16())
+    } else {
+        format!("HTTP {}, error {}", status.as_u16(), parts.join(" "))
+    }
+}
+
 impl WalletObjects for ApiObjects {
     fn patch<'a>(&'a self, object_id: &'a str, object: &'a Value) -> PatchFuture<'a> {
         Box::pin(async move {
             let token = self.access_token().await?;
-            let request = patch_request(&self.origin, &token, object_id, object)?;
-            let answer = net::send(&self.client, request, self.timeout).await?;
+            let answer = self
+                .send(patch_request(&self.origin, &token, object_id, object)?)
+                .await?;
             match answer.status {
                 status if status.is_success() => Ok(PatchOutcome::Updated),
                 StatusCode::NOT_FOUND => Ok(PatchOutcome::NotSaved),
-                StatusCode::UNAUTHORIZED => {
-                    // Asked for again on the next try.
-                    *self.token.lock().await = None;
-                    bail!("the Wallet API refused the access token")
-                }
                 status => bail!(
-                    "the Wallet API answered {status}: {}",
-                    String::from_utf8_lossy(&answer.body)
-                        .chars()
-                        .take(300)
-                        .collect::<String>()
+                    "the Wallet API did not update the object: {}",
+                    describe_refusal(status, &answer.body)
                 ),
             }
+        })
+    }
+
+    fn upsert<'a>(&'a self, class: &'a Value, object: &'a Value) -> CreateFuture<'a> {
+        Box::pin(async move {
+            if !self.class_exists.load(Ordering::Relaxed) {
+                self.insert("genericClass", class).await?;
+                self.class_exists.store(true, Ordering::Relaxed);
+            }
+            if !self.insert("genericObject", object).await? {
+                let id = object["id"].as_str().unwrap_or_default();
+                if self.patch(id, object).await? == PatchOutcome::NotSaved {
+                    bail!("the Wallet API has the object and does not have it");
+                }
+            }
+            Ok(())
         })
     }
 }
