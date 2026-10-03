@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomInt, randomUUID } from 'node:crypto'
 
 import { test as base, type BrowserContext, type Page } from '@playwright/test'
 
@@ -26,6 +26,15 @@ interface Fixtures {
   person(name: string, options?: PersonOptions): Promise<Person>
 }
 
+/**
+ * An address in 198.18.0.0/15, the range set aside for benchmarking, chosen
+ * at random so runs close together do not share one either.
+ */
+function networkAddress(): string {
+  const n = randomInt(1, 2 ** 17 - 1)
+  return `198.${18 + (n >> 16)}.${(n >> 8) & 255}.${n & 255}`
+}
+
 export const test = base.extend<Fixtures>({
   // The second argument hands the fixture to the test; it is Playwright's
   // `use`, renamed so it is not taken for a React hook.
@@ -39,6 +48,9 @@ export const test = base.extend<Fixtures>({
         locale: options.locale ?? 'en-US',
         timezoneId: 'UTC',
         permissions: ['clipboard-read', 'clipboard-write'],
+        // A network address of their own, so the per-address limits on
+        // sign-in count each person apart, as they would for real people.
+        extraHTTPHeaders: { 'X-Forwarded-For': networkAddress() },
       })
       contexts.push(context)
       const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-')

@@ -42,6 +42,11 @@ export function apiEnvironment(listenPort: number): Record<string, string> {
     CODE_DELIVERY: 'log',
     NOTIFICATION_DELIVERY: 'log',
     RUST_LOG: 'info',
+    // Every browser here connects from 127.0.0.1, and sign-in is limited per
+    // requester's address. As behind a proxy, the service takes the address
+    // from this header instead, and each person sends one of their own
+    // (support/fixtures.ts).
+    TRUSTED_PROXY_HEADER: 'X-Forwarded-For',
     // Plain lines, so the codes can be read back.
     NO_COLOR: '1',
   }

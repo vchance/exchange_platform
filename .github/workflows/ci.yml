@@ -284,6 +284,9 @@ jobs:
           CODE_DELIVERY: log
           NOTIFICATION_DELIVERY: log
           NO_COLOR: "1"
+          # Each simulated person sends an address of their own here, so the
+          # per-address sign-in limits count them apart.
+          TRUSTED_PROXY_HEADER: X-Forwarded-For
         run: |
           mkdir -p "$(dirname "$E2E_API_LOG")"
           nohup backend/target/debug/api > "$E2E_API_LOG" 2>&1 &
