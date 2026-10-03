@@ -26,3 +26,18 @@ export function OtherPartyLeft({
     </Notice>
   );
 }
+
+/**
+ * Tells a party that a reviewer has hidden what was written in this
+ * exchange from them (DESIGN.md §9): the service shows them a placeholder
+ * in its place, and refuses signing or changing the terms.
+ */
+export function ContentHidden({ exchange }: { exchange: ExchangeView }) {
+  const { wording } = useI18n();
+  if (!exchange.content_hidden) return null;
+  return (
+    <Notice tone="warning" quiet>
+      {wording.exchange.contentHidden}
+    </Notice>
+  );
+}

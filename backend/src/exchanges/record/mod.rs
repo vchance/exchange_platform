@@ -25,8 +25,8 @@ use uuid::Uuid;
 use self::dto::{
     Actor, ConsentShown, Continuation, ContributionRef, EventType, FORMAT, FORMAT_VERSION,
     HistoryPage, Part, Parties, RecordContribution, RecordDocument, RecordEvent, RecordExchange,
-    RecordRevision, RevisionRef, RevisionStanding, RevisionStatus, Signature, Verification,
-    VerificationMethod, VoidSignature,
+    RecordRevision, ReviewRecord, RevisionRef, RevisionStanding, RevisionStatus, Signature,
+    Verification, VerificationMethod, VoidSignature,
 };
 use super::dto::{ContributionStatus, CounterpartyDto, OutcomeDto, rfc3339, state_dto};
 use super::repo::{self, Aggregate};
@@ -36,6 +36,7 @@ use crate::domain::exchange::Counterparty;
 use crate::domain::revision::Slot;
 use crate::error::{ApiError, ErrorCode};
 use crate::http::extract::Session;
+use crate::review;
 
 /// How much one answer may hold.
 #[derive(Clone, Debug)]
@@ -311,13 +312,20 @@ pub async fn history(
     let mut tx = snapshot(db).await?;
     let (you, parties) = party(&mut tx, exchange, session.account_id).await?;
     let stretch = Stretch::Before(before.unwrap_or(i64::MAX));
-    let (events, more) = events(&mut tx, exchange, stretch, limit).await?;
+    let (mut events, more) = events(&mut tx, exchange, stretch, limit).await?;
+
+    // What a reviewer hid from the reader reads as a placeholder.
+    let hidden = review::hidden_text(&mut tx, exchange, session.account_id).await?;
+    if let Some(placeholder) = &hidden {
+        review::hide_in_events(&mut events, placeholder);
+    }
 
     Ok(HistoryPage {
         you,
         parties,
         earlier: events.first().map(|first| first.sequence).filter(|_| more),
         events,
+        content_hidden: hidden.is_some(),
     })
 }
 
@@ -741,6 +749,19 @@ pub async fn record(
         events_after: 0,
     };
 
+    let mut contributions = contributions(&mut tx, &aggregate).await?;
+    let (mut revisions, mut events) = (revisions, events);
+    // What a reviewer hid from the reader reads as a placeholder, in this
+    // copy too: it is the reader's.
+    let hidden = review::hidden_text(&mut tx, exchange, session.account_id).await?;
+    if let Some(placeholder) = &hidden {
+        review::hide_in_events(&mut events, placeholder);
+        review::hide_in_revisions(&mut revisions, placeholder);
+        for contribution in &mut contributions {
+            contribution.description = placeholder.clone();
+        }
+    }
+
     Ok(RecordDocument {
         format: FORMAT.to_owned(),
         format_version: FORMAT_VERSION,
@@ -750,7 +771,7 @@ pub async fn record(
         prepared_for: you,
         exchange: standing(&mut tx, &aggregate).await?,
         parties,
-        contributions: contributions(&mut tx, &aggregate).await?,
+        contributions,
         revisions,
         events,
         part: Part {
@@ -758,7 +779,50 @@ pub async fn record(
             from,
             next,
         },
+        content_hidden: hidden.is_some().then_some(true),
     })
+}
+
+/// The record of an exchange as a reviewer reads it (`crate::review`): its
+/// beginning, as much as one document holds, with nothing hidden and for
+/// neither party. Whether the reviewer may read it at all is the caller's
+/// to decide. `language` is the reviewer's, for the descriptions of how
+/// each signer was checked.
+pub async fn for_review(
+    conn: &mut PgConnection,
+    exchange: Uuid,
+    language: &str,
+    limits: &Limits,
+) -> Result<Option<ReviewRecord>, sqlx::Error> {
+    let Some(aggregate) = repo::load(conn, exchange, false).await? else {
+        return Ok(None);
+    };
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT slot, display_name FROM participant WHERE exchange_id = $1")
+            .bind(exchange)
+            .fetch_all(&mut *conn)
+            .await?;
+    let mut parties = Parties {
+        a: String::new(),
+        b: String::new(),
+    };
+    for (held, name) in rows {
+        match slot(&held) {
+            Slot::A => parties.a = name,
+            Slot::B => parties.b = name,
+        }
+    }
+    let (_, wording) = notices::wording(language);
+    let (revisions, more_revisions) = revisions(conn, &aggregate, 0, limits, wording).await?;
+    let (events, more_events) = events(conn, exchange, Stretch::After(0), limits.events).await?;
+    Ok(Some(ReviewRecord {
+        exchange: standing(conn, &aggregate).await?,
+        parties,
+        contributions: contributions(conn, &aggregate).await?,
+        revisions,
+        events,
+        complete: !more_revisions && !more_events,
+    }))
 }
 
 #[cfg(test)]

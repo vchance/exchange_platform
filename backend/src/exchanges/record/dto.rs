@@ -262,6 +262,12 @@ pub struct HistoryPage {
     /// Set when there is history before this page: pass it as `before` to
     /// read the page before.
     pub earlier: Option<i64>,
+    /// A reviewer has hidden what the parties wrote in this exchange from
+    /// the reader: every note in this page reads as the same placeholder, in
+    /// the reader's language (DESIGN.md §9). Always sent; a client may read
+    /// its absence as `false`.
+    #[schema(required = false)]
+    pub content_hidden: bool,
 }
 
 // ---- The record -------------------------------------------------------------
@@ -545,4 +551,26 @@ pub struct RecordDocument {
     /// Everything that happened, oldest first.
     pub events: Vec<RecordEvent>,
     pub part: Part,
+    /// Set when a reviewer has hidden what the parties wrote in this
+    /// exchange from the reader (DESIGN.md §9). The terms, the descriptions,
+    /// the criteria and every note then read as one placeholder, in
+    /// `language`, in this copy, `signed` included, so a fingerprint no longer
+    /// matches what is shown. The record itself is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_hidden: Option<bool>,
+}
+
+/// The record of an exchange as a reviewer reads it while a report about
+/// it is open: everything a party's copy holds, for neither party, and with
+/// nothing hidden.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ReviewRecord {
+    pub exchange: RecordExchange,
+    pub parties: Parties,
+    pub contributions: Vec<RecordContribution>,
+    pub revisions: Vec<RecordRevision>,
+    pub events: Vec<RecordEvent>,
+    /// False when the record is longer than one document holds; what is
+    /// here is its beginning.
+    pub complete: bool,
 }

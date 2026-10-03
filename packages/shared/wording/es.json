@@ -163,6 +163,10 @@
         "subject": "{code} es tu código para eliminar tu cuenta de {productName}",
         "body": "Escribe {code} para confirmar que quieres eliminar tu cuenta de {productName}. El código sirve una sola vez y caduca en unos minutos. No sirve para iniciar sesión.\n\nSi no pediste eliminar tu cuenta, ignora este correo y nada cambiará. Nadie de {productName} te pedirá nunca este código."
       }
+    },
+    "staffAlert": {
+      "subject": "Hay una denuncia pendiente de revisión",
+      "body": "Hay una nueva denuncia en {productName} pendiente de revisión. Cada denuncia se revisa en menos de 24 horas.\n\nAbre la cola de revisión: {link}\n\nRecibes este correo porque revisas denuncias en {productName}. Nunca dice de qué trata una denuncia; inicia sesión para leerla."
     }
   },
   "push": {
@@ -524,6 +528,99 @@
     "blockedEmpty": "No has bloqueado a nadie.",
     "blockedSince": "Bloqueo del {date}"
   },
+  "staff": {
+    "title": "Denuncias por revisar",
+    "intro": "Cada denuncia se revisa en menos de {hours} horas. Solo quienes revisan pueden abrir esta página.",
+    "queueHeading": "Denuncias abiertas",
+    "queueEmpty": "No hay denuncias pendientes.",
+    "reportLink": "Denuncia sobre {code}",
+    "reportLinkNoYup": "Denuncia sin yup",
+    "waiting": "Esperando desde hace {hours, plural, one {# hora} other {# horas}}",
+    "waitingMinutes": "Esperando desde hace {minutes, plural, one {# minuto} other {# minutos}}",
+    "overdue": "Atrasada",
+    "reason": "Motivo",
+    "details": "Lo que escribió quien denuncia",
+    "noDetails": "No dio detalles.",
+    "reporter": "Denunciada por",
+    "reporterLink": "Alguien con el enlace de invitación, sin iniciar sesión",
+    "subject": "Persona denunciada",
+    "account": "Cuenta {id}",
+    "nameInYup": "Llamada {name} en el yup",
+    "standing": {
+      "ACTIVE": "Activa",
+      "SUSPENDED": "Suspendida",
+      "DELETED": "Eliminada"
+    },
+    "filed": "Enviada el {date}",
+    "back": "Volver a la cola",
+    "detailTitle": "Denuncia sobre {code}",
+    "decisionHeading": "Decisión",
+    "decisionIntro": "A la persona denunciada no se le avisa de la denuncia. Tu decisión y tu nota quedan en el historial de revisión.",
+    "outcomes": {
+      "DISMISSED": "Descartar",
+      "CONTENT_HIDDEN": "Ocultar contenido",
+      "ACCOUNT_SUSPENDED": "Suspender cuenta",
+      "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED": "Ocultar y suspender"
+    },
+    "outcomeText": {
+      "DISMISSED": "Nada cambia para ninguna de las partes, y la denuncia se cierra.",
+      "CONTENT_HIDDEN": "Para la persona denunciada, todo lo escrito en este yup dice “Oculto por revisión”, y ya no puede firmar ni cambiar sus términos. Todavía puede terminarlo. Lo que ve quien denunció no cambia.",
+      "ACCOUNT_SUSPENDED": "La persona denunciada pierde la sesión en todas partes y no puede volver a iniciarla. Sus yups quedan como están, y la otra parte todavía puede terminarlos.",
+      "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED": "Las dos cosas: el contenido de este yup se oculta a la persona denunciada, y su cuenta se suspende."
+    },
+    "outcomeDone": {
+      "DISMISSED": "Denuncia descartada.",
+      "CONTENT_HIDDEN": "Contenido oculto.",
+      "ACCOUNT_SUSPENDED": "Cuenta suspendida.",
+      "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED": "Contenido oculto y cuenta suspendida."
+    },
+    "outcomeNames": {
+      "DISMISSED": "Descartada",
+      "CONTENT_HIDDEN": "Contenido oculto",
+      "ACCOUNT_SUSPENDED": "Cuenta suspendida",
+      "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED": "Contenido oculto y cuenta suspendida"
+    },
+    "noteLabel": "Nota para el historial de revisión",
+    "noteOptionalLabel": "Nota para el historial de revisión (opcional)",
+    "noteRequired": "Escribe una nota que explique por qué.",
+    "confirm": "Confirmar",
+    "recordHeading": "El yup tal como está registrado",
+    "recordIncomplete": "Este registro es largo; solo se muestra el principio.",
+    "noRecord": "Esta denuncia no trata de un yup.",
+    "contentHidden": "El contenido de este yup está oculto para la persona denunciada.",
+    "otherReportsHeading": "Otras denuncias sobre este yup",
+    "status": {
+      "OPEN": "Abierta",
+      "DISMISSED": "Descartada",
+      "ACTIONED": "Con medidas"
+    },
+    "historyHeading": "Historial de revisión",
+    "historyEmpty": "Nada todavía.",
+    "actions": {
+      "REPORT_VIEWED": "Abierta",
+      "REPORT_DISMISSED": "Descartada",
+      "CONTENT_HIDDEN": "Contenido oculto",
+      "CONTENT_RESTORED": "Contenido visible de nuevo",
+      "ACCOUNT_SUSPENDED": "Cuenta suspendida",
+      "SUSPENSION_LIFTED": "Suspensión levantada",
+      "STAFF_GRANTED": "Ahora revisa denuncias",
+      "STAFF_REVOKED": "Ya no revisa denuncias"
+    },
+    "byReviewer": "{date}, por la cuenta {id}",
+    "byOwner": "{date}, por la persona responsable desde la línea de comandos",
+    "suspensionsHeading": "Cuentas suspendidas",
+    "suspensionsEmpty": "No hay cuentas suspendidas.",
+    "suspendedSince": "Suspendida el {date}",
+    "lift": "Levantar suspensión",
+    "liftText": "Puede volver a iniciar sesión. Las sesiones que tenía siguen cerradas.",
+    "lifted": "Suspensión levantada.",
+    "hiddenHeading": "Contenido oculto",
+    "hiddenEmpty": "No hay contenido oculto.",
+    "hiddenSince": "Oculto el {date}",
+    "restore": "Mostrar de nuevo",
+    "restoreText": "Vuelve a ver todo lo escrito en este yup, y puede firmar y cambiar sus términos.",
+    "restored": "Contenido visible de nuevo."
+  },
   "mobile": {
     "back": "Atrás",
     "openInvitation": {
@@ -674,7 +771,8 @@
     },
     "waitingLong": "{name} no ha confirmado esto desde que lo marcaste como entregado el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrarlo sin acuerdo; el registro mostrará entonces esto como entregado pero sin confirmar.",
     "waitingLongMoney": "{name} no ha confirmado haber recibido esto desde que registraste el pago el {date}. Si nunca lo hace, se queda así. Puedes pedir cerrarlo sin acuerdo; el registro mostrará entonces esto como pagado pero sin confirmar.",
-    "closeRequestLapses": "Si nada cambia, se cierra el {date}."
+    "closeRequestLapses": "Si nada cambia, se cierra el {date}.",
+    "contentHidden": "Parte de este yup se ocultó tras una revisión. Todavía puedes rechazar o retirar una propuesta, marcar elementos y cerrar el yup, pero no puedes firmar ni cambiar sus términos."
   },
   "wallet": {
     "intro": "Guarda este acuerdo en la cartera de tu teléfono. El pase muestra cómo va y enlaza aquí; sus términos se quedan en {productName}.",
@@ -728,6 +826,7 @@
     "openHint": "Todo lo que se envió, se firmó y se registró, para leerlo, imprimirlo o descargarlo.",
     "title": "Registro {code}",
     "back": "Volver al yup",
+    "contentHidden": "Parte de este registro se ocultó tras una revisión.",
     "print": "Imprimir o guardar como PDF",
     "download": "Descargar una copia (JSON)",
     "fileName": "registro-de-acuerdo-{code}",
@@ -860,7 +959,8 @@
       "verification": {
         "EMAIL_OTP": "Un solo código de un solo uso enviado a una dirección de correo electrónico. No se comprobó nada más sobre quien firmó.",
         "PHONE_OTP": "Un solo código de un solo uso enviado por mensaje de texto a un número de teléfono. No se comprobó nada más sobre quien firmó."
-      }
+      },
+      "hidden": "Oculto por revisión"
     },
     "summary": {
       "heading": "En resumen",
@@ -948,7 +1048,10 @@
     "NOT_FOUND": "No pudimos encontrar eso.",
     "SERVICE_UNAVAILABLE": "El servicio no está disponible temporalmente. Inténtalo de nuevo en unos momentos.",
     "INTERNAL": "Algo salió mal de nuestro lado. Inténtalo de nuevo.",
-    "WALLET_UNAVAILABLE": "Los pases para esta cartera aún no están disponibles."
+    "WALLET_UNAVAILABLE": "Los pases para esta cartera aún no están disponibles.",
+    "SESSION_TOO_OLD": "Esta página requiere haber iniciado sesión en las últimas 12 horas. Cierra sesión y vuelve a iniciarla.",
+    "CONTENT_HIDDEN": "Parte de este yup se ocultó tras una revisión, así que sus términos no se pueden firmar ni cambiar.",
+    "REPORT_RESOLVED": "Esta denuncia ya se resolvió."
   },
   "a11y": {
     "openExchange": "Abre este yup.",

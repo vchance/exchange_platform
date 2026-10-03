@@ -69,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 metrics::render_pool(&mut text, &db);
                 metrics::render_outbox(&mut text, &db, max_attempts).await;
+                metrics::render_reports(&mut text, &db).await;
                 text.finish()
             }
         })

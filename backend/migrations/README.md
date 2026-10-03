@@ -133,6 +133,21 @@ The application role may read, add, change and remove rows in both new tables: t
 
 Harder-to-starve limits on text messages (README, "Signing in"). `sign_in_limit` may also hold `sms-sent-by-prefix`, the codes sent by text message per number prefix (the country code and the three digits after it, the area code for `+1`) under `SMS_MAX_PER_PREFIX_PER_HOUR`, its subject a keyed hash of the prefix; and, for the metrics, `sms-refused-prefix` and `sms-refused-country`, the codes refused under that cap and those refused because the number's country is not in `SMS_ALLOWED_COUNTRY_CODES`, each for the whole service. Since this change `sms-sent` counts only messages the provider took: a place is taken before a message is handed over and given back if the provider refuses it. No table or grant changes.
 
+## 0014_staff_review
+
+Staff review of abuse reports (`DESIGN.md` §9, §18 item 5; [docs/operations.md](../../docs/operations.md), "Reviewing reports").
+
+- **`staff_member`**: the accounts that review reports. The application role may only read it; the `staff` command writes it with the owner's connection, so no API request can make anyone a reviewer.
+- **`report`** gains its resolution: `resolved_by` (the reviewer), `outcome` (`DISMISSED`, `CONTENT_HIDDEN`, `ACCOUNT_SUSPENDED`, `CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED`) and `resolution_note`, set together with `resolved_at`, and agreeing with `status`. A trigger refuses any change to a report once it is resolved, and any change to what was reported; another refuses removing reports, for every role.
+- **`review_event`**: the audit history. Every report opened, every decision and every undoing by a reviewer, and every grant and revoke from the command line, with who, when, the report, exchange and account concerned, and the note. Append-only like the agreement history: the application role may read and add, and a trigger refuses `UPDATE`, `DELETE` and `TRUNCATE` for every role.
+- **`hidden_content`**: an exchange's content hidden from one account by a reviewer, until it is shown again. Working state: the application role may read, add and remove rows.
+
+**Why resolution on the report and history apart.** The report row answers "how did this end" in one place, set once. Everything else, including looking again later, is a new event, so nothing is ever edited. A separate table of reviews per report would have held the same thing as the events, less completely: views, suspensions lifted and content shown again are not reviews of one report, but belong in the same history.
+
+The link an unsigned report came through (§18 item 5) is not added: the owner decided on 3 October 2026 that reading a proposal needs signing in, which leaves reports made without an account to the past; a reviewer sees such a report as made "through the invitation link", and the exchange it names is the link's.
+
+`backend/tests/schema.rs` checks the grants, checks and triggers; `backend/tests/review.rs` everything through the API and the command.
+
 ## 0015_deletion_log
 
 The deletion log ([docs/operations.md](../../docs/operations.md), "Replaying deletions"). **`deletion_log`** holds one row per deleted account, its ID and when it was deleted, and nothing else; the row is written in the transaction that deletes the account. `scripts/backup.sh` exports it beside every backup, and `scripts/replay-deletions.sh` applies it to a restored copy, so that a restore does not bring back accounts deleted since its backup. Accounts deleted before this migration are added with the time it ran.

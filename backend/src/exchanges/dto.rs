@@ -413,6 +413,14 @@ pub struct ExchangeView {
     /// The viewer's own unsent working copy.
     #[schema(value_type = Option<Object>)]
     pub draft: Option<serde_json::Value>,
+    /// A reviewer has hidden what the parties wrote in this exchange from
+    /// the viewer (DESIGN.md §9): the terms, the descriptions, the criteria
+    /// and the messages read as one placeholder in the viewer's language,
+    /// there is no working copy, and signing or sending terms is refused
+    /// with `CONTENT_HIDDEN`. Always sent; a client may read its absence as
+    /// `false`.
+    #[schema(required = false)]
+    pub content_hidden: bool,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -568,6 +576,7 @@ impl ExchangeView {
                 .and_then(|request| request.at.checked_add(rules.close_response_window))
                 .map(rfc3339),
             draft,
+            content_hidden: false,
         }
     }
 }

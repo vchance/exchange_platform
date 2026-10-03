@@ -38,6 +38,8 @@ const DeleteAccount = lazy(() => import('../screens/DeleteAccount'))
 const ExchangePage = lazy(() => import('../screens/ExchangePage'))
 const RecordPage = lazy(() => import('../screens/RecordPage'))
 const HelpPage = lazy(() => import('../screens/HelpPage'))
+// Reviewers only, and English only is acceptable for it (DESIGN.md §9).
+const StaffPage = lazy(() => import('../screens/StaffPage'))
 
 interface Props {
   initialLanguage: Language
@@ -219,6 +221,19 @@ function Shell({ outdated }: { outdated: boolean }) {
     case 'help':
       // Open to anyone, signed in or not.
       page = <HelpPage key={route.topic ?? ''} topic={route.topic} />
+      break
+    case 'staff':
+    case 'staffReport':
+      // For reviewers only: to anyone else the service answers "not found",
+      // and so does the page. Nothing in the app links here.
+      page = (
+        <Gate>
+          <StaffPage
+            key={route.name === 'staffReport' ? route.id : ''}
+            report={route.name === 'staffReport' ? route.id : null}
+          />
+        </Gate>
+      )
       break
     default:
       page = <NotFound />

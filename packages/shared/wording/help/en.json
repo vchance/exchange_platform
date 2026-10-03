@@ -162,7 +162,18 @@
         { "p": "Nothing we show tells them that you blocked them: an invitation link from you stops working for them the same way a used or expired link does. Someone set on finding out could still work it out, for example with a second account." },
         { "p": "Your blocks are listed on your account page, under “People you’ve blocked”, where you can lift them." },
         { "h": "Reporting" },
-        { "p": "Report a yup or a proposal if something is wrong, such as harassment, a scam, something illegal, someone pretending to be someone else, or someone under 18. The person you report isn’t told. A report changes nothing in the yup itself; block the person as well if you want to stop dealing with them." }
+        { "p": "Report a yup or a proposal if something is wrong, such as harassment, a scam, something illegal, someone pretending to be someone else, or someone under 18. The person you report isn’t told that you reported them." },
+        { "h": "What happens to a report" },
+        { "p": "Every report is read by one of a small team of reviewers named by Yuppers, within a day of being sent. A reviewer sees what you wrote in the report and, while the report is open, everything in the yup it is about: its terms, its history and its record. Nobody else sees your report." },
+        { "p": "A reviewer can:" },
+        {
+          "ul": [
+            "Close the report without doing anything else.",
+            "Hide what was written in the yup from the person you reported. In its place they see “Hidden by review”, and they can no longer sign the yup or change its terms, though they can still end it. What you see doesn’t change.",
+            "Suspend the person’s account. They are signed out and can’t sign in again. Your yups with them stay as they are, and you can still end them."
+          ]
+        },
+        { "p": "What a reviewer looked at and decided, and why, is kept on record. You aren’t told the outcome. The person you reported isn’t told about the report, though they may notice hidden content or a suspension. A report doesn’t end or change your yup by itself; block the person as well if you want to stop dealing with them." }
       ]
     },
     "deleting": {

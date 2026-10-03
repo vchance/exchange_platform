@@ -363,6 +363,40 @@ pub async fn render_outbox(text: &mut Text, pool: &PgPool, max_attempts: i32) {
     }
 }
 
+// ---- Reports -----------------------------------------------------------------
+
+/// The abuse reports waiting for review, and how long the oldest has waited
+/// (DESIGN.md §9: every report is reviewed within 24 hours). Read at each
+/// scrape, like the outbox, and reported by the API and the worker both.
+/// Says nothing when the database cannot be read; `yuppers_database_up`
+/// already does.
+pub async fn render_reports(text: &mut Text, pool: &PgPool) {
+    // Only open reports, which the partial index `report_open_idx` holds.
+    let state: Result<(i64, Option<f64>), sqlx::Error> = sqlx::query_as(
+        "SELECT count(*), EXTRACT(EPOCH FROM now() - min(created_at))::float8
+         FROM report WHERE status = 'OPEN'",
+    )
+    .fetch_one(pool)
+    .await;
+    match state {
+        Ok((open, oldest)) => {
+            text.single(
+                "yuppers_reports_open",
+                Kind::Gauge,
+                "Abuse reports waiting for review.",
+                open as f64,
+            );
+            text.single(
+                "yuppers_reports_oldest_open_age_seconds",
+                Kind::Gauge,
+                "How long the oldest open report has waited since it was made; 0 when none is open.",
+                oldest.unwrap_or(0.0).max(0.0),
+            );
+        }
+        Err(error) => tracing::warn!(%error, "metrics could not read the reports"),
+    }
+}
+
 // ---- Text messages ---------------------------------------------------------
 
 /// The one-time codes sent by text message in the current hour, by the whole

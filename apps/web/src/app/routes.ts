@@ -21,6 +21,10 @@ export type Route =
   | { name: 'record'; id: string }
   /** The help pages: the list of topics, or one topic, which may not exist. */
   | { name: 'help'; topic: string | null }
+  /** Staff review of abuse reports: the queue. Nothing links here; to anyone but a reviewer it is not found. */
+  | { name: 'staff' }
+  /** One report, opened for review. */
+  | { name: 'staffReport'; id: string }
   | { name: 'notFound' }
 
 const UUID = '[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}'
@@ -31,6 +35,7 @@ const REVISE = new RegExp(`^/exchanges/(${UUID})/revise$`)
 const RECORD = new RegExp(`^/exchanges/(${UUID})/record$`)
 const INVITATION = new RegExp(`^/(${LANGUAGE_TAG})/i$`)
 const HELP_TOPIC = /^\/help\/([a-z0-9-]+)$/
+const STAFF_REPORT = new RegExp(`^/staff/reports/(${UUID})$`)
 
 export function matchRoute(pathname: string): Route {
   // A static host may answer `/en/i` at `/en/i/`.
@@ -40,6 +45,9 @@ export function matchRoute(pathname: string): Route {
   if (path === '/help') return { name: 'help', topic: null }
   const help = HELP_TOPIC.exec(path)
   if (help) return { name: 'help', topic: help[1] }
+  if (path === '/staff') return { name: 'staff' }
+  const staffReport = STAFF_REPORT.exec(path)
+  if (staffReport) return { name: 'staffReport', id: staffReport[1].toLowerCase() }
 
   const invitation = INVITATION.exec(path)
   if (invitation) return { name: 'invitation', language: invitation[1] }
@@ -59,6 +67,8 @@ export const paths = {
   revise: (id: string) => `/exchanges/${id}/revise`,
   record: (id: string) => `/exchanges/${id}/record`,
   help: helpPath,
+  staff: '/staff',
+  staffReport: (id: string) => `/staff/reports/${id}`,
   /**
    * The link an initiator shares. The token goes in the fragment, which a
    * browser never sends, so it cannot end up in a server log; the path names

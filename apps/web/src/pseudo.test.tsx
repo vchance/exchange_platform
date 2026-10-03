@@ -18,8 +18,10 @@ import {
   GOOD_CODE,
   INVITATION,
   OFFER,
+  REPORT,
   STAND_IN_TEXT,
   ana,
+  rita,
 } from './test/fake-service'
 import { button, field, press, settle, start, stop, type, until } from './test/harness'
 
@@ -190,6 +192,24 @@ describe('every word on the main web screens comes from the wording', () => {
         await until(() => document.querySelector('.record-plain') !== null, 'the summary')
         await check()
       }
+    })
+    expect(found).toEqual([])
+  })
+
+  test('staff review: the queue, a report and its decision', async () => {
+    const found = await screens(async (check) => {
+      await start('/staff', rita, pseudo)
+      await h1(pseudo.staff.title)
+      await until(() => document.querySelectorAll('.card').length >= 3, 'the queue')
+      await check()
+      await press(button(pseudo.staff.lift))
+      await check()
+      await start(`/staff/reports/${REPORT}`, rita, pseudo)
+      await until(() => document.querySelector('.history') !== null, 'the record')
+      await check()
+      await press(button(pseudo.staff.outcomes.CONTENT_HIDDEN))
+      await press(button(pseudo.staff.confirm))
+      await check()
     })
     expect(found).toEqual([])
   })

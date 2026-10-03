@@ -37,6 +37,7 @@ use crate::domain::reminder;
 use crate::domain::revision::ContributionId;
 use crate::error::Redacted;
 use crate::exchanges::reminders;
+use crate::review;
 
 /// The numbers behind delivery. Placeholders: none of these is a recorded
 /// design decision yet.
@@ -401,6 +402,9 @@ async fn prepare(
     // A row this build cannot read may have been written by a newer one, so
     // it is retried like any failure and, at worst, left for inspection.
     let unreadable = || Attempt::Failed(format!("unreadable payload: {payload}"));
+    if payload["staff"].as_str() == Some(review::ALERT_PAYLOAD) {
+        return staff_alert(conn, delivery, row).await;
+    }
     let Some(notice) = payload["notice"].as_str().and_then(Notice::parse) else {
         return Ok(Err(unreadable()));
     };
@@ -464,6 +468,37 @@ async fn prepare(
         record: &format!("{link}/record"),
     };
     let rendered = delivery.wording.email(&language, notice, &code, links);
+    Ok(Ok(Email {
+        to,
+        subject: rendered.subject,
+        body: rendered.body,
+        html: Some(rendered.html),
+        reference: row.id,
+    }))
+}
+
+/// The email telling a reviewer that a report is waiting (`crate::review`).
+/// Sent only to someone who is still a reviewer and can still be emailed.
+async fn staff_alert(
+    conn: &mut PgConnection,
+    delivery: &Delivery,
+    row: Row<'_>,
+) -> Result<Result<Email, Attempt>, sqlx::Error> {
+    let account: Option<(Option<String>, String)> = sqlx::query_as(
+        "SELECT a.email, a.language FROM account a
+         JOIN staff_member s ON s.account_id = a.id
+         WHERE a.id = $1 AND a.status = 'ACTIVE'",
+    )
+    .bind(row.recipient)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some((Some(to), language)) = account else {
+        return Ok(Err(Attempt::Dropped(
+            "not sent: the recipient is no longer a reviewer who can be emailed",
+        )));
+    };
+    let link = format!("{}/staff", delivery.web_origin);
+    let rendered = delivery.wording.staff_alert(&language, &link);
     Ok(Ok(Email {
         to,
         subject: rendered.subject,

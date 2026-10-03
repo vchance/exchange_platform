@@ -52,6 +52,10 @@ struct Notifications {
     /// the message says what the code does.
     #[serde(rename = "oneTimeCode")]
     one_time_code: CodeWording,
+    /// The email that tells a reviewer a report is waiting
+    /// (`crate::review`). It says nothing about the report.
+    #[serde(rename = "staffAlert")]
+    staff_alert: Message,
 }
 
 #[derive(Deserialize)]
@@ -349,6 +353,64 @@ impl Wording {
     }
 }
 
+impl Wording {
+    /// The email that tells a reviewer a report is waiting, in `language`
+    /// where that language has wording and in the default language
+    /// otherwise. It names no report, exchange or person, and links to the
+    /// review screen, which asks the reader to sign in.
+    pub fn staff_alert(&self, language: &str, link: &str) -> Rendered {
+        let (language, file) = languages::resolve_among(self.supported, language)
+            .and_then(|language| self.languages.get_key_value(language))
+            .or_else(|| self.languages.get_key_value(self.default))
+            .expect("the default language has wording; checked when loading");
+        let message = &file.notifications.staff_alert;
+        let values = [("productName", file.product_name.as_str()), ("link", link)];
+        let subject = fill(&message.subject, &values);
+
+        // A paragraph that ends in the link becomes a button, as in the
+        // notification layout; what follows it is small print.
+        let markup = [
+            ("productName", Value::Text(&file.product_name)),
+            ("link", Value::Link(link)),
+        ];
+        let (mut main, mut small_print, mut past_link) = (String::new(), String::new(), false);
+        for part in message.body.split("\n\n") {
+            let label = part
+                .trim_end()
+                .strip_suffix("{link}")
+                .map(|before| {
+                    fill(before, &values)
+                        .trim_end_matches(|c: char| {
+                            c.is_whitespace() || matches!(c, ':' | '：' | '-' | '–' | '—')
+                        })
+                        .to_owned()
+                })
+                .filter(|label| !label.is_empty());
+            if let Some(label) = label {
+                main.push_str(&html::button(&label, link));
+                past_link = true;
+            } else if past_link {
+                small_print.push_str(&html::small_print(&fill_html(part, &markup)));
+            } else {
+                main.push_str(&html::paragraph(&fill_html(part, &markup)));
+            }
+        }
+        let html = html::page(&html::Page {
+            language,
+            direction: languages::direction(language),
+            product: &file.product_name,
+            heading: &subject,
+            main: &main,
+            small_print: &small_print,
+        });
+        Rendered {
+            subject,
+            body: fill(&message.body, &values),
+            html,
+        }
+    }
+}
+
 /// A piece of a template: text as written, or a variable that has a value.
 enum Piece<'t, V> {
     Text(&'t str),
@@ -554,6 +616,7 @@ mod tests {
             "notifications": {
                 "email": { "layout": "{body} {link}", "messages": messages },
                 "oneTimeCode": { "signIn": code("sign-in"), "deleteAccount": code("delete") },
+                "staffAlert": { "subject": format!("{product} review"), "body": "Waiting.\n\nOpen: {link}" },
             },
             "push": { "body": format!("{product} news") },
             "sms": { "signIn": "{code} in", "deleteAccount": "{code} out" },
@@ -711,7 +774,8 @@ mod tests {
         for (at, _) in html.match_indices("href=\"") {
             let target = &html[at + 6..];
             assert!(
-                target.starts_with("https://app.test/exchanges/7"),
+                target.starts_with("https://app.test/exchanges/7")
+                    || target.starts_with("https://app.test/staff\""),
                 "{language} {what}: a link to {}",
                 &target[..target.find('"').unwrap()]
             );
@@ -779,6 +843,29 @@ mod tests {
                 assert!(!email.html.contains("href"), "no link in a code email");
             }
         }
+    }
+
+    #[test]
+    fn the_staff_alert_says_only_that_a_report_waits_in_every_language() {
+        let wording = Wording::embedded().unwrap();
+        let link = "https://app.test/staff";
+        for language in languages::supported() {
+            let email = wording.staff_alert(language, link);
+            check_html(language, "staff alert", &email);
+            assert!(email.body.contains(link), "{language}: the link");
+            assert!(
+                email.html.contains(&format!("<a href=\"{link}\"")),
+                "{language}: the button"
+            );
+            assert!(
+                !email.body.contains('{'),
+                "{language}: every variable filled"
+            );
+        }
+        assert_eq!(
+            wording.staff_alert("en", link).subject,
+            "A report is waiting for review"
+        );
     }
 
     #[test]

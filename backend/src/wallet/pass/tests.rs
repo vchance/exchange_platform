@@ -104,6 +104,7 @@ fn view() -> ExchangeView {
         close_requested_at: None,
         close_request_lapses_at: None,
         draft: None,
+        content_hidden: false,
     }
 }
 

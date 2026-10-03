@@ -37,6 +37,27 @@ export const ana: Account = {
   email: 'ana@example.test',
 }
 
+/** A reviewer of abuse reports (DESIGN.md §9). Only she gets anything but "not found" from the staff paths. */
+export const rita: Account = {
+  id: 'a0000000-0000-4000-8000-000000000009',
+  display_name: 'Rita Reviewer',
+  adult_confirmed: true,
+  language: 'en',
+  email: 'rita@example.test',
+}
+
+/** A reviewer whose sign-in is more than twelve hours old. */
+export const staleRita: Account = { ...rita, id: 'a0000000-0000-4000-8000-00000000000a' }
+
+/** A report another reviewer has already resolved. */
+export const RESOLVED_REPORT = 'f0000000-0000-4000-8000-000000000003'
+
+/** An open report about the agreement in force, filed by Ben about Ana. */
+export const REPORT = 'f0000000-0000-4000-8000-000000000001'
+/** An open report older than a day. */
+export const OLD_REPORT = 'f0000000-0000-4000-8000-000000000002'
+const BEN_ID = 'b0000000-0000-4000-8000-000000000002'
+
 const PARTIES = { A: 'Ana Ruiz', B: 'Ben Ortiz' }
 
 /**
@@ -66,6 +87,9 @@ export const STAND_IN_TEXT: readonly string[] = [
   'described by the record',
   // The version of the consent wording a signature was given under.
   'draft-1',
+  // What a reporter and a reviewer wrote.
+  'She threatened me in a note.',
+  'Threats in the notes.',
 ]
 
 export const revision: RevisionView = {
@@ -498,6 +522,94 @@ export function fakeService(account: Account | null): FakeService {
   return service
 }
 
+function queuedReport(id: string, hours: number, overdue: boolean) {
+  return {
+    id,
+    created_at: '2026-10-22T09:00:00Z',
+    age_seconds: hours * 3600,
+    overdue,
+    reason: overdue ? ('SCAM' as const) : ('HARASSMENT' as const),
+    details: overdue ? null : 'She threatened me in a note.',
+    reporter_account_id: overdue ? null : BEN_ID,
+    subject_account_id: ana.id,
+    exchange_id: ACTIVE,
+    display_code: 'PVVS-5Q2K',
+  }
+}
+
+/** The staff review calls, for a reviewer. */
+function staff(call: string): [number, unknown] | null {
+  if (call === 'GET /v1/staff/reports') {
+    return [
+      200,
+      {
+        review_within_hours: 24,
+        reports: [queuedReport(OLD_REPORT, 30, true), queuedReport(REPORT, 2, false)],
+      },
+    ]
+  }
+  if (call === `GET /v1/staff/reports/${REPORT}`) {
+    const document = record(activeExchange())
+    return [
+      200,
+      {
+        report: queuedReport(REPORT, 2, false),
+        reporter: { id: BEN_ID, status: 'ACTIVE', party: 'B', name: PARTIES.B },
+        subject: { id: ana.id, status: 'ACTIVE', party: 'A', name: PARTIES.A },
+        content_hidden: false,
+        record: {
+          exchange: document.exchange,
+          parties: document.parties,
+          contributions: document.contributions,
+          revisions: document.revisions,
+          events: document.events,
+          complete: true,
+        },
+        other_reports: [
+          {
+            id: OLD_REPORT,
+            created_at: '2026-10-21T09:00:00Z',
+            reason: 'SCAM',
+            status: 'OPEN',
+            outcome: null,
+          },
+        ],
+        history: [
+          {
+            id: 1,
+            action: 'REPORT_VIEWED',
+            staff_account_id: rita.id,
+            at: '2026-10-22T10:00:00Z',
+            note: null,
+            report_id: REPORT,
+            exchange_id: ACTIVE,
+            account_id: ana.id,
+          },
+        ],
+      },
+    ]
+  }
+  if (call === `POST /v1/staff/reports/${REPORT}/resolution`) return [204, null]
+  if (call === `GET /v1/staff/reports/${RESOLVED_REPORT}`) return [409, { code: 'REPORT_RESOLVED' }]
+  if (call === 'GET /v1/staff/suspensions') {
+    return [
+      200,
+      [
+        {
+          account_id: BEN_ID,
+          name: PARTIES.B,
+          suspended_at: '2026-10-20T09:00:00Z',
+          note: 'Threats in the notes.',
+          report_id: OLD_REPORT,
+        },
+      ],
+    ]
+  }
+  if (call === `POST /v1/staff/suspensions/${BEN_ID}/lift`) return [204, null]
+  if (call === 'GET /v1/staff/hidden') return [200, []]
+  return null
+}
+
 function respond(service: FakeService, call: string, body: unknown): [number, unknown] {
   if (call === 'GET /v1/meta') {
     return [
@@ -550,6 +662,11 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
   }
   if (call === 'GET /v1/exchanges') return [200, exchanges().map(summary)]
   if (call === 'GET /v1/blocks') return [200, []]
+  // To anyone but a reviewer, every staff path is not found.
+  if (call.includes(' /v1/staff/')) {
+    if (service.account.id === staleRita.id) return [401, { code: 'SESSION_TOO_OLD' }]
+    return (service.account.id === rita.id && staff(call)) || [404, { code: 'NOT_FOUND' }]
+  }
   for (const exchange of [...exchanges(), ...others()]) {
     const at = `/v1/exchanges/${exchange.id}`
     if (call === `GET ${at}`) return [200, exchange]

@@ -620,6 +620,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/hidden": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Staff only. Content hidden by review, most recently hidden first. */
+        get: operations["hidden"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/hidden/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Staff only. Shows hidden content to the account again. A note is
+         *     required.
+         */
+        post: operations["restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Staff only. The open reports, oldest first, each with its age. */
+        get: operations["queue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/reports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Staff only. Opens an open report: what it says, who it is about, the
+         *     reported exchange's record with nothing hidden, and what review has done
+         *     so far. Recorded in the audit history. A resolved report shows nothing
+         *     more.
+         */
+        get: operations["open_report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/reports/{id}/resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Staff only. Resolves an open report, once: dismissed, the exchange's
+         *     content hidden from the person reported, their account suspended, or
+         *     both. A note is required for every outcome but `DISMISSED`.
+         */
+        post: operations["resolve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/suspensions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Staff only. The suspended accounts, most recently suspended first. */
+        get: operations["suspensions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/suspensions/{account}/lift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Staff only. Lifts a suspension; the account can sign in again. A note is
+         *     required.
+         */
+        post: operations["lift"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -635,6 +769,11 @@ export interface components {
             language: string;
             phone?: string | null;
         };
+        /**
+         * @description Where an account stands.
+         * @enum {string}
+         */
+        AccountStanding: "ACTIVE" | "SUSPENDED" | "DELETED";
         /** @enum {string} */
         Action: "CLAIM" | "RETRACT_CLAIM" | "CONFIRM" | "DISPUTE" | "WAIVE";
         /**
@@ -900,7 +1039,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "PHONE_COUNTRY_NOT_SERVED" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "WALLET_UNAVAILABLE" | "SESSION_TOO_OLD" | "CONTENT_HIDDEN" | "REPORT_RESOLVED" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -930,6 +1069,15 @@ export interface components {
             close_requested_by?: components["schemas"]["Slot"] | null;
             closed_outcome?: components["schemas"]["OutcomeDto"] | null;
             closed_reason?: string | null;
+            /**
+             * @description A reviewer has hidden what the parties wrote in this exchange from
+             *     the viewer (DESIGN.md §9): the terms, the descriptions, the criteria
+             *     and the messages read as one placeholder in the viewer's language,
+             *     there is no working copy, and signing or sending terms is refused
+             *     with `CONTENT_HIDDEN`. Always sent; a client may read its absence as
+             *     `false`.
+             */
+            content_hidden?: boolean;
             /** @description Status of each contribution in the agreement in force. */
             contributions: components["schemas"]["ContributionStatus"][];
             counterparty: components["schemas"]["CounterpartyDto"];
@@ -967,8 +1115,28 @@ export interface components {
             /** @description Which side the viewer is. */
             you: components["schemas"]["Slot"];
         };
+        /** @description Content hidden from one account. */
+        HiddenContent: {
+            /** Format: uuid */
+            account_id: string;
+            display_code: string;
+            /** Format: uuid */
+            exchange_id: string;
+            hidden_at: string;
+            /** @description Their name as the exchange writes it. */
+            name: string;
+            /** Format: uuid */
+            report_id: string;
+        };
         /** @description A stretch of an exchange's history, oldest first. */
         HistoryPage: {
+            /**
+             * @description A reviewer has hidden what the parties wrote in this exchange from
+             *     the reader: every note in this page reads as the same placeholder, in
+             *     the reader's language (DESIGN.md §9). Always sent; a client may read
+             *     its absence as `false`.
+             */
+            content_hidden?: boolean;
             /**
              * Format: int64
              * @description Set when there is history before this page: pass it as `before` to
@@ -1092,6 +1260,36 @@ export interface components {
             amount: string;
             unit?: string | null;
         };
+        /** @description An open report, as the queue lists it. */
+        QueuedReport: {
+            /**
+             * Format: int64
+             * @description Seconds since it was made, when the answer was given.
+             */
+            age_seconds: number;
+            /** @description RFC 3339. */
+            created_at: string;
+            details?: string | null;
+            display_code?: string | null;
+            /** Format: uuid */
+            exchange_id?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description Older than the time a report is to be reviewed within. */
+            overdue: boolean;
+            reason: components["schemas"]["ReportReason"];
+            /**
+             * Format: uuid
+             * @description Who made it. Absent for a report made through an invitation link
+             *     without signing in.
+             */
+            reporter_account_id?: string | null;
+            /**
+             * Format: uuid
+             * @description The person reported.
+             */
+            subject_account_id?: string | null;
+        };
         /** @description Where a contribution of the agreement stands. */
         RecordContribution: {
             description: string;
@@ -1109,6 +1307,14 @@ export interface components {
          *     copy to keep or to hand to someone else.
          */
         RecordDocument: {
+            /**
+             * @description Set when a reviewer has hidden what the parties wrote in this
+             *     exchange from the reader (DESIGN.md §9). The terms, the descriptions,
+             *     the criteria and every note then read as one placeholder, in
+             *     `language`, in this copy, `signed` included, so a fingerprint no longer
+             *     matches what is shown. The record itself is unchanged.
+             */
+            content_hidden?: boolean | null;
             /**
              * @description Where each contribution of the agreement stands. These are the
              *     parties' own statements about delivery; the service did not check
@@ -1267,12 +1473,48 @@ export interface components {
             /** @description The Expo push token the app was given, `ExponentPushToken[…]`. */
             token: string;
         };
+        /** @description Another report about the same exchange. */
+        RelatedReport: {
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            outcome?: components["schemas"]["ReviewOutcome"] | null;
+            reason: components["schemas"]["ReportReason"];
+            status: components["schemas"]["ReportStatus"];
+        };
+        /**
+         * @description A report opened for review: what it says, who it is about, the
+         *     exchange's record, and what review has done about it so far.
+         */
+        ReportDetail: {
+            /**
+             * @description Whether the exchange's content is already hidden from the person
+             *     reported.
+             */
+            content_hidden: boolean;
+            /**
+             * @description The audit history of this report, its exchange and the person
+             *     reported: the latest 200 entries, oldest first.
+             */
+            history: components["schemas"]["ReviewEntry"][];
+            /** @description The other reports about the same exchange, oldest first. */
+            other_reports: components["schemas"]["RelatedReport"][];
+            record?: components["schemas"]["ReviewRecord"] | null;
+            report: components["schemas"]["QueuedReport"];
+            reporter?: components["schemas"]["ReviewedAccount"] | null;
+            subject?: components["schemas"]["ReviewedAccount"] | null;
+        };
         /**
          * @description Why an exchange is being reported. A fixed list, so that a reviewer can
          *     tell what kind of harm a report is about before reading it.
          * @enum {string}
          */
         ReportReason: "HARASSMENT" | "PROHIBITED_TRADE" | "SCAM" | "IMPERSONATION" | "UNDERAGE" | "UNWANTED" | "OTHER";
+        /**
+         * @description Where a report stands.
+         * @enum {string}
+         */
+        ReportStatus: "OPEN" | "DISMISSED" | "ACTIONED";
         RequestCode: {
             /** @description An email address, or a phone number in international form. */
             identifier: string;
@@ -1280,6 +1522,92 @@ export interface components {
         RequestDeletionCode: {
             /** @description Which of the account's own identifiers to send the code to. */
             channel: components["schemas"]["CodeChannel"];
+        };
+        /** @description Resolving a report. */
+        Resolution: {
+            /**
+             * @description What the reviewer found, for the audit history. Required for every
+             *     outcome but `DISMISSED`. At most 1,000 characters.
+             */
+            note?: string | null;
+            outcome: components["schemas"]["ReviewOutcome"];
+        };
+        /** @description Showing hidden content again. */
+        RestoreContent: {
+            /** Format: uuid */
+            account_id: string;
+            /** Format: uuid */
+            exchange_id: string;
+            /** @description At most 1,000 characters. */
+            note: string;
+        };
+        /**
+         * @description One entry of the audit history.
+         * @enum {string}
+         */
+        ReviewAction: "REPORT_VIEWED" | "REPORT_DISMISSED" | "CONTENT_HIDDEN" | "CONTENT_RESTORED" | "ACCOUNT_SUSPENDED" | "SUSPENSION_LIFTED" | "STAFF_GRANTED" | "STAFF_REVOKED";
+        /** @description One entry of the audit history. */
+        ReviewEntry: {
+            /**
+             * Format: uuid
+             * @description The account acted on.
+             */
+            account_id?: string | null;
+            action: components["schemas"]["ReviewAction"];
+            /** @description RFC 3339. */
+            at: string;
+            /** Format: uuid */
+            exchange_id?: string | null;
+            /** Format: int64 */
+            id: number;
+            note?: string | null;
+            /** Format: uuid */
+            report_id?: string | null;
+            /**
+             * Format: uuid
+             * @description The reviewer; absent for the owner's command line.
+             */
+            staff_account_id?: string | null;
+        };
+        /**
+         * @description How a reviewer resolved a report.
+         * @enum {string}
+         */
+        ReviewOutcome: "DISMISSED" | "CONTENT_HIDDEN" | "ACCOUNT_SUSPENDED" | "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED";
+        /** @description The queue of open reports, oldest first. */
+        ReviewQueue: {
+            reports: components["schemas"]["QueuedReport"][];
+            /**
+             * Format: int64
+             * @description How soon a report is to be reviewed (DESIGN.md §9).
+             */
+            review_within_hours: number;
+        };
+        /**
+         * @description The record of an exchange as a reviewer reads it while a report about
+         *     it is open: everything a party's copy holds, for neither party, and with
+         *     nothing hidden.
+         */
+        ReviewRecord: {
+            /**
+             * @description False when the record is longer than one document holds; what is
+             *     here is its beginning.
+             */
+            complete: boolean;
+            contributions: components["schemas"]["RecordContribution"][];
+            events: components["schemas"]["RecordEvent"][];
+            exchange: components["schemas"]["RecordExchange"];
+            parties: components["schemas"]["Parties"];
+            revisions: components["schemas"]["RecordRevision"][];
+        };
+        /** @description One side of a report, as the reviewer is shown it. */
+        ReviewedAccount: {
+            /** Format: uuid */
+            id: string;
+            /** @description Their name as the exchange writes it; empty if they hold no side. */
+            name: string;
+            party?: components["schemas"]["Slot"] | null;
+            status: components["schemas"]["AccountStanding"];
         };
         /** @description A revision, named both ways: by ID, and by the number people see. */
         RevisionRef: {
@@ -1429,6 +1757,11 @@ export interface components {
          * @enum {string}
          */
         Slot: "A" | "B";
+        /** @description A reviewer's note, required for lifting a suspension. */
+        StaffNote: {
+            /** @description At most 1,000 characters. */
+            note: string;
+        };
         /** @enum {string} */
         StateDto: "DRAFT" | "NEGOTIATING" | "ACTIVE" | "CLOSED";
         /**
@@ -1437,6 +1770,18 @@ export interface components {
          * @enum {string}
          */
         Status: "PENDING" | "CLAIMED" | "DISPUTED" | "ACCEPTED" | "WAIVED" | "REMOVED";
+        /** @description A suspended account. */
+        Suspension: {
+            /** Format: uuid */
+            account_id: string;
+            /** @description The name on the account. */
+            name: string;
+            note?: string | null;
+            /** Format: uuid */
+            report_id?: string | null;
+            /** @description When review suspended it, RFC 3339; absent if review did not. */
+            suspended_at?: string | null;
+        };
         UpdateAccount: {
             /** @description Only `true` is meaningful: a confirmation cannot be taken back. */
             adult_confirmed?: boolean | null;
@@ -3101,6 +3446,368 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Meta"];
+                };
+            };
+        };
+    };
+    hidden: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Hidden content */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HiddenContent"][];
+                };
+            };
+            /** @description The reviewer must sign in again (`SESSION_TOO_OLD`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not a reviewer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreContent"];
+            };
+        };
+        responses: {
+            /** @description Shown again */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The reviewer must sign in again (`SESSION_TOO_OLD`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not a reviewer, or nothing hidden there */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The note is missing or too long */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many actions in the last hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    queue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The queue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewQueue"];
+                };
+            };
+            /** @description The reviewer must sign in again (`SESSION_TOO_OLD`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not a reviewer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    open_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Report ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The report and the exchange */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportDetail"];
+                };
+            };
+            /** @description The reviewer must sign in again (`SESSION_TOO_OLD`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not a reviewer, or no such report */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Already resolved (`REPORT_RESOLVED`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many reports opened in the last hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    resolve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Report ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Resolution"];
+            };
+        };
+        responses: {
+            /** @description Resolved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The reviewer must sign in again (`SESSION_TOO_OLD`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not a reviewer, or no such report */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Already resolved (`REPORT_RESOLVED`), or the outcome cannot apply (`ACTION_NOT_ALLOWED`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The note is missing or too long */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many actions in the last hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    suspensions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suspended accounts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Suspension"][];
+                };
+            };
+            /** @description The reviewer must sign in again (`SESSION_TOO_OLD`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not a reviewer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    lift: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account ID */
+                account: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffNote"];
+            };
+        };
+        responses: {
+            /** @description Lifted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The reviewer must sign in again (`SESSION_TOO_OLD`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Not a reviewer, or no such suspended account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The note is missing or too long */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many actions in the last hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

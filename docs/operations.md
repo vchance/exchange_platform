@@ -145,6 +145,8 @@ From both, read from the database at each scrape (so they are right however many
 | `yuppers_outbox_oldest_pending_age_seconds` | gauge | how long the oldest pending message has waited since it was queued; 0 when none |
 | `yuppers_database_up` | gauge | 0 when that read failed |
 | `yuppers_db_pool_max`, `yuppers_db_pool_size`, `yuppers_db_pool_in_use` | gauge | this process's connection pool: its limit, connections open, connections busy |
+| `yuppers_reports_open` | gauge | abuse reports waiting for review ("Reviewing reports") |
+| `yuppers_reports_oldest_open_age_seconds` | gauge | how long the oldest open report has waited since it was made; 0 when none |
 
 ## What to watch
 
@@ -160,13 +162,53 @@ Starting points; tune them once there is real traffic.
 - **Text messages, which cost money.** `yuppers_sms_codes_this_hour{result="sent"}` against the cap, and its daily sum against the budget: at the default cap of 50 an hour the service can send at most 1,200 a day, about $10 to $20 a day at US prices in 2026 (the provider's per-message price plus carrier fees; check the provider's price list, and international numbers cost several times more). Any `refused` means people asking for a code by phone were turned away; `yuppers_sms_codes_refused_this_hour` says why. `hourly_cap`: either real demand above the cap, which is the cue to raise `SMS_MAX_PER_HOUR`, or someone sending codes to numbers that are not theirs (SMS pumping), which the provider's fraud tools and its geographic permissions (allow only the countries you serve) are for. `prefix_cap` from one or two area codes at a time is more likely the latter; spread over many, demand, and the cue to raise `SMS_MAX_PER_PREFIX_PER_HOUR`. `country`: people abroad trying to sign in by phone, or someone trying numbers the service will not text; neither costs anything. `failed` above a few in an hour: the provider is refusing; its error code is in the api's log.
 - **Push.** `yuppers_push_deliveries_total{result="given_up"}` growing, or `yuppers_push_receipt_checks_total{result="error"}` most of the time: Expo is refusing or unreachable; the error code is in the worker's log. A jump in `yuppers_push_devices_removed_total` after a release can mean the app's project or credentials changed and every token stopped working.
 - **Wallet passes**, once on: `wallet pass update given up on` in the worker's log, or rows in `wallet_pass` with `update_status = 'FAILED'` (`last_error` says why; APNs refusing the certificate means it expired or was revoked). And the pass type certificate: `yuppers_wallet_cert_expiry_seconds` below 2,592,000 (30 days) is the cue to renew, and below 604,800 (7 days) is urgent: at 0 every Apple pass stops updating and no new one can be added, though the api and the worker keep running everything else. Renewing takes a new certificate from Apple's developer account and a restart (docs/wallet.md).
+- **Reports.** `yuppers_reports_oldest_open_age_seconds` above 72,000 (20 hours): a report is close to its 24 hours without review; tell whoever is on call. Any open report on a day nobody is named is the same alarm.
 - **Refusals** are not errors: `429` is a limit working (too many codes asked for, too many wrong guesses), and `4xx` in general is a person or a client being told no. Watch them for sudden jumps, not as failures.
+
+## Reviewing reports
+
+Every abuse report is read by a reviewer within 24 hours, every day of the week (`DESIGN.md` §9). Reviewers are named by the owner and use the review screen at `{WEB_ORIGIN}/staff`, which nothing in the app links to and which is "not found" to everyone else. The code is `backend/src/review.rs`; README, "Help", and the help page on blocking and reporting say what a person is told.
+
+**Naming reviewers.** The person signs in to the app once, normally, so that the account exists and has a name. Then the owner runs the `staff` command with the schema owner's connection, the same one `migrate` uses; the service's own role can read the list of reviewers and cannot change it, so no request to the API can make anyone a reviewer.
+
+```sh
+MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/yuppers \
+  cargo run --bin staff -- grant rita@example.com     # an email address, a phone number or an account ID
+cargo run --bin staff -- list                         # ID, address, name, status, since when
+cargo run --bin staff -- revoke rita@example.com
+```
+
+In the image it is `/usr/local/bin/staff`. Each grant and revoke is written to the review history as the owner's. A suspended or deleted account cannot be made a reviewer. A reviewer's sign-in must be recent: the staff screen and every `/v1/staff/` path want a one-time code entered within the last 12 hours (`STAFF_SIGN_IN_MAX_AGE`, a placeholder), and say "sign in again" (`SESSION_TOO_OLD`) after that. Revoke a reviewer who leaves; deleting their account also ends it, since a deleted account has no session.
+
+**The daily routine.** The reviewer on call that day:
+
+1. Opens `/staff` and signs in if asked. The queue lists every open report, oldest first, with how long it has waited; one older than 24 hours is outlined and tagged "Overdue".
+2. Opens each report. It shows the reason, what the reporter wrote, who reported it (an account, or "someone with the invitation link, not signed in"), the person reported and their account's status, the reported yup's whole record (every version sent, every signature, the history with every note), the other reports about the same yup, and what review has done so far. Opening a report is itself recorded. A yup can be read here only while a report about it is open: once it is resolved, the report shows nothing more.
+3. Decides, with a note saying why (required for everything but dismissing):
+   - **Dismiss.** Nothing changes for anyone.
+   - **Hide content.** For the person reported, and only them, everything written in that yup (its terms, each item's description and completion criteria, the messages sent with versions, and every note, reason and statement in its history) reads "Hidden by review", in their language, in the yup, its history and their copy of the record, and a notice says so. They can no longer sign or send terms there (`CONTENT_HIDDEN`), but can still decline, withdraw, mark items and close, so the yup can still end. Names and amounts stay. Nothing stored changes, and the reporter's view does not change. It protects what the reporter wrote there (an address, a phone number) from the person reported.
+   - **Suspend account.** The person reported is signed out of every session, their devices stop getting notifications, and signing in is refused (`ACCOUNT_SUSPENDED`). Nothing is sent to them, and their Wallet passes stop updating. Their yups are left as they are; the other party can still end them. A reviewer cannot suspend their own account.
+   - **Hide and suspend.** Both.
+4. A report is resolved once: who, when, the outcome and the note are set together and the database refuses to change them. A second report about the same yup is reviewed on its own.
+
+Below the queue are the suspended accounts and the hidden content, each with a way to undo it ("Lift suspension", "Show again"), again with a required note. Lifting a suspension lets the person sign in again; the sessions they had stay ended. Neither the reporter nor the person reported is told the outcome, though the person reported will notice a suspension or hidden content.
+
+Requests are limited per reviewer: 300 reports opened and 60 actions an hour (`VIEWS_PER_HOUR`, `ACTIONS_PER_HOUR`, placeholders), then `TOO_MANY_REQUESTS`.
+
+**The audit history.** Every report opened and every action, and every grant and revoke from the command line, is a row in `review_event`: the reviewer's account (none for the owner's command line), the time, the action, the report, yup and account it concerns, and the note. Neither the service nor the schema owner can change or remove a row. A later look at the same matter, such as lifting a suspension, is a new row tied to the same report, and the report's resolution stays as it was. A report's page shows its latest 200 entries; for anything else, as the owner:
+
+```sql
+SELECT occurred_at, action, staff_account_id, report_id, exchange_id, account_id, note
+FROM review_event ORDER BY id DESC LIMIT 100;
+```
+
+**The alert.** When a report arrives, every reviewer with an email address gets "A report is waiting for review", through the outbox like every other email (so it needs the worker running), with a link to `/staff` and nothing about the report. A reviewer already waiting for one is not sent another. Watch the queue as well: `yuppers_reports_open` and `yuppers_reports_oldest_open_age_seconds` ("Metrics").
 
 ## When the worker is down
 
 Requests keep working: people can sign in, sign and record deliveries. What stops:
 
-- **Notification emails and push notifications** queue in the outbox; nothing is lost. One-time codes, by email or text message, are sent by the api itself, so sign-in is unaffected.
+- **Notification emails and push notifications** queue in the outbox; nothing is lost. So does the alert to reviewers that a report is waiting: check `/staff` by hand until the worker is back. One-time codes, by email or text message, are sent by the api itself, so sign-in is unaffected.
 - **Timers**: unanswered revisions do not expire, close requests do not lapse into closing as unresolved, idle exchanges are not prompted or closed.
 - **Reminders** of contributions due soon or overdue are not sent.
 - **Wallet passes** are not updated; each catches up with the latest face when the worker is back.
@@ -228,7 +270,7 @@ scripts/replay-deletions.sh -d postgres://exchange_app:...@db.internal:5432/yupp
 
 - `APP_ROLE` names the application role if it is not `exchange_app`. It reaches the server only as a value psql quotes (`:'app_role'`), never pasted into a query.
 - It refuses a database that already holds tables. `--overwrite` replaces every object the backup holds instead, but leaves alone anything it does not, so a new, empty database is the safe target; point `DATABASE_URL` and `MIGRATION_DATABASE_URL` at it when it is ready.
-- **Grants**: the backup carries the grants the migrations gave `exchange_app`, and the restore applies them as they were. Afterwards `exchange_app` holds exactly those: `SELECT` and `INSERT` on the five append-only tables (`revision`, `revision_attachment`, `contribution_snapshot`, `acceptance`, `exchange_event`) and `contribution_reminder`; `SELECT`, `INSERT`, `UPDATE` on the current-state tables; `SELECT` only on `slot_holding`; `SELECT`, `INSERT`, `UPDATE`, `DELETE` on working data (drafts, blocks, idempotency keys, the outbox, network metadata, codes, sessions, sign-in counts, devices registered for push and their push tickets). `backend/tests/schema.rs` asserts these. Do not restore with `--no-acl` or as another application role: the service would then have no rights, or the wrong ones.
+- **Grants**: the backup carries the grants the migrations gave `exchange_app`, and the restore applies them as they were. Afterwards `exchange_app` holds exactly those: `SELECT` and `INSERT` on the five append-only tables (`revision`, `revision_attachment`, `contribution_snapshot`, `acceptance`, `exchange_event`) and `contribution_reminder`; `SELECT`, `INSERT`, `UPDATE` on the current-state tables; `SELECT` only on `slot_holding`; `SELECT`, `INSERT`, `UPDATE`, `DELETE` on working data (drafts, blocks, idempotency keys, the outbox, network metadata, codes, sessions, sign-in counts, devices registered for push and their push tickets); and for review, `SELECT` only on `staff_member`, `SELECT` and `INSERT` on `review_event`, and `SELECT`, `INSERT`, `DELETE` on `hidden_content`. `backend/tests/schema.rs` asserts these. Do not restore with `--no-acl` or as another application role: the service would then have no rights, or the wrong ones.
 - **Owner**: every object belongs to the role that ran the restore, whatever the owner was called where the backup was made, so a backup moves between servers whose owner roles have different names.
 - **Triggers**: the append-only triggers come back with their tables and refuse `UPDATE`, `DELETE` and `TRUNCATE` for every role again. The restore loads rows before creating triggers, so loading history does not trip them and the stamps the database writes (slot holdings) are restored as stored, not recomputed. The script checks afterwards that all five append-only triggers exist and that `exchange_app` cannot change those tables, and fails if not.
 - **Migrations**: the backup includes `_sqlx_migrations`, so `migrate` against the restored database applies only what is newer than the backup. Restore with the release that made the backup or a newer one, never an older one.
@@ -300,8 +342,10 @@ Between steps 2 and 3 the old processes run against the new schema for a few min
 - How long backups are kept, and where, given the retention in `DESIGN.md` §14.
 - **Deletions after the newest backup, when the live database is lost.** The deletion log covers every deletion up to the newest backup ("Replaying deletions"); a deletion made after it is lost with the database. Closing that gap needs a log kept outside the database as deletions happen, for example the worker appending each new line of the log to object storage. Until that exists, the gap is the time between backups, narrowed by point-in-time recovery or by exporting the log hourly.
 - **How long the deletion log is kept.** It holds account IDs and times only, and is never pruned, because a restore of any backup still kept needs every deletion since. It could be pruned of deletions older than the oldest backup kept, once backup retention is decided (above).
-- **A suspended account in the log.** Replaying leaves an account that is suspended in the restored copy undeleted and reports it. Today nothing suspends accounts; once staff can, decide whether a replay should delete such an account anyway.
+- **A suspended account in the log.** Replaying leaves an account that is suspended in the restored copy undeleted and reports it. Reviewers can now suspend accounts ("Reviewing reports"), and a suspended account cannot delete itself, so an account in the log was active when it was deleted: if the copy has it suspended, a reviewer lifted the suspension after the backup and the person then deleted their account. The recommendation is that a replay deletes it anyway (lift, then delete, as happened), since the person's deletion is what the log proves; today it is left for a person to do by hand, and the review history of that lifting is lost with the restore like everything else after the backup.
 - The alert thresholds above are placeholders until there is real traffic.
+- **Review's numbers**: the 12-hour sign-in for reviewers, 300 reports opened and 60 actions an hour, and the 1,000-character note, are placeholders.
+- **Who is on call.** The design names a reviewer each day, weekends included, in English and Spanish (`DESIGN.md` §9). The rota is not in the product; the alert goes to every reviewer.
 - **Push through Expo, or straight to Apple and Google.** `DESIGN.md` §13.1 decides that app push goes directly from the backend to Apple's and Google's services, with no third party. This build sends through Expo's push service instead, which holds the APNs key and FCM credentials, sees each token and the generic text, and needs nothing from Apple or Google on the service. Going direct means an APNs adapter (HTTP/2, a signed JWT per hour) and an FCM v1 adapter (OAuth with a service account), and the app registering device tokens (`getDevicePushTokenAsync`) instead of Expo tokens; the `PushSender` interface and the `device.service` column are where they would go.
 - **Email and push both.** Someone with the app and an email address gets both for each notice, one per channel, as §12 reads. Sending the email only when the push was not delivered or not opened within some time would halve that, at the cost of the email's detail; the outbox could hold an email back for that time.
 - **The SMS caps**, 50 an hour and 10 an hour per area code, are placeholders like the sign-in limits.

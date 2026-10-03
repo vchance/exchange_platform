@@ -16,6 +16,7 @@ pub mod languages;
 pub mod metrics;
 pub mod notifications;
 pub mod outbound;
+pub mod review;
 pub mod safety;
 pub mod shutdown;
 pub mod telemetry;

@@ -22,7 +22,7 @@ import { AppState, StyleSheet, Text, type ScrollView } from 'react-native';
 
 import { Consent } from '../components/Consent';
 import { InvitationFor, InvitationLink } from '../components/InvitationLink';
-import { OtherPartyLeft } from '../components/OtherPartyLeft';
+import { ContentHidden, OtherPartyLeft } from '../components/OtherPartyLeft';
 import { TermsView } from '../components/TermsView';
 import { WalletButton } from '../components/WalletButton';
 import {
@@ -198,6 +198,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       )}
 
       <OtherPartyLeft exchange={exchange} otherName={otherName} />
+      <ContentHidden exchange={exchange} />
       <Counterparty
         exchange={exchange}
         otherName={otherName}

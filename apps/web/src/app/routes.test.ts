@@ -29,6 +29,16 @@ test('help is /help, and each topic /help/{topic}', () => {
   expect(matchRoute('/help/no-such-topic')).toEqual({ name: 'help', topic: 'no-such-topic' })
 })
 
+test('staff review is /staff, and one report /staff/reports/{id}', () => {
+  expect(matchRoute(paths.staff)).toEqual({ name: 'staff' })
+  expect(matchRoute('/staff/')).toEqual({ name: 'staff' })
+  expect(matchRoute(paths.staffReport(ID))).toEqual({ name: 'staffReport', id: ID })
+  expect(matchRoute(`/staff/reports/${ID.toUpperCase()}`)).toEqual({ name: 'staffReport', id: ID })
+  for (const path of ['/staff/reports', '/staff/reports/not-an-id', `/staff/${ID}`]) {
+    expect(matchRoute(path), path).toEqual({ name: 'notFound' })
+  }
+})
+
 test('the other pages, and everything else', () => {
   expect(matchRoute('/')).toEqual({ name: 'home' })
   expect(matchRoute('/account')).toEqual({ name: 'account' })

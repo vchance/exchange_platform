@@ -154,6 +154,12 @@ export interface Wording {
       signIn: { subject: string; body: string }
       deleteAccount: { subject: string; body: string }
     }
+    /**
+     * The email telling a reviewer that a report is waiting (DESIGN.md §9).
+     * Says nothing about the report. Uses `{productName}` and `{link}`, the
+     * review screen; a paragraph ending in `{link}` becomes its button.
+     */
+    staffAlert: { subject: string; body: string }
   }
   /**
    * The push notification the service sends, for every notice alike
@@ -528,6 +534,83 @@ export interface Wording {
     blockedSince: string
   }
   /**
+   * The staff screen where reports are reviewed (DESIGN.md §9), on the web
+   * only and for reviewers only. English only would be acceptable here; the
+   * keys are checked like every other screen's.
+   */
+  staff: {
+    title: string
+    /** Uses `{hours}`. */
+    intro: string
+    queueHeading: string
+    queueEmpty: string
+    /** Uses `{code}`. */
+    reportLink: string
+    reportLinkNoYup: string
+    /** Uses `{hours}`, a plural. */
+    waiting: string
+    /** Uses `{minutes}`, a plural. */
+    waitingMinutes: string
+    overdue: string
+    reason: string
+    details: string
+    noDetails: string
+    reporter: string
+    reporterLink: string
+    subject: string
+    /** Uses `{id}`. */
+    account: string
+    /** Uses `{name}`. */
+    nameInYup: string
+    standing: Record<Schemas['AccountStanding'], string>
+    /** Uses `{date}`. */
+    filed: string
+    back: string
+    /** Uses `{code}`. */
+    detailTitle: string
+    decisionHeading: string
+    decisionIntro: string
+    /** The button for each decision. */
+    outcomes: Record<Schemas['ReviewOutcome'], string>
+    /** What each decision does, said before it is confirmed. */
+    outcomeText: Record<Schemas['ReviewOutcome'], string>
+    /** Said once it is done. */
+    outcomeDone: Record<Schemas['ReviewOutcome'], string>
+    /** How another report was resolved. */
+    outcomeNames: Record<Schemas['ReviewOutcome'], string>
+    noteLabel: string
+    noteOptionalLabel: string
+    noteRequired: string
+    confirm: string
+    recordHeading: string
+    recordIncomplete: string
+    noRecord: string
+    contentHidden: string
+    otherReportsHeading: string
+    status: Record<Schemas['ReportStatus'], string>
+    historyHeading: string
+    historyEmpty: string
+    actions: Record<Schemas['ReviewAction'], string>
+    /** Uses `{date}` and `{id}`. */
+    byReviewer: string
+    /** Uses `{date}`. */
+    byOwner: string
+    suspensionsHeading: string
+    suspensionsEmpty: string
+    /** Uses `{date}`. */
+    suspendedSince: string
+    lift: string
+    liftText: string
+    lifted: string
+    hiddenHeading: string
+    hiddenEmpty: string
+    /** Uses `{date}`. */
+    hiddenSince: string
+    restore: string
+    restoreText: string
+    restored: string
+  }
+  /**
    * What only the mobile app says. Everything else it shows is the wording the
    * web app uses for the same thing.
    */
@@ -702,6 +785,8 @@ export interface Wording {
     waitingLongMoney: string
     /** Under a close request: when it lapses. Uses `{date}`. */
     closeRequestLapses: string
+    /** A reviewer has hidden what the parties wrote from the reader (DESIGN.md §9). */
+    contentHidden: string
     noteLabel: string
     reasonLabel: string
     remedyLabel: string
@@ -800,6 +885,8 @@ export interface Wording {
     openHint: string
     title: string
     back: string
+    /** A reviewer has hidden what the parties wrote from the reader (DESIGN.md §9). */
+    contentHidden: string
     print: string
     download: string
     /** The downloaded copy's file name, without its extension. */
@@ -865,6 +952,8 @@ export interface Wording {
       statements: string
       contentHash: string
       verification: Record<Schemas['VerificationMethod'], string>
+      /** What stands in place of text a reviewer has hidden from the reader. */
+      hidden: string
     }
     /**
      * The plain summary at the top of the record (DESIGN.md §14.1): who,
