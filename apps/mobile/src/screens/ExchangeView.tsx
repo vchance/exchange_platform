@@ -527,6 +527,7 @@ function OpenRevision({ exchange, revision, otherName, actions, onRevise }: Open
         <Panel title={w.signHeading}>
           <P>{w.signIntro}</P>
           <Consent
+            headingLevel={4}
             signLabel={w.accept}
             busy={actions.busy}
             failure={actions.failure}

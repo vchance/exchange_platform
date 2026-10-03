@@ -84,8 +84,16 @@ export function Screen({ children, onRefresh, refreshing = false, scroll }: Scre
   );
 }
 
-/** A heading, announced as one. Level 1 names the screen. */
-export function Heading({ children, level = 1 }: { children: string; level?: 1 | 2 | 3 }) {
+/** How deep a heading sits: 1 names the screen, 2 a part of it, and so on. */
+export type HeadingLevel = 1 | 2 | 3 | 4;
+
+/**
+ * A heading, announced as one. Level 1 names the screen; there is one per
+ * screen. The level is also given as `aria-level`, which the screen readers
+ * of iOS and Android do not use but the browser harness turns into `h1` to
+ * `h4`, so the harness shows the same outline a browser would.
+ */
+export function Heading({ children, level = 1 }: { children: string; level?: HeadingLevel }) {
   const colors = useColors();
   const { language } = useI18n();
   const size = level === 1 ? type.title : level === 2 ? type.heading : type.subheading;
@@ -538,7 +546,19 @@ export function Tag({ children, alert }: { children: string; alert?: boolean }) 
  * An action that has been opened but not sent. It appears in place, under
  * the thing it acts on, and a screen reader is taken to it.
  */
-export function Panel({ title, children }: { title: string; children: ReactNode }) {
+export function Panel({
+  title,
+  children,
+  level = 3,
+}: {
+  title: string;
+  children: ReactNode;
+  /**
+   * The level of the panel's heading, one below the heading of the part of
+   * the screen it opens in. Most open under a level 2 heading, so 3.
+   */
+  level?: Exclude<HeadingLevel, 1>;
+}) {
   const colors = useColors();
   const { language } = useI18n();
   const heading = useRef<Text>(null);
@@ -555,6 +575,7 @@ export function Panel({ title, children }: { title: string; children: ReactNode 
         ref={heading}
         accessibilityRole="header"
         accessibilityLanguage={language}
+        aria-level={level}
         style={[type.subheading, { color: colors.text }]}>
         {title}
       </Text>

@@ -114,6 +114,12 @@ function hidden(node: Node): boolean {
   );
 }
 
+/** The text inside a node, as one string. */
+function textOf(node: Node | string): string {
+  if (typeof node === 'string') return node;
+  return (node.children ?? []).map(textOf).join('');
+}
+
 const label = (node: Node) =>
   (node.props.accessibilityLabel ?? node.props['aria-label']) as string | undefined;
 const role = (node: Node) =>
@@ -153,6 +159,21 @@ function audit(): string[] {
   }
   const headings = nodes.filter((node) => role(node) === 'header' && !hidden(node));
   if (headings.length === 0) problems.push('the screen has no heading');
+  // Every heading says how deep it sits, which the browser harness turns
+  // into h1 to h4, and one, at level 1, names the screen. A panel's heading
+  // sits under the part of the screen it opens in, never at the top.
+  for (const heading of headings) {
+    const level = heading.props['aria-level'];
+    if (typeof level !== 'number' || level < 1 || level > 4) {
+      problems.push(`heading “${textOf(heading)}” has no level`);
+    }
+  }
+  const top = headings.filter((heading) => heading.props['aria-level'] === 1);
+  if (top.length !== 1) {
+    problems.push(
+      `the screen has ${top.length} level 1 headings: ${top.map((heading) => `“${textOf(heading)}”`).join(', ')}`,
+    );
+  }
   if (pressables === 0) problems.push('nothing on the screen can be pressed: is it rendered?');
   return problems;
 }
@@ -303,6 +324,21 @@ describe('the exchange', () => {
     focused.mockClear();
     await fireEvent.press(screen.getByRole('button', { name: w.common.cancel }));
     await waitFor(() => expect(focused).toHaveBeenCalledWith(expect.anything(), 'focus'));
+  });
+
+  test('a panel’s heading sits under the part of the screen it opens in', async () => {
+    await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
+    await screen.findByText('Yup with Ben Ortiz');
+    const level = (name: string) =>
+      screen.getAllByRole('header', { name }).map((node) => node.props['aria-level']);
+    expect(level('Yup with Ben Ortiz')).toEqual([1]);
+    expect(level(w.safety.heading)).toEqual([2]);
+
+    const block = w.safety.block.replace('{name}', 'Ben Ortiz');
+    await fireEvent.press(screen.getByRole('button', { name: block }));
+    // The panel, under “Report or block”.
+    expect(level(block)).toEqual([3]);
+    expect(audit()).toEqual([]);
   });
 
   test('the heading, said first, has nothing in the name that turns it around', async () => {

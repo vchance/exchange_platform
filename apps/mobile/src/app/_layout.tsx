@@ -1,7 +1,7 @@
 import { directionOf } from '@yuppers/shared';
 import { DarkTheme, DefaultTheme, LocaleProvider, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Actions, Button, Heading, Screen } from '../components/ui';
@@ -66,6 +66,11 @@ function Navigation() {
               headerBackTitle: wording.mobile.back,
               headerTintColor: colors.primary,
               headerTitleStyle: { color: colors.text },
+              // In the browser harness the bar's own title would be a second
+              // `h1` above the screen's (React Navigation marks it as one);
+              // there it is plain text. A device keeps the system's own bar,
+              // whose title VoiceOver and TalkBack already treat as a heading.
+              headerTitle: Platform.OS === 'web' ? NavigationTitle : undefined,
               headerStyle: { backgroundColor: colors.surface },
               contentStyle: { backgroundColor: colors.background },
               animation: reduceMotion ? 'none' : 'default',
@@ -96,6 +101,19 @@ function Navigation() {
 }
 
 /**
+ * The navigation bar's title in the browser harness: the same words, not a
+ * heading. Each screen names itself with its own level 1 heading.
+ */
+function NavigationTitle({ children }: { children: string }) {
+  const colors = colorsFor(useScheme());
+  return (
+    <Text numberOfLines={1} style={[styles.navigationTitle, { color: colors.text }]}>
+      {children}
+    </Text>
+  );
+}
+
+/**
  * This build is older than the service accepts changes from. It covers the
  * screens, since nothing in them may offer a change it cannot make, and says
  * the one thing to do. Trying again asks the service once more, for a build
@@ -119,5 +137,6 @@ function Outdated() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  navigationTitle: { fontSize: 18, fontWeight: '500' },
   cover: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 1 },
 });

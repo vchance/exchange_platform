@@ -14,6 +14,8 @@ interface Props {
   onSign(): void;
   onCancel(): void;
   cancelLabel?: string;
+  /** The level of its heading: one below whatever it sits under. */
+  headingLevel?: 3 | 4;
 }
 
 /**
@@ -25,14 +27,22 @@ interface Props {
  * The wording is a placeholder until counsel approves the real text, and says
  * so on the screen.
  */
-export function Consent({ signLabel, busy, failure, onSign, onCancel, cancelLabel }: Props) {
+export function Consent({
+  signLabel,
+  busy,
+  failure,
+  onSign,
+  onCancel,
+  cancelLabel,
+  headingLevel = 3,
+}: Props) {
   const { wording } = useI18n();
   const w = wording.consent;
   const [agreed, setAgreed] = useState(false);
 
   return (
     <View style={styles.consent}>
-      <Heading level={3}>{w.heading}</Heading>
+      <Heading level={headingLevel}>{w.heading}</Heading>
       <Notice tone="warning" quiet>
         {w.pendingReview}
       </Notice>

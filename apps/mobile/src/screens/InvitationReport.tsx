@@ -25,7 +25,7 @@ export function InvitationReport({ token }: { token: string }) {
         <Button label={w.reportProposal} expanded={report.open} onPress={report.begin} />
       </Actions>
       {report.open && (
-        <Panel title={w.reportProposal}>
+        <Panel level={2} title={w.reportProposal}>
           <ReportForm
             intro={w.reportProposalIntro}
             busy={report.busy}

@@ -72,7 +72,7 @@ export function Trouble({ exchange, otherName, actions, onRevise }: Props) {
       {!situation || !route ? (
         <>
           <P>{t.intro}</P>
-          <Heading level={3}>{t.question}</Heading>
+          <Heading level={4}>{t.question}</Heading>
           <View style={styles.choices}>
             {TROUBLE_SITUATIONS.map((option) => (
               <Button
@@ -89,7 +89,7 @@ export function Trouble({ exchange, otherName, actions, onRevise }: Props) {
         </>
       ) : (
         <>
-          <Heading level={3}>{fmt(t.situations[situation], { name: otherName })}</Heading>
+          <Heading level={4}>{fmt(t.situations[situation], { name: otherName })}</Heading>
           <Text
             ref={explained}
             accessibilityLanguage={language}

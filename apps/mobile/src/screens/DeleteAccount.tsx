@@ -135,14 +135,14 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
   const open = preview ? preview.open_proposals + preview.agreements_in_force : 0;
   return (
     <Panel key="explain" title={w.intro}>
-      <Heading level={3}>{w.deletedHeading}</Heading>
+      <Heading level={4}>{w.deletedHeading}</Heading>
       <Lines>
         <P>{w.deletedAccount}</P>
         <P>{w.deletedData}</P>
         <P>{w.signUpAgain}</P>
       </Lines>
 
-      <Heading level={3}>{w.exchangesHeading}</Heading>
+      <Heading level={4}>{w.exchangesHeading}</Heading>
       {!preview && !deletion.previewFailure ? <P>{wording.common.loading}</P> : null}
       {!preview && deletion.previewFailure ? (
         <>
@@ -168,7 +168,7 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
         </Lines>
       ) : null}
 
-      <Heading level={3}>{w.keptHeading}</Heading>
+      <Heading level={4}>{w.keptHeading}</Heading>
       <Lines>
         <P>{w.keptAgreements}</P>
         <P>{w.keptReports}</P>
