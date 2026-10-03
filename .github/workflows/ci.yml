@@ -194,7 +194,11 @@ jobs:
           # Invitation links, and the exchange pages notification emails link to.
           grep --quiet 'android:pathPattern="/.\*/i"' "$manifest"
           grep --quiet 'android:pathPrefix="/exchanges/"' "$manifest"
-          for permission in READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE SYSTEM_ALERT_WINDOW VIBRATE; do
+          # Push notifications: the iOS entitlement, and the Android channel
+          # the service names in each message.
+          grep --quiet '<key>aps-environment</key>' ios/*/*.entitlements
+          grep --quiet 'default_notification_channel_id" android:value="default"' "$manifest"
+          for permission in READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE SYSTEM_ALERT_WINDOW VIBRATE RECEIVE_BOOT_COMPLETED; do
             grep --quiet "android.permission.$permission\" tools:node=\"remove\"" "$manifest" \
               || { echo "::error::$permission is not removed"; exit 1; }
           done

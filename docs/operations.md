@@ -1,6 +1,6 @@
 # Operations
 
-How to run the service: the first deployment, what to check and watch, backups and the restore drill, rotating the secret, and what to do when the worker stops. Nothing here assumes a particular host. A deployment is a managed PostgreSQL database, a container platform that can run one image three ways, a reverse proxy or load balancer that terminates TLS, and an SMTP account. `.env.example` documents every setting with its default; README, "Deploying", says what the image is.
+How to run the service: the first deployment, what to check and watch, backups and the restore drill, rotating the secret, and what to do when the worker stops. Nothing here assumes a particular host. A deployment is a managed PostgreSQL database, a container platform that can run one image three ways, a reverse proxy or load balancer that terminates TLS, and an SMTP account; for codes to phone numbers, an SMS provider's account, and for push notifications, an Expo project ("Text messages and push notifications", below). `.env.example` documents every setting with its default; README, "Deploying", says what the image is.
 
 ## The processes
 
@@ -29,24 +29,46 @@ All three come from the same image: the `api` is its default command, the other 
    - `MIGRATION_DATABASE_URL`: the owner's, for `migrate` only.
    - `APP_SECRET`: `openssl rand -hex 32`.
    - `SMTP_PASSWORD`, and `SMTP_USERNAME` if the provider treats it as secret.
+   - When they are switched on: `SMS_AUTH_TOKEN` for the api, and `EXPO_ACCESS_TOKEN` for the worker if the Expo project has push security on.
 
 3. **Settings** (plain environment):
    - `WEB_ORIGIN`: the public HTTPS origin, such as `https://app.example.com`, without a trailing slash. Cookie sessions are honored only from it, emails link into it, and because it is HTTPS every response carries HSTS.
    - `CODE_DELIVERY=smtp`, `NOTIFICATION_DELIVERY=smtp`, and `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS` (`tls` for port 465, `starttls` for 587), `SMTP_FROM`. The sending domain needs the provider's SPF and DKIM records, or codes land in spam.
    - `TRUSTED_PROXY_HEADER`: the header the proxy in front of the API sets to the client's address, and `TRUSTED_PROXIES` if more than one proxy appends to `X-Forwarded-For`. Without it every signature records the proxy's address (`DESIGN.md` §8) and the per-address sign-in limits count every person as one. Name a header only if the proxy always sets it and clients cannot reach the API around the proxy; otherwise a client can choose its own address.
    - The `SIGN_IN_*` limits only if the placeholders in `.env.example` do not suit (README, "Deploying").
+   - `SMS_DELIVERY` and `PUSH_DELIVERY` stay unset (off) until their accounts exist; "Text messages and push notifications" says how to switch each on.
    - `LOG_FORMAT=json` if a log collector reads the output; `RUST_LOG` stays `info`.
    - `METRICS_ADDR=0.0.0.0:9100` on the api and the worker, if something will scrape them (below).
 
 4. **Migrate.** Run the image with `/usr/local/bin/migrate` and `MIGRATION_DATABASE_URL`. It exits 0 with `migrations applied`. Safe to run again; every release runs it before the new api and worker start.
 
-5. **The worker.** One copy, `/usr/local/bin/worker`, with `DATABASE_URL`, `WEB_ORIGIN`, the delivery and SMTP settings. It logs `worker started`. Give it a stop grace period of at least 35 seconds: on `SIGTERM` it finishes the message it is sending (at most 30 seconds) and exits 0.
+5. **The worker.** One copy, `/usr/local/bin/worker`, with `DATABASE_URL`, `WEB_ORIGIN`, the delivery and SMTP settings, and `PUSH_DELIVERY` (with `EXPO_ACCESS_TOKEN`) once push is on. It logs `worker started`. Give it a stop grace period of at least 35 seconds: on `SIGTERM` it finishes the message it is sending (at most 30 seconds) and exits 0.
 
-6. **The api.** The image's default command, with `DATABASE_URL`, `APP_SECRET`, `WEB_ORIGIN`, `CODE_DELIVERY`, the SMTP settings and `TRUSTED_PROXY_HEADER`. It serves the web app itself from `/srv/web`. Point the platform's health check at `/readyz` (below). Any number of copies; each holds up to 10 database connections, so copies × 10 plus the worker's 10 must stay under the database's connection limit.
+6. **The api.** The image's default command, with `DATABASE_URL`, `APP_SECRET`, `WEB_ORIGIN`, `CODE_DELIVERY`, the SMTP settings and `TRUSTED_PROXY_HEADER`, and once they are on, the `SMS_*` settings and the same `PUSH_DELIVERY` as the worker. It serves the web app itself from `/srv/web`. Point the platform's health check at `/readyz` (below). Any number of copies; each holds up to 10 database connections, so copies × 10 plus the worker's 10 must stay under the database's connection limit.
 
 7. **TLS at the proxy.** The proxy or load balancer terminates HTTPS for `WEB_ORIGIN`'s host and forwards plain HTTP to port 8080, adding the header named in `TRUSTED_PROXY_HEADER`. Redirect HTTP to HTTPS there. Do not route the metrics port through it.
 
 8. **Check it.** `https://<origin>/healthz` and `/readyz` answer 204; the home page loads; sign in with a real address and the code arrives; an exchange between two test accounts sends both their notification emails within a few seconds. Each response carries an `X-Request-Id`.
+
+## Text messages and push notifications
+
+Both are built and off: with `SMS_DELIVERY` and `PUSH_DELIVERY` unset nothing changes from an email-only deployment. Each is switched on by settings alone, once its account exists. README, "Notifications" and "Signing in", says what each does.
+
+**Codes by text message.**
+
+1. Open an account with Twilio (or write another `SmsSender` for another provider: `backend/src/notifications/sms.rs`). Buy a number able to send SMS in the countries served, or create a Messaging Service; for US numbers, register the brand and campaign (A2P 10DLC) or verify a toll-free number, without which carriers block or filter the messages. Restrict the account's geographic permissions to those countries.
+2. On the api: `SMS_DELIVERY=twilio`, `SMS_ACCOUNT_SID`, `SMS_AUTH_TOKEN` (a secret), `SMS_FROM` (`+1...` or `MG...`), and `SMS_MAX_PER_HOUR` if 50 an hour is not right. The api logs at start how many it may send an hour.
+3. Check: ask for a code for a phone you hold; it arrives in one message, in the account's or the browser's language, and `yuppers_sms_codes_this_hour{result="sent"}` counts it.
+
+With SMS off, a code for a phone number is refused as unavailable, as before; sign-in and deletion screens still offer phone numbers. Costs to watch are in "What to watch".
+
+**Push notifications.**
+
+1. The Expo project, the APNs key and the Firebase credentials, as docs/mobile-release.md, "Once the accounts exist", step 6, says; and a build of the app made after them.
+2. On the api and the worker: `PUSH_DELIVERY=expo`. On the worker, `EXPO_ACCESS_TOKEN` if push security is on for the project. The api then tells the apps to offer notifications; the worker sends them, reads Expo's receipts about fifteen minutes later, and removes devices Expo says are gone.
+3. Check: on a device, turn notifications on, have the other party act, and see `yuppers_push_deliveries_total{result="sent"}` go up and the notification arrive.
+
+`PUSH_DELIVERY=log` on both is for development: the worker writes each notification to its log. Turning push off again closes whatever is queued for push unsent, and the apps stop offering it; the devices stay registered, harmlessly, until their sessions end.
 
 ## Health checks
 
@@ -72,11 +94,11 @@ Each request writes one line when it is answered, `request completed`, with:
 
 A proxy that sets its own request ID ties its logs to the service's that way.
 
-**Never logged:** request or response bodies, query strings, headers other than the request ID (so no `Authorization`, no cookie), session or invitation tokens, one-time codes, email addresses, phone numbers. A database error is logged by its SQLSTATE, constraint and table, never the server's message, which can quote a value. An email that could not be sent is logged by its outbox ID with the SMTP reply code only; the same goes into `outbox.last_error`. `backend/tests/telemetry.rs` signs a person in at every log level and checks that the output holds none of their address, phone number, codes, token or cookie; `backend/tests/smtp.rs` does the same for a refused recipient.
+**Never logged:** request or response bodies, query strings, headers other than the request ID (so no `Authorization`, no cookie), session or invitation tokens, one-time codes, email addresses, phone numbers. A database error is logged by its SQLSTATE, constraint and table, never the server's message, which can quote a value. An email that could not be sent is logged by its outbox ID with the SMTP reply code only; the same goes into `outbox.last_error`. A push notification likewise, with the HTTP status and Expo's error code, and a text message that could not be sent with the HTTP status and Twilio's error code: never the provider's message, which quotes the token or the number. `backend/tests/telemetry.rs` signs a person in at every log level and checks that the output holds none of their address, phone number, codes, token or cookie; `backend/tests/smtp.rs` does the same for a refused recipient, and `backend/tests/sms.rs` for a refused text message.
 
-The one exception is the development deliveries, `CODE_DELIVERY=log` and `NOTIFICATION_DELIVERY=log`, which write each code and email to the log because that is their job. A deployment has to choose a delivery, so it never gets them by default; check that both say `smtp`.
+The one exception is the development deliveries, `CODE_DELIVERY=log`, `NOTIFICATION_DELIVERY=log`, `SMS_DELIVERY=log` and `PUSH_DELIVERY=log`, which write each code, email, text message and push notification to the log because that is their job. Even they write a phone number masked (`+1••••••••67`) and a push token by its first characters only. A deployment has to choose `CODE_DELIVERY` and `NOTIFICATION_DELIVERY`, so it never gets the log by default; check that both say `smtp`, and that `SMS_DELIVERY` and `PUSH_DELIVERY` are unset, `twilio` and `expo`.
 
-Useful lines besides requests: `api listening`, `worker started`, `worker shutting down`, `notifications delivered` (counts per pass), `notification not sent; will retry` and `notification given up on` (with the outbox ID), `timers ran`, `reminders queued`, `database error`, `readiness check failed`.
+Useful lines besides requests: `api listening`, `worker started`, `worker shutting down`, `notifications delivered` and `push notifications delivered` (counts per pass), `notification not sent; will retry`, `push notification not sent; will retry`, `notification given up on` and `push notification given up on` (with the outbox ID), `push receipts read` and `push receipts could not be read`, `devices of ended sessions removed`, `push notifications are off (PUSH_DELIVERY)` at the worker's start, `one-time code could not be delivered`, `a code was not sent by SMS: the service's hourly cap is reached`, `timers ran`, `reminders queued`, `database error`, `readiness check failed`.
 
 ## Metrics
 
@@ -88,12 +110,17 @@ From the api:
 |---|---|---|
 | `yuppers_http_requests_total` | counter | `route` (the route's template, such as `/v1/exchanges/{id}`, or `unmatched` for the web app's pages and unknown paths), `method`, `status` (`2xx`, `4xx`, ...) |
 | `yuppers_http_request_duration_seconds` | histogram, buckets from 1 ms to 10 s | the same |
+| `yuppers_sms_codes_this_hour` | gauge, only with `SMS_DELIVERY` on | `result`: `sent` (handed to the provider, each a message paid for), `refused` (the hourly cap was reached), `failed` (the provider did not take it; also in `sent`). For the whole service in the current UTC hour, read from the database at each scrape. |
+| `yuppers_sms_codes_hourly_cap` | gauge, the same | `SMS_MAX_PER_HOUR` |
 
 From the worker:
 
 | Metric | Type | Labels |
 |---|---|---|
-| `yuppers_outbox_deliveries_total` | counter | `result`: `sent`, `failed` (every failed try), `given_up` (the last try failed), `dropped` (closed unsent: recipient gone, or a reminder no longer true) |
+| `yuppers_outbox_deliveries_total` | counter | `result`: `sent`, `failed` (every failed try), `given_up` (the last try failed), `dropped` (closed unsent: recipient gone, or a reminder no longer true). Emails. |
+| `yuppers_push_deliveries_total` | counter | The same results for push notifications, one per person and notice; `sent` once the push service took it for at least one of their devices, `dropped` also when no device is left or push is off |
+| `yuppers_push_devices_removed_total` | counter | devices removed because the push service said their token is no longer registered |
+| `yuppers_push_receipt_checks_total` | counter | `result`: `ok`, `error`: requests for the receipts of earlier notifications |
 | `yuppers_worker_runs_total` | counter | `job`: `timers`, `reminders`; `result`: `ok`, `error` |
 | `yuppers_worker_timer_changes_total` | counter | expiries, lapsed close requests, inactivity prompts and closures |
 | `yuppers_worker_reminders_queued_total` | counter | |
@@ -103,7 +130,7 @@ From both, read from the database at each scrape (so they are right however many
 
 | Metric | Type | |
 |---|---|---|
-| `yuppers_outbox_messages` | gauge | `state`: `pending` (waiting, or between retries), `given_up` |
+| `yuppers_outbox_messages` | gauge | `state`: `pending` (waiting, or between retries), `given_up`; emails and push notifications together |
 | `yuppers_outbox_oldest_pending_age_seconds` | gauge | how long the oldest pending message has waited since it was queued; 0 when none |
 | `yuppers_database_up` | gauge | 0 when that read failed |
 | `yuppers_db_pool_max`, `yuppers_db_pool_size`, `yuppers_db_pool_in_use` | gauge | this process's connection pool: its limit, connections open, connections busy |
@@ -119,13 +146,15 @@ Starting points; tune them once there is real traffic.
 - **Pool.** `yuppers_db_pool_in_use` at `yuppers_db_pool_max` for minutes: requests are queuing for connections.
 - **Worker alive.** `time() - yuppers_worker_last_pass_timestamp_seconds` above 60, or its scrape failing.
 - **Readiness** failing on every copy: the database is unreachable.
+- **Text messages, which cost money.** `yuppers_sms_codes_this_hour{result="sent"}` against the cap, and its daily sum against the budget: at the default cap of 50 an hour the service can send at most 1,200 a day, about $10 to $20 a day at US prices in 2026 (the provider's per-message price plus carrier fees; check the provider's price list, and international numbers cost several times more). Any `refused` means people asking for a code by phone were turned away: either real demand above the cap, which is the cue to raise `SMS_MAX_PER_HOUR`, or someone sending codes to numbers that are not theirs (SMS pumping), which the provider's fraud tools and its geographic permissions (allow only the countries you serve) are for. `failed` above a few in an hour: the provider is refusing; its error code is in the api's log.
+- **Push.** `yuppers_push_deliveries_total{result="given_up"}` growing, or `yuppers_push_receipt_checks_total{result="error"}` most of the time: Expo is refusing or unreachable; the error code is in the worker's log. A jump in `yuppers_push_devices_removed_total` after a release can mean the app's project or credentials changed and every token stopped working.
 - **Refusals** are not errors: `429` is a limit working (too many codes asked for, too many wrong guesses), and `4xx` in general is a person or a client being told no. Watch them for sudden jumps, not as failures.
 
 ## When the worker is down
 
 Requests keep working: people can sign in, sign and record deliveries. What stops:
 
-- **Notification emails** queue in the outbox; nothing is lost. One-time codes are sent by the api itself, so sign-in is unaffected.
+- **Notification emails and push notifications** queue in the outbox; nothing is lost. One-time codes, by email or text message, are sent by the api itself, so sign-in is unaffected.
 - **Timers**: unanswered revisions do not expire, close requests do not lapse into closing as unresolved, idle exchanges are not prompted or closed.
 - **Reminders** of contributions due soon or overdue are not sent.
 - **Purges**: network addresses and user agents older than 90 days (`DESIGN.md` §14) and old sign-in counts are not removed, so a long outage keeps personal data past its retention period.
@@ -180,7 +209,7 @@ scripts/restore.sh -d postgres://exchange:...@db.internal:5432/yuppers_restored 
 
 - `APP_ROLE` names the application role if it is not `exchange_app`. It reaches the server only as a value psql quotes (`:'app_role'`), never pasted into a query.
 - It refuses a database that already holds tables. `--overwrite` replaces every object the backup holds instead, but leaves alone anything it does not, so a new, empty database is the safe target; point `DATABASE_URL` and `MIGRATION_DATABASE_URL` at it when it is ready.
-- **Grants**: the backup carries the grants the migrations gave `exchange_app`, and the restore applies them as they were. Afterwards `exchange_app` holds exactly those: `SELECT` and `INSERT` on the five append-only tables (`revision`, `revision_attachment`, `contribution_snapshot`, `acceptance`, `exchange_event`) and `contribution_reminder`; `SELECT`, `INSERT`, `UPDATE` on the current-state tables; `SELECT` only on `slot_holding`; `SELECT`, `INSERT`, `UPDATE`, `DELETE` on working data (drafts, blocks, idempotency keys, the outbox, network metadata, codes, sessions, sign-in counts). `backend/tests/schema.rs` asserts these. Do not restore with `--no-acl` or as another application role: the service would then have no rights, or the wrong ones.
+- **Grants**: the backup carries the grants the migrations gave `exchange_app`, and the restore applies them as they were. Afterwards `exchange_app` holds exactly those: `SELECT` and `INSERT` on the five append-only tables (`revision`, `revision_attachment`, `contribution_snapshot`, `acceptance`, `exchange_event`) and `contribution_reminder`; `SELECT`, `INSERT`, `UPDATE` on the current-state tables; `SELECT` only on `slot_holding`; `SELECT`, `INSERT`, `UPDATE`, `DELETE` on working data (drafts, blocks, idempotency keys, the outbox, network metadata, codes, sessions, sign-in counts, devices registered for push and their push tickets). `backend/tests/schema.rs` asserts these. Do not restore with `--no-acl` or as another application role: the service would then have no rights, or the wrong ones.
 - **Owner**: every object belongs to the role that ran the restore, whatever the owner was called where the backup was made, so a backup moves between servers whose owner roles have different names.
 - **Triggers**: the append-only triggers come back with their tables and refuse `UPDATE`, `DELETE` and `TRUNCATE` for every role again. The restore loads rows before creating triggers, so loading history does not trip them and the stamps the database writes (slot holdings) are restored as stored, not recomputed. The script checks afterwards that all five append-only triggers exist and that `exchange_app` cannot change those tables, and fails if not.
 - **Migrations**: the backup includes `_sqlx_migrations`, so `migrate` against the restored database applies only what is newer than the backup. Restore with the release that made the backup or a newer one, never an older one.
@@ -222,3 +251,6 @@ Between steps 2 and 3 the old processes run against the new schema for a few min
 - How long backups are kept, and where, given the retention in `DESIGN.md` §14.
 - What happens to deletions made between a backup and a restore of it. Today they would have to be redone by hand from a record nobody keeps.
 - The alert thresholds above are placeholders until there is real traffic.
+- **Push through Expo, or straight to Apple and Google.** `DESIGN.md` §13.1 decides that app push goes directly from the backend to Apple's and Google's services, with no third party. This build sends through Expo's push service instead, which holds the APNs key and FCM credentials, sees each token and the generic text, and needs nothing from Apple or Google on the service. Going direct means an APNs adapter (HTTP/2, a signed JWT per hour) and an FCM v1 adapter (OAuth with a service account), and the app registering device tokens (`getDevicePushTokenAsync`) instead of Expo tokens; the `PushSender` interface and the `device.service` column are where they would go.
+- **Email and push both.** Someone with the app and an email address gets both for each notice, one per channel, as §12 reads. Sending the email only when the push was not delivered or not opened within some time would halve that, at the cost of the email's detail; the outbox could hold an email back for that time.
+- **The SMS cap**, 50 an hour, is a placeholder like the sign-in limits.

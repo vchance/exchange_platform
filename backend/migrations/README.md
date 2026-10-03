@@ -95,6 +95,18 @@ Three indexes on `exchange`, for queries the load check (README, "Load check") f
 
 The last two are partial, so they hold only the exchanges the worker is looking for. Like every migration this one runs in a transaction, so the indexes are built without `CONCURRENTLY` and writes to `exchange` wait while they build. Against the load check's 4,500 exchanges the whole migration took a tenth of a second.
 
+## 0011_devices
+
+Push notifications and the cost of text messages (`DESIGN.md` §12, §13).
+
+- **`device`**: a device the app registered for push, with its Expo push token, platform, app version and language, under the account and the session it was signed in with. One token is one device (`UNIQUE (service, token)`): registered again by another account, it moves to that account. Removing the session removes the device (`ON DELETE CASCADE`), and the service also removes it when that session signs out, when the account is deleted, when the push service says the token is no longer registered, and, in the worker, once its session has expired or been revoked. `service` names the push service the token belongs to, only `EXPO` so far, so that tokens for Apple's and Google's own services could sit beside them.
+- **`push_ticket`**: a message Expo accepted, waiting for its receipt, by Expo's ticket ID. A receipt saying the token is no longer registered removes the device, and its tickets with it; a ticket is forgotten once its receipt is read, or after a day, when Expo keeps it no longer.
+- **`sign_in_limit`** may also hold `sms-sent`, `sms-refused` and `sms-failed`: the codes sent by text message, those refused under the service's hourly cap (`SMS_MAX_PER_HOUR`), and those the provider did not take, each counted for the whole service per hour under one keyed-hash subject. The cap is decided on the `sms-sent` row, locked like every other count, so it holds across copies of the API.
+
+The application role may read, add, change and remove rows in both new tables: they are working data, like sessions. Neither holds anything from an agreement. A push token identifies an installed app, so the backups that hold it are held as narrowly as the rest of the database.
+
+`backend/tests/schema.rs` checks the keys, the checks and the cascade as the application role; `backend/tests/push.rs` and `backend/tests/sms.rs` drive them through the API and the worker.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

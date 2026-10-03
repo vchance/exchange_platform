@@ -31,7 +31,7 @@ The Yuppers mark (`assets/splash-icon.png`, drawn by `scripts/make-icons.mjs`) o
 
 What each platform's generated project asks for, read from `Info.plist` and `AndroidManifest.xml` produced by `npx expo prebuild` with the app config as it is now, and from the Android manifests of the dependencies that are merged into it at build time.
 
-**iOS.** No permission prompt. The app asks for no camera, photos, contacts, location, microphone, notifications or tracking. `expo-secure-store`'s Face ID usage string is turned off (`faceIDPermission: false`): the session token is kept in the Keychain without biometrics. The only usage string in `Info.plist` is `NSLocalNetworkUsageDescription`, with the Bonjour service `_expo._tcp`, added by the development client so it can find a development server on the local network; a build step added by the same plugin deletes both from every build that is not Debug, so preview and production builds carry neither.
+**iOS.** One permission prompt: notifications, the system's own dialog, which needs no usage string. It is shown only when the person turns notifications on in the app (README, "Mobile app"), never at launch. The app asks for no camera, photos, contacts, location, microphone or tracking. `expo-notifications` adds the `aps-environment` entitlement (`development`, its plugin's default; App Store builds are signed for production, which is meant to set it to `production`: check it in the first store build). `expo-secure-store`'s Face ID usage string is turned off (`faceIDPermission: false`): the session token is kept in the Keychain without biometrics. The only usage string in `Info.plist` is `NSLocalNetworkUsageDescription`, with the Bonjour service `_expo._tcp`, added by the development client so it can find a development server on the local network; a build step added by the same plugin deletes both from every build that is not Debug, so preview and production builds carry neither.
 
 **Android.**
 
@@ -40,11 +40,14 @@ What each platform's generated project asks for, read from `Info.plist` and `And
 | `INTERNET` | The app template, `expo-file-system` | Kept: the app talks to the service. Granted at install, never prompted. |
 | `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` (up to Android 12) | The app template, `expo-file-system` | Removed. The only file the app writes is a copy of a record for the share sheet, in its own cache directory, which needs no permission. |
 | `SYSTEM_ALERT_WINDOW` | The app template (React Native's debug overlay) | Removed. The app draws over no other app. |
-| `VIBRATE` | The app template | Removed. Nothing in the app vibrates. |
+| `VIBRATE` | The app template | Removed. Nothing in the app vibrates. Whether Android then vibrates for a notification on the app's channel depends on the version and the person's settings; not checked on a device. |
+| `POST_NOTIFICATIONS` (Android 13 and later) | `expo-notifications` | Kept: showing a notification needs it, and the system asks the person, once, when they turn notifications on in the app. Earlier versions grant it at install. |
+| `RECEIVE_BOOT_COMPLETED` | `expo-notifications` | Removed. It lets notifications scheduled on the device come back after a restart; the app schedules none, and push notifications do not need it. |
+| `com.google.android.c2dm.permission.RECEIVE`, `WAKE_LOCK`, `ACCESS_NETWORK_STATE` | Firebase Cloud Messaging, which `expo-notifications` uses, merged at build time | Expected to be kept: receiving push through FCM needs them. Not seen yet: only a Gradle build shows the merged manifest, and none has been run. |
 
-They are removed with `android.blockedPermissions` in `app.json`, which marks each `tools:node="remove"` so that a dependency's manifest cannot bring it back at build time. CI generates both projects on every change and fails if any of the four reappears, or if an iOS usage string other than the development client's appears ("Checks in CI", below).
+They are removed with `android.blockedPermissions` in `app.json`, which marks each `tools:node="remove"` so that a dependency's manifest cannot bring it back at build time. CI generates both projects on every change and fails if any of the five reappears, or if an iOS usage string other than the development client's appears ("Checks in CI", below).
 
-No permission string is shown to anyone, so none needed translating. If one is added, `app.json` takes per-language strings through Expo's `locales` setting, and it should have English and Spanish.
+No permission string is shown to anyone, so none needed translating: the iOS notification prompt and Android's are the systems' own, in the device's language. If one is added, `app.json` takes per-language strings through Expo's `locales` setting, and it should have English and Spanish. The Android notification channel is named by the app in the person's language when it is created ("Updates to your yups").
 
 ## iOS privacy manifest
 
@@ -56,7 +59,7 @@ Apple requires an app to declare why it uses certain APIs ("required reason APIs
 
 | API category | Reason | Declared by |
 |---|---|---|
-| User defaults | `CA92.1`: reading and writing the app's own settings | React Native, `expo-constants`, `expo-localization`, `expo-system-ui`; `expo-sharing` also reads its own defaults |
+| User defaults | `CA92.1`: reading and writing the app's own settings | React Native, `expo-constants`, `expo-localization`, `expo-notifications`, `expo-system-ui`; `expo-sharing` also reads its own defaults |
 | File timestamps | `C617.1`: timestamps of files in the app's own container | React Native, its Folly, boost and glog libraries, `expo-application` |
 | File timestamps | `0A2A.1`: a library's own file functions, used by the app; `3B52.1`: files the person chose to give the app | `expo-file-system` |
 | Disk space | `E174.1`: checking there is room before writing; `85F4.1`: showing free space | `expo-file-system` |
@@ -77,7 +80,8 @@ For the App Store privacy label ("App Privacy" in App Store Connect) and the Goo
 | Data | What it is in the code | Linked to the person | Purpose |
 |---|---|---|---|
 | Email address | The address a person signs in with; a one-time code is sent to it. Kept on the account once verified. | Yes | Signing in; notification emails about their yups |
-| Phone number | Accepted as a sign-in identifier and kept on the account once verified. Codes are not yet sent by SMS (README, "Not built yet"). | Yes | Signing in |
+| Phone number | Accepted as a sign-in identifier and kept on the account once verified. A code for it goes by text message through the SMS provider a deployment configures (`SMS_DELIVERY`), and through nothing until one is. | Yes | Signing in |
+| Push token | Once the person turns notifications on: the Expo push token the system gives the app, with the platform, the app's version and its language, kept on the service under the account and the session until notifications are turned off, the device signs out, the account is deleted or the token stops working. It is how a notification reaches that installed app, and is sent to Expo's push service with each one. | Yes | App functionality (notifications about their yups) |
 | Name | The display name a person gives their profile; it appears on their agreements and in the other party's copy of the record. | Yes | App functionality |
 | User ID | The account's identifier, made by the service. | Yes | App functionality |
 | Other user content | The agreement's text (what each party will give, when, and how they will know it is done), each revision, delivery claims and confirmations, and the reason given in a report. | Yes | App functionality; reports are kept for moderation |
@@ -88,9 +92,9 @@ Also true, and relevant to how the owner answers some questions:
 - **Age.** A person confirms they are 18 or over before signing; the service keeps the time they confirmed, not a date of birth.
 - **Language.** The account's language preference.
 - **Diagnostics:** none. There is no crash reporting, analytics or performance SDK in the app. The service logs each request's method, path, status and timing, with nothing personal (README, "Deploying").
-- **Device identifiers:** none. The app sends its platform and version (`X-Client-Version: ios/0.1.0`), which identifies the build, not the device. It does not read the advertising identifier or any other device ID.
+- **Device identifiers:** the push token above, and only once notifications are turned on. It identifies the installed app to the push service, and changes if the app is reinstalled. Whether a store form counts it as a device ID is the owner's judgement; it is not the advertising identifier, which the app never reads. Otherwise the app sends its platform and version (`X-Client-Version: ios/0.1.0`), which identifies the build, not the device.
 - **On the device.** The session token is kept in the Keychain or Keystore and nowhere else. An invitation's token is held in memory only. A copy of a record made for the share sheet is written to the app's cache and deleted when the next copy is made, on sign-out, and on iOS when the sheet closes. On Android, secure storage is excluded from device backups (`expo-secure-store`'s backup rules).
-- **Shared with others.** The other party to a yup sees what the agreement and its record contain, including the person's name. Emails go through the SMTP provider a deployment configures. Nothing is sold or sent to advertisers or data brokers.
+- **Shared with others.** The other party to a yup sees what the agreement and its record contain, including the person's name. Emails go through the SMTP provider a deployment configures, text messages with codes through its SMS provider (the phone number and the message), and push notifications through Expo's push service and then Apple's or Google's (the push token and the generic text, "Your yup has an update", with the exchange's ID). Nothing is sold or sent to advertisers or data brokers.
 - **In transit.** The app talks to the service over whatever `EXPO_PUBLIC_API_URL` names; iOS refuses plain HTTP except to the local network, so a production build must use HTTPS.
 - **Deletion.** A person can delete their account inside the app (account screen) and on the web (README, "Deleting an account"; `backend/src/deletion.rs` says exactly what goes and what stays).
 - **Payments:** none. The app never handles money; any payment between the parties happens outside it.
@@ -129,7 +133,12 @@ In this order. Each step needs only what the steps before it set up.
 3. **First builds, without Apple or Google.** `eas build --profile development-simulator --platform ios` for the Simulator, and `eas build --profile development --platform android` or `--profile preview` for an APK to install on any Android phone; EAS makes and keeps the Android upload key. This is the first time the app runs on a device: go through sign-in, an invitation link, signing, delivery, the record and its share sheet, report and block, deletion, both languages, light and dark, and large text, on both platforms.
 4. **Apple Developer account.** Note the Team ID (Membership details). Register the bundle ID `app.yuppers`; `eas build` does this, and turns on the Associated Domains capability the config asks for, when it first signs an iOS build. Set `APPLE_APP_ID=<Team ID>.app.yuppers` on the API. Device builds of `development` and `preview` then work for registered devices (`eas device:create`).
 5. **Google Play developer account.** Create the app with the package `app.yuppers` and use Play App Signing. Copy the SHA-256 fingerprint of the app signing key (Play Console, Test and release, App integrity), and of the upload key that EAS keeps (`eas credentials`, Android); set both on the API as `ANDROID_SHA256_CERT_FINGERPRINTS`. Builds installed from Play are signed with the first, internal builds with the second.
-6. **The domain.** With the API serving `https://<domain>` (`WEB_ORIGIN`) and both settings above, check:
+6. **Push notifications.** The app offers notifications only in a build that names the Expo project (step 1: without its project ID it cannot get a push token, skips registration and, in a development build, says so in its log), and only against a service with `PUSH_DELIVERY` set on the api and the worker. Then:
+
+   - **iOS:** create an APNs key in the Apple Developer account (Certificates, Identifiers & Profiles, Keys, with Apple Push Notifications service), and give it to Expo: `npx eas-cli@latest credentials`, iOS, Push Notifications, or let `eas build` offer to create one. The App ID needs the Push Notifications capability, which `eas build` turns on from the `aps-environment` entitlement the `expo-notifications` plugin adds.
+   - **Android:** create a Firebase project and add an Android app with the package `app.yuppers`. Download its `google-services.json` and give it to EAS as a file variable, not to the repository: `npx eas-cli@latest env:create --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json --visibility secret` for each environment; `app.config.ts` builds it in when it is set. Then create a service account key for Firebase Cloud Messaging (API V1) in the Google Cloud console and upload it to Expo: `eas credentials`, Android, Google Service Account Key for Push Notifications (FCM V1).
+   - **The service:** set `PUSH_DELIVERY=expo` on the api and the worker. If push security is turned on in the Expo project's settings (recommended, so only the service can send to its tokens), create an access token there and set `EXPO_ACCESS_TOKEN` on the worker. Check on a device: turn notifications on from the account screen, have the other party act, and see the notification arrive on the lock screen with the generic text and open the exchange when tapped, from a closed app and a running one.
+7. **The domain.** With the API serving `https://<domain>` (`WEB_ORIGIN`) and both settings above, check:
 
    ```sh
    curl -i https://<domain>/.well-known/apple-app-site-association   # 200, application/json, no redirect
@@ -138,8 +147,8 @@ In this order. Each step needs only what the steps before it set up.
    ```
 
    Google's checker: `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://<domain>&relation=delegate_permission/common.handle_all_urls`. On an Android device with a build installed: `adb shell pm verify-app-links --re-verify app.yuppers`, then `adb shell pm get-app-links app.yuppers` should show the domain as `verified`. On iOS, tap an invitation link in Notes or Messages (not typed into Safari, which never opens an app).
-7. **Store listings.** Create the App Store Connect record and the Play Console listing from the drafts below; fill the App Privacy label and the data-safety form from "What the app collects"; answer the content rating questionnaires (the app has user content, reporting and blocking, and is for people 18 and over); publish the privacy policy and support pages and put their addresses in both stores.
-8. **Production builds.** `eas build --profile production --platform all`. The build number starts at 1 and goes up by one each time; `eas build:version:set` sets it if a store already has a higher one. Upload through each store's own console or `eas submit`, when the owner decides to.
+8. **Store listings.** Create the App Store Connect record and the Play Console listing from the drafts below; fill the App Privacy label and the data-safety form from "What the app collects"; answer the content rating questionnaires (the app has user content, reporting and blocking, and is for people 18 and over); publish the privacy policy and support pages and put their addresses in both stores.
+9. **Production builds.** `eas build --profile production --platform all`. The build number starts at 1 and goes up by one each time; `eas build:version:set` sets it if a store already has a higher one. Upload through each store's own console or `eas submit`, when the owner decides to.
 
 ## Store listing drafts
 
@@ -239,7 +248,7 @@ Sizes each store asks for at the time of writing (check before taking them):
 The "Mobile app config" job (`.github/workflows/ci.yml`) runs on every change:
 
 - `npx expo-doctor`, Expo's checks of the dependencies against the SDK and of the app config;
-- `npx expo prebuild --no-install` for iOS and for Android, with `EXPO_PUBLIC_WEB_URL=https://yuppers.example`, in a copy of the app outside the checkout that is deleted afterwards; then checks that the generated projects carry the associated domain, the verified Android intent filter, the privacy manifest and the four removed permissions, and no iOS usage string beyond the development client's.
+- `npx expo prebuild --no-install` for iOS and for Android, with `EXPO_PUBLIC_WEB_URL=https://yuppers.example`, in a copy of the app outside the checkout that is deleted afterwards; then checks that the generated projects carry the associated domain, the verified Android intent filter, the privacy manifest, the push entitlement and Android notification channel, and the five removed permissions, and no iOS usage string beyond the development client's.
 
 It builds and signs nothing and needs no account. The generated `ios/` and `android/` folders are never committed (`apps/mobile/.gitignore`); `app.json` and `app.config.ts` are the source of truth.
 
@@ -248,3 +257,4 @@ It builds and signs nothing and needs no account. The generated `ios/` and `andr
 - Nothing here has run on a device or a simulator, or been built by EAS. `npx expo prebuild`, `npx expo export` for both platforms, `expo-doctor` and the jest tests (as iOS and as Android) have.
 - Whether iOS hands the app the link's `#token` fragment intact for a universal link, and Android for an app link, is what the system documentation says and what `+native-intent.ts` is written for; it has not been seen on a device.
 - The privacy manifest reasons come from the dependencies' own manifests and a search of their sources; Apple's check at upload is the real test.
+- Push notifications have never reached a device. Registering, the offer and the switch, the permission prompts, and opening an exchange from a tapped notification are covered by the jest tests with `expo-notifications` replaced by a stand-in, and the service's requests to Expo by tests against a stand-in for Expo. Not seen: a real token, Expo passing a message to Apple and Google, the lock-screen text, a tap starting a closed app, the notification left unshown while the app is open, `aps-environment` in a store build, the permissions Firebase merges into the Android manifest, and whether Android vibrates without `VIBRATE`.
