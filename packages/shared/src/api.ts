@@ -18,6 +18,8 @@ export type BlockedPerson = Schemas['BlockedPerson']
 export type BlockStatus = Schemas['BlockStatus']
 export type CodeChannel = Schemas['CodeChannel']
 export type DeletionPreview = Schemas['DeletionPreview']
+export type DeviceRegistered = Schemas['DeviceRegistered']
+export type RegisterDevice = Schemas['RegisterDevice']
 export type InvitationPreview = Schemas['InvitationPreview']
 export type RevisionSent = Schemas['RevisionSent']
 export type RevisionView = Schemas['RevisionView']
@@ -230,6 +232,23 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
     deleteAccount(channel: CodeChannel, code: string): Promise<void> {
       return send(() =>
         client.POST('/v1/me/deletion', { headers: headers(), body: { channel, code } }),
+      )
+    },
+
+    // Push notifications (DESIGN.md §12), for an app on a device.
+
+    /**
+     * Registers this device's push token under the current session, or
+     * brings it up to date. Signing out of the session removes it.
+     */
+    registerDevice(device: RegisterDevice): Promise<DeviceRegistered> {
+      return send(() => client.PUT('/v1/me/devices', { headers: headers(), body: device }))
+    },
+
+    /** Stops push notifications to a device registered earlier. Fine to repeat. */
+    removeDevice(id: string): Promise<void> {
+      return send(() =>
+        client.DELETE('/v1/me/devices/{id}', { headers: headers(), params: { path: { id } } }),
       )
     },
 

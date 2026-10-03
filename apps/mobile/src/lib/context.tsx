@@ -20,7 +20,17 @@ import {
   type ReactNode,
 } from 'react';
 
+import { forgetPush } from './push';
 import { api, CLIENT, dropSession, keepSession, restoreSession } from './session';
+
+/**
+ * Stops acting as the account on this device: the session, and this
+ * device's choice about notifications, which is the account's. Whoever signs
+ * in next is asked for themselves.
+ */
+async function leaveDevice(): Promise<void> {
+  await Promise.all([dropSession(), forgetPush()]);
+}
 
 export const I18nContext = createContext<I18n | null>(null);
 
@@ -95,7 +105,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
           if (found) setAccount(found);
           else {
             // A token the service no longer honors is not worth keeping.
-            void dropSession();
+            void leaveDevice();
             setAccountState(null);
           }
           setFailure(null);
@@ -115,7 +125,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   // A session can end at any time: it expires, or the account is suspended.
   useEffect(() => {
     api.onSignedOut(() => {
-      void dropSession();
+      void leaveDevice();
       setAccountState(null);
     });
     return () => api.onSignedOut(() => {});
@@ -183,11 +193,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
           // Whether or not the service heard, this device stops acting as the
           // account: a refusal means the session had already ended.
         }
-        await dropSession();
+        await leaveDevice();
         setAccountState(null);
       },
       async forget() {
-        await dropSession();
+        await leaveDevice();
         setAccountState(null);
       },
       retry() {

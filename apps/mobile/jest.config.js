@@ -4,6 +4,7 @@
 // for the browser test harness.
 const shared = {
   testMatch: ['**/__tests__/**/*.test.[jt]s?(x)'],
+  setupFiles: ['<rootDir>/src/__tests__/setup-notifications.ts'],
   transformIgnorePatterns: [
     // The Expo preset's list, plus `make-plural`, which ships as ES modules.
     '/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|standard-navigation|make-plural))',

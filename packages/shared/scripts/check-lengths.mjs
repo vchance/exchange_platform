@@ -90,6 +90,9 @@ const TIGHT = {
       'mobile.openInvitation.title',
       'mobile.openInvitation.open',
       'mobile.openInvitation.paste',
+      'mobile.notifications.turnOn',
+      'mobile.notifications.notNow',
+      'mobile.notifications.openSettings',
     ],
   },
   // One line in the web header or the mobile navigation bar.

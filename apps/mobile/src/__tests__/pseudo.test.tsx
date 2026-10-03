@@ -4,6 +4,7 @@ import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-li
 import * as Print from 'expo-print';
 
 import { forgetInvitation } from '../lib/invitation';
+import { notifications, resetNotifications } from './fake-notifications';
 import { DRAFT, EXCHANGE, fakeService, INVITATION, TOKEN, ana, type FakeService } from './fake-service';
 
 /*
@@ -95,13 +96,18 @@ const ALLOWED = [
   ...languages.flatMap((language) => [language.name, language.code]),
 ];
 
-async function open(initialUrl: string, signedIn: boolean) {
+async function open(
+  initialUrl: string,
+  signedIn: boolean,
+  prepare?: (service: FakeService) => void,
+) {
   mockKeychain.clear();
   service = fakeService();
   if (signedIn) {
     mockKeychain.set('yuppers.session', TOKEN);
     service.account = ana;
   }
+  prepare?.(service);
   await renderRouter('src/app', { initialUrl });
 }
 
@@ -186,6 +192,33 @@ describe('every word on the main mobile screens comes from the wording', () => {
     await screen.findByText(w.safety.blockedEmpty);
     check();
     await fireEvent.press(screen.getByRole('button', { name: w.deletion.open }));
+    check();
+    expect([...found]).toEqual([]);
+  });
+
+  test('notifications: the offer on the list, the switch, and a phone-only account', async () => {
+    notifications.projectId = 'test-project-id';
+    try {
+      await open('/', true, (fake) => {
+        fake.push = true;
+      });
+      await screen.findByText(w.mobile.notifications.askHeading);
+      check();
+      notifications.permission = { granted: false, canAskAgain: false };
+      await open('/account', true, (fake) => {
+        fake.push = true;
+        fake.account = { ...ana, email: null, phone: '+15555550123' };
+      });
+      await screen.findByText(w.mobile.notifications.blocked);
+      await screen.findByText(w.mobile.notifications.phoneOnly);
+      check();
+    } finally {
+      resetNotifications();
+    }
+    await open('/account', true, (fake) => {
+      fake.account = { ...ana, email: null, phone: '+15555550123' };
+    });
+    await screen.findByText(w.mobile.notifications.phoneOnlyNoPush);
     check();
     expect([...found]).toEqual([]);
   });

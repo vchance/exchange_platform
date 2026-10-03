@@ -557,6 +557,9 @@ pub struct ReceiptRules {
     pub keep: Duration,
     /// How long one request for receipts may take.
     pub timeout: std::time::Duration,
+    /// How often the worker asks, at most. A receipt not ready yet is asked
+    /// for again, and every pass would be every five seconds.
+    pub every: std::time::Duration,
 }
 
 impl Default for ReceiptRules {
@@ -565,6 +568,7 @@ impl Default for ReceiptRules {
             wait: Duration::minutes(15),
             keep: Duration::hours(24),
             timeout: std::time::Duration::from_secs(30),
+            every: std::time::Duration::from_secs(60),
         }
     }
 }

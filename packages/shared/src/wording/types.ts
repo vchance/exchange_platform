@@ -155,6 +155,26 @@ export interface Wording {
       deleteAccount: { subject: string; body: string }
     }
   }
+  /**
+   * The push notification the service sends, for every notice alike
+   * (DESIGN.md §12): a lock screen is read by whoever holds the phone, so it
+   * names no exchange, party, term or amount. May use `{productName}`.
+   */
+  push: {
+    body: string
+  }
+  /**
+   * The text message that carries a one-time code to a phone number, one per
+   * purpose, as `notifications.oneTimeCode`. Uses `{code}` and
+   * `{productName}`, warns not to share the code, and must fit one SMS
+   * segment: 160 characters if every character is in the GSM alphabet, 70
+   * if any is not (an accent such as `ó`, or a curly apostrophe). The
+   * backend's tests check each language.
+   */
+  sms: {
+    signIn: string
+    deleteAccount: string
+  }
   common: {
     loading: string
     cancel: string
@@ -537,6 +557,26 @@ export interface Wording {
     invited: {
       heading: string
       intro: string
+    }
+    /** Push notifications on this phone: the offer on the list, and the account screen's switch. */
+    notifications: {
+      heading: string
+      switch: string
+      switchHint: string
+      /** When the system's settings refuse notifications to the app. */
+      blocked: string
+      openSettings: string
+      failed: string
+      askHeading: string
+      askBody: string
+      turnOn: string
+      notNow: string
+      /** The Android notification channel's name, shown in the system's settings. */
+      channel: string
+      /** To an account with no email address, where push can be had. */
+      phoneOnly: string
+      /** To an account with no email address, where it cannot. */
+      phoneOnlyNoPush: string
     }
     date: {
       choose: string

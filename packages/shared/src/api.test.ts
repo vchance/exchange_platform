@@ -199,6 +199,31 @@ test('an invitation token travels in the body, never in the address', async () =
   ])
 })
 
+test('a device is registered for push and removed with the session’s token', async () => {
+  const { client, calls } = fakeClient([
+    { status: 200, data: { id: 'd1' } },
+    { status: 204 },
+  ])
+  const api = createExchangeApi({ client, session: holding('s3cret') })
+  const device = {
+    token: 'ExponentPushToken[abc]',
+    platform: 'ios' as const,
+    app_version: '0.1.0',
+    language: 'es',
+  }
+  expect(await api.registerDevice(device)).toEqual({ id: 'd1' })
+  await api.removeDevice('d1')
+  expect(calls.map((made) => `${made.method} ${made.path}`)).toEqual([
+    'PUT /v1/me/devices',
+    'DELETE /v1/me/devices/{id}',
+  ])
+  expect(calls[0].init.body).toEqual(device)
+  expect(calls[1].init.params?.path).toEqual({ id: 'd1' })
+  for (const made of calls) {
+    expect(made.init.headers).toEqual({ Authorization: 'Bearer s3cret' })
+  }
+})
+
 test('reporting and blocking go out like every other call', async () => {
   const token = 'a3'.repeat(32)
   const { client, calls } = fakeClient()

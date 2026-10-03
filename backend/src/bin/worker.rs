@@ -42,6 +42,8 @@ async fn main() -> anyhow::Result<()> {
         rules: DeliveryRules::default(),
     };
     let receipt_rules = ReceiptRules::default();
+    // When the push service was last asked for receipts.
+    let mut last_receipts: Option<std::time::Instant> = None;
     if push_delivery.sender.is_none() {
         tracing::info!("push notifications are off (PUSH_DELIVERY)");
     }
@@ -170,7 +172,10 @@ async fn main() -> anyhow::Result<()> {
                     }
                     Err(error) => tracing::error!(error = %Redacted(&error), "push delivery failed"),
                 }
-                if let Some(sender) = &push_delivery.sender {
+                let receipts_due = last_receipts
+                    .is_none_or(|last: std::time::Instant| last.elapsed() >= receipt_rules.every);
+                if let Some(sender) = push_delivery.sender.as_ref().filter(|_| receipts_due) {
+                    last_receipts = Some(std::time::Instant::now());
                     let read = push::check_receipts(
                         &db,
                         sender.as_ref(),

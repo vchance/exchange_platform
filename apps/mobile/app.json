@@ -79,7 +79,8 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ],
       "predictiveBackGestureEnabled": false
     },
@@ -103,6 +104,14 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#0b57b0",
+          "defaultChannel": "default"
+        }
+      ],
       [
         "expo-splash-screen",
         {

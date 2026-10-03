@@ -3,6 +3,7 @@ import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-li
 import { AccessibilityInfo, StyleSheet } from 'react-native';
 
 import { forgetInvitation } from '../lib/invitation';
+import { notifications, resetNotifications } from './fake-notifications';
 import {
   DRAFT,
   EXCHANGE,
@@ -264,6 +265,44 @@ describe('the exchanges', () => {
     expect(label.startsWith(w.states.ACTIVE + '. Reference PVVS-5Q2K. ')).toBe(true);
     expect(label.endsWith('. With Sam. Completed. Reference EX-0001.')).toBe(true);
     expect(label).not.toMatch(/[\u0000-\u001f\u202A-\u202E\u2066-\u2069]/);
+  });
+});
+
+describe('notifications', () => {
+  afterEach(resetNotifications);
+  const withPush = (fake: FakeService) => {
+    notifications.projectId = 'test-project-id';
+    fake.push = true;
+  };
+
+  test('the offer on the list is headed, and each of its buttons named', async () => {
+    await open('/', { signedIn: true, prepare: withPush });
+    await screen.findByText(w.mobile.notifications.askHeading);
+    expect(audit()).toEqual([]);
+    screen.getByRole('button', { name: w.mobile.notifications.turnOn });
+    screen.getByRole('button', { name: w.mobile.notifications.notNow });
+  });
+
+  test('the switch on the account screen is labelled, says what it does, and its state', async () => {
+    await open('/account', { signedIn: true, prepare: withPush });
+    const toggle = await screen.findByLabelText(w.mobile.notifications.switch);
+    expect(audit()).toEqual([]);
+    expect(toggle.props.accessibilityRole).toBe('switch');
+    expect(toggle.props.accessibilityHint).toBe(w.mobile.notifications.switchHint);
+    expect(toggle.props.accessibilityState).toMatchObject({ checked: false });
+  });
+
+  test('refused in the system settings, the way there is a named button', async () => {
+    await open('/account', {
+      signedIn: true,
+      prepare: (fake) => {
+        withPush(fake);
+        notifications.permission = { granted: false, canAskAgain: false };
+      },
+    });
+    await screen.findByText(w.mobile.notifications.blocked);
+    expect(audit()).toEqual([]);
+    screen.getByRole('button', { name: w.mobile.notifications.openSettings });
   });
 });
 

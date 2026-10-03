@@ -15,6 +15,8 @@ export const REPAIR = '11111111-1111-4111-8111-111111111111';
 export const PAYMENT = '22222222-2222-4222-8222-222222222222';
 export const TOKEN = 'session-token-from-the-service';
 export const INVITATION = 'a3'.repeat(32);
+/** The ID the service gives a device registered for push. */
+export const DEVICE = 'd0000000-0000-4000-8000-000000000001';
 
 export const ana: Account = {
   id: 'a0000000-0000-4000-8000-000000000001',
@@ -135,6 +137,10 @@ export interface FakeService {
    * used by the signed-in account.
    */
   invitation: 'live' | 'spent' | 'yours';
+  /** Whether the service says it sends push notifications. */
+  push: boolean;
+  /** The devices registered for push, by ID, with what was registered. */
+  devices: Map<string, unknown>;
   fetch: typeof fetch;
 }
 
@@ -146,6 +152,8 @@ export function fakeService(): FakeService {
     otherPartyName: 'Ben Ortiz',
     conflictNext: false,
     invitation: 'live',
+    push: false,
+    devices: new Map(),
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const text = await request.text();
@@ -185,6 +193,7 @@ function respond(
         service: 'yuppers-backend',
         version: '0.0.0',
         minimum_client_versions: { web: null, ios: null, android: null },
+        push_notifications: service.push,
       },
     ];
   }
@@ -238,7 +247,19 @@ function respond(
     };
     return [200, service.account];
   }
-  if (call === 'DELETE /v1/auth/session') return [204, null];
+  if (call === 'DELETE /v1/auth/session') {
+    // The device signed in with the session goes with it.
+    service.devices.clear();
+    return [204, null];
+  }
+  if (call === 'PUT /v1/me/devices') {
+    service.devices.set(DEVICE, body);
+    return [200, { id: DEVICE }];
+  }
+  if (call === `DELETE /v1/me/devices/${DEVICE}`) {
+    service.devices.delete(DEVICE);
+    return [204, null];
+  }
   if (call === 'GET /v1/exchanges') {
     return [
       200,

@@ -1,6 +1,7 @@
 import { directionOf } from '@yuppers/shared';
 import { DarkTheme, DefaultTheme, LocaleProvider, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -8,6 +9,7 @@ import { Actions, Button, Heading, Screen } from '../components/ui';
 import { AppProviders, useI18n, useSession } from '../lib/context';
 import { useReduceMotion } from '../lib/accessibility';
 import { installPluralRules } from '../lib/plural-rules';
+import { installNotificationHandling, syncDevice, useNotificationTaps } from '../lib/push';
 import { holdSplash, useSplashUntil, useWindowBackground } from '../lib/splash';
 import { colorsFor, useScheme } from '../lib/theme';
 
@@ -15,6 +17,8 @@ import { colorsFor, useScheme } from '../lib/theme';
 installPluralRules();
 // The launch screen stays until the app knows who is signed in (`lib/splash.ts`).
 holdSplash();
+// A notification arriving while the app is open is not shown (`lib/push.ts`).
+installNotificationHandling();
 
 export default function RootLayout() {
   return (
@@ -33,11 +37,20 @@ export default function RootLayout() {
  */
 function Navigation() {
   const { wording, language } = useI18n();
-  const { outdated, ready } = useSession();
+  const { outdated, ready, account } = useSession();
   const scheme = useScheme();
   const colors = colorsFor(scheme);
   useWindowBackground(colors);
   useSplashUntil(ready);
+  // A tapped notification opens its exchange; signed in, the service's
+  // record of this device is kept current (`lib/push.ts`).
+  useNotificationTaps();
+  const accountId = account?.id;
+  const accountLanguage = account?.language;
+  const channel = wording.mobile.notifications.channel;
+  useEffect(() => {
+    if (accountId && accountLanguage) void syncDevice(accountLanguage, channel);
+  }, [accountId, accountLanguage, channel]);
   const direction = directionOf(language);
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
   // Screens slide in, unless the person has asked for less motion.

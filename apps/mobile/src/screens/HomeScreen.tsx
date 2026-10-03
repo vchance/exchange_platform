@@ -18,6 +18,7 @@ import {
   Tags,
   Written,
 } from '../components/ui';
+import { NotificationsOffer } from '../components/Notifications';
 import { useI18n } from '../lib/context';
 import { forgetInvitation } from '../lib/invitation';
 import { deviceTimezone } from '../lib/time-zone';
@@ -99,6 +100,7 @@ export function HomeScreen() {
       </Actions>
       <Failure code={failure} />
       {tooMany && <ErrorNote>{w.tooManyToday}</ErrorNote>}
+      <NotificationsOffer exchanges={exchanges} />
 
       {!exchanges && !failure && <P>{wording.common.loading}</P>}
       {exchanges?.length === 0 && <P>{w.empty}</P>}

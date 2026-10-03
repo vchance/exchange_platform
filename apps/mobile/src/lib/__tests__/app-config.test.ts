@@ -1,6 +1,11 @@
 import type { ExpoConfig } from 'expo/config';
 
-import appConfig, { appLinkDomain, checkReleaseSettings, withAppLinks } from '../../../app.config';
+import appConfig, {
+  appLinkDomain,
+  checkReleaseSettings,
+  withAppLinks,
+  withPushCredentials,
+} from '../../../app.config';
 import appJson from '../../../app.json';
 
 const base = appJson.expo as ExpoConfig;
@@ -110,6 +115,16 @@ describe('the app config', () => {
     ]);
     expect(config.android?.package).toBe('app.yuppers');
     expect(config.android?.blockedPermissions).toEqual(base.android?.blockedPermissions);
+  });
+
+  it('builds in the Firebase file for Android push only when a build is given one', () => {
+    expect(withPushCredentials(base, undefined)).toBe(base);
+    expect(withPushCredentials(base, ' ')).toBe(base);
+    expect(base.android?.googleServicesFile).toBeUndefined();
+    const config = withPushCredentials(base, '/home/expo/workingdir/google-services.json');
+    expect(config.android?.googleServicesFile).toBe('/home/expo/workingdir/google-services.json');
+    expect(config.android?.package).toBe('app.yuppers');
+    expect(config.ios).toEqual(base.ios);
   });
 
   it('reads the domain from EXPO_PUBLIC_WEB_URL', () => {

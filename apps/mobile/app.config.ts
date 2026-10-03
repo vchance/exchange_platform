@@ -112,8 +112,24 @@ export function checkReleaseSettings(env: Record<string, string | undefined>): v
   }
 }
 
+/**
+ * Push on Android: an app gets a push token only with its Firebase project's
+ * `google-services.json` built in. That file belongs to the owner's Firebase
+ * project and is not kept in the repository; an EAS build is handed it as a
+ * file environment variable, `GOOGLE_SERVICES_JSON`, whose value is the path
+ * EAS writes it to (docs/mobile-release.md). Without it the build is as
+ * before, and on Android the app finds no token and offers no notifications.
+ * iOS needs nothing here: the APNs key is uploaded to Expo, not built in.
+ */
+export function withPushCredentials(config: ExpoConfig, googleServicesFile: string | undefined): ExpoConfig {
+  const file = googleServicesFile?.trim();
+  if (!file) return config;
+  return { ...config, android: { ...config.android, googleServicesFile: file } };
+}
+
 export default function appConfig({ config }: ConfigContext): ExpoConfig {
   checkReleaseSettings(process.env);
   // `config` is app.json's `expo` object; it always has a name and a slug.
-  return withAppLinks(config as ExpoConfig, appLinkDomain(process.env.EXPO_PUBLIC_WEB_URL));
+  const linked = withAppLinks(config as ExpoConfig, appLinkDomain(process.env.EXPO_PUBLIC_WEB_URL));
+  return withPushCredentials(linked, process.env.GOOGLE_SERVICES_JSON);
 }

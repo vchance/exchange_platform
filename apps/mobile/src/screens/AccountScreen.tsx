@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { NotificationsSetting } from '../components/Notifications';
 import { Actions, Button, Heading, Label, Screen } from '../components/ui';
 import { useI18n, useSession } from '../lib/context';
 import { openHelp } from '../lib/help';
@@ -10,7 +11,7 @@ import { ProfileForm } from './AccountSetup';
 import { BlockedPeople } from './BlockedPeople';
 import { DeleteAccount } from './DeleteAccount';
 
-/** The account: what it is verified with, its name and language, and signing out. */
+/** The account: what it is verified with, its name and language, notifications, and signing out. */
 export function AccountScreen() {
   const { wording, language } = useI18n();
   const { account, signOut } = useSession();
@@ -50,6 +51,7 @@ export function AccountScreen() {
         </View>
       ) : null}
       <ProfileForm account={account} first={false} />
+      <NotificationsSetting account={account} />
       <BlockedPeople />
       <Actions>
         <Button
