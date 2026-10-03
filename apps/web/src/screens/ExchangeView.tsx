@@ -22,6 +22,7 @@ import { InvitationFor, InvitationLink } from '../components/InvitationLink'
 import { OtherPartyLeft } from '../components/OtherPartyLeft'
 import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
+import { WalletButton } from '../components/WalletButton'
 import { Failure, Notice, PageHeading, Written } from '../components/ui'
 import { restoreFocus, useActions, type Actions } from '../lib/actions'
 import { useAnnouncement } from '../lib/announce'
@@ -196,6 +197,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
           <h2 id="agreement-heading">{w.agreementHeading}</h2>
           <p>{w.agreementSigned}</p>
           {active && remaining > 0 && <p>{fmt(w.remaining, { count: remaining })}</p>}
+          {active && <WalletButton exchange={exchange} />}
           <TermsView
             terms={inForce.terms}
             currency={exchange.currency}

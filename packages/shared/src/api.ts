@@ -24,6 +24,8 @@ export type RevisionView = Schemas['RevisionView']
 export type SendRevision = Schemas['SendRevision']
 export type SessionCreated = Schemas['SessionCreated']
 export type Slot = Schemas['Slot']
+export type WalletLink = Schemas['WalletLink']
+export type WalletPlatform = Schemas['WalletPlatform']
 
 /**
  * A refusal from the service, or no answer from it. Screens show
@@ -410,6 +412,32 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
 
     blockedPeople(): Promise<BlockedPerson[]> {
       return send(() => client.GET('/v1/blocks', { headers: headers() }))
+    },
+
+    // Wallet passes (DESIGN.md §11). Each is the caller's own pass for the
+    // exchange, the same one each time; asking again is harmless.
+
+    /**
+     * A link that downloads the caller's Apple Wallet pass for a few minutes,
+     * without a session: opened in Safari, it adds the pass to Wallet.
+     */
+    appleWalletLink(id: string): Promise<WalletLink> {
+      return send(() =>
+        client.POST('/v1/exchanges/{id}/wallet/apple/link', {
+          headers: headers(),
+          params: { path: { id } },
+        }),
+      )
+    },
+
+    /** The "Save to Google Wallet" link for the caller's pass. */
+    googleWalletLink(id: string): Promise<WalletLink> {
+      return send(() =>
+        client.POST('/v1/exchanges/{id}/wallet/google', {
+          headers: headers(),
+          params: { path: { id } },
+        }),
+      )
     },
   }
 }

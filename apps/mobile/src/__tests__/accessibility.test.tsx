@@ -1,6 +1,6 @@
 import { wordingFor } from '@yuppers/shared';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
-import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Platform, StyleSheet } from 'react-native';
 
 import { forgetInvitation } from '../lib/invitation';
 import {
@@ -311,6 +311,10 @@ describe('the exchange', () => {
   test('a panel takes the screen reader to it, and gives the focus back on cancel', async () => {
     await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
     await screen.findByText('Yup with Ben Ortiz');
+    // The device's own wallet button is there to be audited too.
+    await screen.findByRole('button', {
+      name: Platform.OS === 'ios' ? w.wallet.addToApple : w.wallet.addToGoogle,
+    });
     expect(audit()).toEqual([]);
 
     const opener = screen.getByRole('button', { name: w.exchange.moves.CLAIM });

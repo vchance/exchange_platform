@@ -24,6 +24,7 @@ import { Consent } from '../components/Consent';
 import { InvitationFor, InvitationLink } from '../components/InvitationLink';
 import { OtherPartyLeft } from '../components/OtherPartyLeft';
 import { TermsView } from '../components/TermsView';
+import { WalletButton } from '../components/WalletButton';
 import {
   Actions,
   Button,
@@ -221,6 +222,7 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
           <Heading level={2}>{w.agreementHeading}</Heading>
           <P>{w.agreementSigned}</P>
           {active && remaining > 0 && <P>{fmt(w.remaining, { count: remaining })}</P>}
+          {active && <WalletButton exchange={exchange} />}
           <TermsView
             terms={inForce.terms}
             currency={exchange.currency}

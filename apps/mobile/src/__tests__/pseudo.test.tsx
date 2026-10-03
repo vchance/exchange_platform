@@ -2,6 +2,7 @@ import { languages, timeZoneCity } from '@yuppers/shared';
 import { formattedWords, pseudoWording, untranslated } from '@yuppers/shared/testing/pseudo';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import * as Print from 'expo-print';
+import { Platform } from 'react-native';
 
 import { forgetInvitation } from '../lib/invitation';
 import { DRAFT, EXCHANGE, fakeService, INVITATION, TOKEN, ana, type FakeService } from './fake-service';
@@ -203,6 +204,8 @@ describe('every word on the main mobile screens comes from the wording', () => {
   test('an agreement in force, its panels, the guide and the record', async () => {
     await open(`/exchanges/${EXCHANGE}`, true);
     await screen.findByText(w.exchange.title.replace('{name}', 'Ben Ortiz'));
+    // The wallet button, which comes once the service has said it has passes.
+    await screen.findByText(Platform.OS === 'ios' ? w.wallet.addToApple : w.wallet.addToGoogle);
     check();
     await fireEvent.press(screen.getByRole('button', { name: w.exchange.moves.CLAIM }));
     check();
