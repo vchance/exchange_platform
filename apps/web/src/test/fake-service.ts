@@ -11,8 +11,17 @@ import type { HistoryPage, RecordDocument, RevisionView } from '@exchange/shared
 export const ACTIVE = '0b9f1c2e-7a41-4c6e-9a55-3d2f8e1b6c70'
 export const DRAFT = '5d0c3b1a-2f64-4e8b-9a7d-1c2e3f4a5b6c'
 export const OFFER = '7e2f3a4b-5c6d-4e7f-8a9b-0c1d2e3f4a5b'
+/** A counteroffer from Ben, waiting for Ana. */
+export const COUNTER = '8a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'
+/** An amendment from Ana, waiting for Ben. */
+export const AMENDING = '9b2c3d4e-5f6a-4b7c-9d8e-0f1a2b3c4d5e'
+/** An agreement in force where Ben has disputed the repair. */
+export const DISPUTED = 'ac3d4e5f-6a7b-4c8d-8e9f-1a2b3c4d5e6f'
+/** An exchange that ended by agreement. */
+export const ENDED = 'bd4e5f6a-7b8c-4d9e-9f0a-2b3c4d5e6f7a'
 export const REPAIR = '11111111-1111-4111-8111-111111111111'
 export const PAYMENT = '22222222-2222-4222-8222-222222222222'
+export const GATE = '33333333-3333-4333-8333-333333333333'
 export const INVITATION = 'a3'.repeat(32)
 /** A second invitation, to another proposal, whose preview carries its own reference. */
 export const OTHER_INVITATION = 'b4'.repeat(32)
@@ -150,7 +159,106 @@ export function draftExchange(): ExchangeView {
   }
 }
 
+/** Ben's answer to the first version: a higher payment, and a gate to paint. */
+export const counterRevision: RevisionView = {
+  ...revision,
+  id: 'c0000000-0000-4000-8000-000000000002',
+  sequence: 2,
+  author: 'B',
+  accepted_by: ['B'],
+  note: null,
+  terms: {
+    ...revision.terms,
+    contributions: [
+      revision.terms.contributions[0],
+      { ...revision.terms.contributions[1], amount_minor: 50000 },
+      {
+        id: GATE,
+        from: 'A',
+        type: 'TASK',
+        description: 'Paint the gate',
+        due: { kind: 'ON_AGREEMENT' },
+        required: false,
+      },
+    ],
+  },
+}
+
+/** Ana's change to the agreement: the repair is described anew. */
+export const amendmentRevision: RevisionView = {
+  ...revision,
+  id: 'c0000000-0000-4000-8000-000000000003',
+  sequence: 2,
+  author: 'A',
+  accepted_by: ['A'],
+  note: null,
+  terms: {
+    ...revision.terms,
+    contributions: [
+      { ...revision.terms.contributions[0], description: 'Repair the back fence and the gate' },
+      revision.terms.contributions[1],
+    ],
+  },
+}
+
+function counterExchange(): ExchangeView {
+  return {
+    ...common,
+    id: COUNTER,
+    version: 5,
+    state: 'NEGOTIATING',
+    you: 'A',
+    display_code: 'CNTR-4H7J',
+    open_revision: counterRevision,
+    contributions: [],
+  }
+}
+
+function amendingExchange(): ExchangeView {
+  return {
+    ...activeExchange(),
+    id: AMENDING,
+    you: 'B',
+    display_code: 'AMND-2X9Q',
+    open_revision: amendmentRevision,
+  }
+}
+
+function disputedExchange(): ExchangeView {
+  return {
+    ...activeExchange(),
+    id: DISPUTED,
+    you: 'B',
+    display_code: 'DSPT-8M3R',
+    contributions: [
+      { id: REPAIR, status: 'DISPUTED', since: '2026-10-21T09:00:00Z' },
+      { id: PAYMENT, status: 'PENDING' },
+    ],
+  }
+}
+
+function endedExchange(): ExchangeView {
+  return {
+    ...activeExchange(),
+    id: ENDED,
+    state: 'CLOSED',
+    closed_outcome: 'ENDED_BY_AGREEMENT',
+    display_code: 'ENDD-6T1W',
+    contributions: [
+      { id: REPAIR, status: 'ACCEPTED', since: '2026-10-21T09:00:00Z' },
+      { id: PAYMENT, status: 'WAIVED', since: '2026-10-24T09:00:00Z' },
+    ],
+  }
+}
+
 const exchanges = (): ExchangeView[] => [activeExchange(), offerExchange(), draftExchange()]
+/** Exchanges that can be opened but are not in the list, so the list stays as it was. */
+const others = (): ExchangeView[] => [
+  counterExchange(),
+  amendingExchange(),
+  disputedExchange(),
+  endedExchange(),
+]
 
 function summary(exchange: ExchangeView): ExchangeSummary {
   return {
@@ -205,6 +313,87 @@ function record(exchange: ExchangeView): RecordDocument {
     verified_at: '2026-10-02T15:58:00Z',
     description: 'described by the record',
   })
+  const counter = exchange.id === COUNTER
+  const amending = exchange.id === AMENDING
+  const ended = exchange.id === ENDED
+  /** One version as the record holds it. */
+  const recorded = (
+    view: RevisionView,
+    standing: RecordDocument['revisions'][number]['standing'],
+    signers: readonly ('A' | 'B')[],
+  ): RecordDocument['revisions'][number] => ({
+    id: view.id,
+    sequence: view.sequence,
+    author: view.author,
+    sent_at: '2026-10-02T15:00:05Z',
+    expires_at: view.expires_at,
+    standing,
+    note: view.note,
+    answers: view.sequence > 1 ? { id: revision.id, sequence: 1 } : null,
+    content_hash: view.content_hash,
+    signed: {
+      v: 1,
+      exchange: exchange.id,
+      currency: exchange.currency,
+      timezone: exchange.timezone,
+      parties: PARTIES,
+      terms: view.terms.terms,
+      attachments: [],
+      contributions: view.terms.contributions.map((item) => ({
+        id: item.id,
+        from: item.from,
+        type: item.type,
+        description: item.description,
+        quantity: item.quantity ?? null,
+        due: item.due,
+        completion_criteria: item.completion_criteria ?? null,
+        required: item.required,
+        amount_minor: item.amount_minor ?? null,
+        settlement: item.type === 'MONEY' ? 'OFF_PLATFORM' : null,
+      })),
+    },
+    signatures: signers.map((party) => ({
+      party,
+      name: PARTIES[party],
+      signed_at: signedAt,
+      content_hash: view.content_hash,
+      verification: verification(party === 'A' ? 'EMAIL_OTP' : 'PHONE_OTP'),
+      consent: { language: 'en', version: 'draft-1' },
+    })),
+  })
+  const revisions = counter
+    ? [
+        recorded(revision, { status: 'SUPERSEDED', since: signedAt }, ['A']),
+        recorded(counterRevision, { status: 'OPEN', since: signedAt }, ['B']),
+      ]
+    : [
+        recorded(revision, { status: 'IN_FORCE', since: signedAt, in_force_at: signedAt }, ['A', 'B']),
+        ...(amending ? [recorded(amendmentRevision, { status: 'OPEN', since: signedAt }, ['A'])] : []),
+      ]
+  const closedAt = '2026-10-24T09:00:00Z'
+  const events = history(exchange).events
+  if (ended) {
+    const at = closedAt
+    events.push(
+      {
+        sequence: 4,
+        type: 'CONTRIBUTION_CONFIRMED',
+        actor: 'B',
+        at: '2026-10-21T09:00:00Z',
+        contribution: { id: REPAIR, description: 'Repair the back fence' },
+        status: 'ACCEPTED',
+      },
+      { sequence: 5, type: 'END_PROPOSED', actor: 'B', at },
+      {
+        sequence: 6,
+        type: 'EXCHANGE_CLOSED',
+        actor: 'A',
+        at,
+        outcome: 'ENDED_BY_AGREEMENT',
+        waived: [PAYMENT],
+      },
+    )
+  }
   return {
     format: 'exchange-record',
     format_version: 2,
@@ -225,60 +414,28 @@ function record(exchange: ExchangeView): RecordDocument {
       created_at: '2026-10-02T14:50:00Z',
       state: exchange.state,
       counterparty: exchange.counterparty,
-      in_force_revision: { id: revision.id, sequence: 1 },
-      last_event: 3,
+      in_force_revision: counter ? null : { id: revision.id, sequence: 1 },
+      open_revision: exchange.open_revision
+        ? { id: exchange.open_revision.id, sequence: exchange.open_revision.sequence }
+        : null,
+      closed_outcome: exchange.closed_outcome ?? null,
+      closed_at: exchange.state === 'CLOSED' ? closedAt : null,
+      last_event: events.length,
     },
     parties: PARTIES,
-    contributions: revision.terms.contributions.map((item) => ({
-      id: item.id,
-      from: item.from,
-      description: item.description,
-      required: item.required,
-      status: exchange.contributions.find((stands) => stands.id === item.id)?.status ?? 'PENDING',
-      since: signedAt,
-    })),
-    revisions: [
-      {
-        id: revision.id,
-        sequence: 1,
-        author: 'A',
-        sent_at: '2026-10-02T15:00:05Z',
-        expires_at: revision.expires_at,
-        standing: { status: 'IN_FORCE', since: signedAt, in_force_at: signedAt },
-        note: revision.note,
-        content_hash: revision.content_hash,
-        signed: {
-          v: 1,
-          exchange: exchange.id,
-          currency: exchange.currency,
-          timezone: exchange.timezone,
-          parties: PARTIES,
-          terms: revision.terms.terms,
-          attachments: [],
-          contributions: revision.terms.contributions.map((item) => ({
-            id: item.id,
-            from: item.from,
-            type: item.type,
-            description: item.description,
-            quantity: item.quantity ?? null,
-            due: item.due,
-            completion_criteria: item.completion_criteria ?? null,
-            required: item.required,
-            amount_minor: item.amount_minor ?? null,
-            settlement: item.type === 'MONEY' ? 'OFF_PLATFORM' : null,
-          })),
-        },
-        signatures: (['A', 'B'] as const).map((party) => ({
-          party,
-          name: PARTIES[party],
-          signed_at: signedAt,
-          content_hash: revision.content_hash,
-          verification: verification(party === 'A' ? 'EMAIL_OTP' : 'PHONE_OTP'),
-          consent: { language: 'en', version: 'draft-1' },
+    contributions: counter
+      ? []
+      : revision.terms.contributions.map((item) => ({
+          id: item.id,
+          from: item.from,
+          description: item.description,
+          required: item.required,
+          status:
+            exchange.contributions.find((stands) => stands.id === item.id)?.status ?? 'PENDING',
+          since: signedAt,
         })),
-      },
-    ],
-    events: history(exchange).events,
+    revisions,
+    events,
     part: { from: { revisions_after: 0, events_after: 0 }, next: null, complete: true },
   } as RecordDocument
 }
@@ -352,7 +509,7 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
   }
   if (call === 'GET /v1/exchanges') return [200, exchanges().map(summary)]
   if (call === 'GET /v1/blocks') return [200, []]
-  for (const exchange of exchanges()) {
+  for (const exchange of [...exchanges(), ...others()]) {
     const at = `/v1/exchanges/${exchange.id}`
     if (call === `GET ${at}`) return [200, exchange]
     if (call === `PUT ${at}/draft`) return [204, null]

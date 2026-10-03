@@ -14,7 +14,19 @@ import {
   until,
   violations,
 } from './test/harness'
-import { ACTIVE, DRAFT, GOOD_CODE, INVITATION, OFFER, REPAIR, ana } from './test/fake-service'
+import {
+  ACTIVE,
+  AMENDING,
+  COUNTER,
+  DISPUTED,
+  DRAFT,
+  ENDED,
+  GOOD_CODE,
+  INVITATION,
+  OFFER,
+  REPAIR,
+  ana,
+} from './test/fake-service'
 
 /*
  * The main screens, each in the state a person meets it in, checked with
@@ -195,12 +207,70 @@ describe('the exchange view', () => {
     await until(() => document.querySelector('.history') !== null, 'the history')
     expect(await violations()).toEqual([])
   })
+
+  test('“Something isn’t working”: the question, then the ways forward', async () => {
+    const { wording } = await start(`/exchanges/${ACTIVE}`, ana)
+    const t = wording.trouble
+    await heading(wording.exchange.title.replace('{name}', 'Ben Ortiz'))
+    await until(() => document.querySelector('.history') !== null, 'the history')
+    const open = button(t.open)
+    open.focus()
+    await press(open)
+    expect(open.getAttribute('aria-expanded')).toBe('true')
+    expect(document.activeElement?.classList.contains('panel')).toBe(true)
+    expect(await violations()).toEqual([])
+
+    // Choosing a situation puts the keyboard on what it says.
+    await press(button(t.situations.THEY_HAVENT.replace('{name}', 'Ben Ortiz')))
+    expect(document.activeElement?.textContent).toBe(t.explain.THEY_HAVENT)
+    expect(await violations()).toEqual([])
+
+    await press(button(wording.common.cancel))
+    expect(document.activeElement).toBe(button(t.open))
+  })
+
+  test('a disputed item, which says the dispute is recorded and not decided', async () => {
+    const { wording } = await start(`/exchanges/${DISPUTED}`, ana)
+    await heading(wording.exchange.title.replace('{name}', 'Ana Ruiz'))
+    await until(() => document.querySelector('.history') !== null, 'the history')
+    expect(document.body.textContent).toContain(wording.dispute.weRecord)
+    expect(await violations()).toEqual([])
+  })
+
+  test('an amendment waiting for the reader, with what it changes', async () => {
+    const { wording } = await start(`/exchanges/${AMENDING}`, ana)
+    await heading(wording.exchange.title.replace('{name}', 'Ana Ruiz'))
+    await until(() => document.querySelector('.proposal-changes') !== null, 'what changes')
+    await until(() => document.querySelector('.history') !== null, 'the history')
+    expect(await violations()).toEqual([])
+  })
+
+  test('a counteroffer waiting for the reader, with what it changes', async () => {
+    const { wording } = await start(`/exchanges/${COUNTER}`, ana)
+    await heading(wording.exchange.title.replace('{name}', 'Ben Ortiz'))
+    await until(() => document.querySelector('.proposal-changes') !== null, 'what changes')
+    await until(() => document.querySelector('.history') !== null, 'the history')
+    expect(await violations()).toEqual([])
+  })
 })
 
 describe('the record', () => {
-  test('laid out for reading', async () => {
+  test('laid out for reading, its plain summary first', async () => {
     const { wording } = await start(`/exchanges/${ACTIVE}/record`, ana)
     await heading(wording.record.title.replace('{code}', 'PVVS-5Q2K'))
+    await until(() => document.querySelector('.record-plain') !== null, 'the summary')
+    expect(await violations()).toEqual([])
+    // Headings go down one level at a time.
+    const levels = [...document.querySelectorAll('main h1, main h2, main h3')].map((h) => h.tagName)
+    for (let i = 1; i < levels.length; i += 1) {
+      expect(Number(levels[i][1]) - Number(levels[i - 1][1])).toBeLessThanOrEqual(1)
+    }
+  })
+
+  test('the summary of an exchange that has ended', async () => {
+    const { wording } = await start(`/exchanges/${ENDED}/record`, ana)
+    await heading(wording.record.title.replace('{code}', 'ENDD-6T1W'))
+    await until(() => document.querySelector('.record-plain') !== null, 'the summary')
     expect(await violations()).toEqual([])
   })
 })

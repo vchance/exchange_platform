@@ -17,6 +17,7 @@ import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
 import { paths } from '../app/routes'
 import { EventList } from '../components/EventList'
+import { RecordSummary } from '../components/RecordSummary'
 import { TermsView } from '../components/TermsView'
 import { Failure, PageHeading, Written } from '../components/ui'
 import { api } from '../lib/api'
@@ -27,8 +28,9 @@ type Slot = components['schemas']['Slot']
 /**
  * The record of an exchange at `/exchanges/{id}/record`: how it stands, every
  * version sent and who signed it, and everything that happened, laid out to
- * be read and printed. The browser's "save as PDF" is the PDF; the download
- * is the same record as a file (DESIGN.md §14.1).
+ * be read and printed, under a plain summary of it. "Save as PDF" opens the
+ * browser's print window, which makes the PDF; the download is the same
+ * record as a file (DESIGN.md §14.1).
  */
 export default function RecordPage({ id }: { id: string }) {
   const { wording } = useI18n()
@@ -82,18 +84,23 @@ function Record({ record }: { record: RecordDocument }) {
         <Link className="button" to={paths.exchange(exchange.id)}>
           {w.back}
         </Link>
-        <button type="button" onClick={() => window.print()}>
-          {w.print}
+        {/* The PDF is the browser's: its print window saves the page as one,
+            and the print rules in record.css leave only the record on it. */}
+        <button type="button" className="primary" onClick={() => window.print()}>
+          {w.summary.savePdf}
         </button>
         <button type="button" onClick={() => download(record, fmt(w.fileName, { code }))}>
           {w.download}
         </button>
       </div>
+      <p className="hint no-print">{w.summary.savePdfHint}</p>
       <p className="hint">
         {fmt(w.madeFor, { name: parties[record.prepared_for], date: when(record.generated_at) })}
         <br />
         {fmt(w.timesIn, { timezone: exchange.timezone })}
       </p>
+
+      <RecordSummary record={record} />
 
       <section aria-labelledby="record-summary">
         <h2 id="record-summary">{w.summaryHeading}</h2>

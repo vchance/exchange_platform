@@ -1,12 +1,14 @@
 import type { components } from '@exchange/api-client'
 import {
   moveCommand,
+  movePanel,
   movesFor,
   moveTextWording,
   moveWording,
   noteFor,
   NOTE_MAX_CHARS,
   statusWording,
+  troublePanel,
   waitingLong,
   type Move,
 } from '@exchange/shared'
@@ -56,7 +58,7 @@ export function Fulfillment({
   const money = contribution.type === 'MONEY'
   const role = contribution.from === you ? 'PROVIDER' : 'RECIPIENT'
   const moves = active ? movesFor(status, role) : []
-  const panelOf = (move: Move) => `move:${contribution.id}:${move}`
+  const panelOf = (move: Move) => movePanel(contribution.id, move)
   const opened = moves.find((move) => actions.panel === panelOf(move))
   // A claim nobody answers stays a claim (DESIGN.md §5.2). After a while the
   // provider is pointed to the way out, rather than left waiting.
@@ -72,6 +74,27 @@ export function Fulfillment({
             date: moment(since),
           })}
         </p>
+      )}
+      {/* A dispute is recorded, never decided (DESIGN.md §14.1). */}
+      {status === 'DISPUTED' && (
+        <div className="dispute-note">
+          <p>{wording.dispute.weRecord}</p>
+          {active && (
+            <>
+              <p className="hint">{wording.dispute.pointer}</p>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="link"
+                  disabled={actions.busy}
+                  onClick={() => actions.open(troublePanel('DISAGREE'))}
+                >
+                  {wording.trouble.open}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       )}
       {moves.length > 0 && (
         <div className="actions">
@@ -135,6 +158,12 @@ function MovePanel({ move, money, contribution, otherName, actions }: MovePanelP
     <Panel title={title}>
       <form noValidate onSubmit={submit}>
         <p>{fmt(moveTextWording(wording, move, money), { name: otherName })}</p>
+        {move === 'DISPUTE' && (
+          <>
+            <p>{wording.dispute.weRecord}</p>
+            <p className="hint">{wording.dispute.pointer}</p>
+          </>
+        )}
         {takesNote && (
           <Field
             label={w[label]}

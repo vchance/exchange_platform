@@ -12,6 +12,11 @@
   margin-block-end: 0.25rem;
 }
 
+/* The plain summary leads the page and the paper. */
+.record-plain h3 {
+  margin-block-start: 1rem;
+}
+
 @page {
   margin: 16mm;
 }
@@ -24,7 +29,9 @@
 
   body:has(.record-page) header.site,
   body:has(.record-page) .skip,
-  .record-page .no-print {
+  .record-page .no-print,
+  .record-page button,
+  .record-page a.button {
     display: none;
   }
 

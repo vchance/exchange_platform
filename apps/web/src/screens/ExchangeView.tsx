@@ -7,6 +7,8 @@ import {
   otherPartyName,
   remainingRequired,
   statusesOf,
+  troublePanel,
+  troubleSituationOf,
   useHistory,
   type ClosedReason,
 } from '@exchange/shared'
@@ -30,6 +32,8 @@ import { Ending } from './Ending'
 import { ExchangeSafety } from './ExchangeSafety'
 import { Fulfillment } from './Fulfillment'
 import { History } from './History'
+import { ProposalChanges } from './ProposalChanges'
+import { Trouble } from './Trouble'
 
 /** How often an open exchange is checked for what the other party has done. */
 const CHECK_EVERY_MS = 20_000
@@ -213,12 +217,31 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
           <p className="hint fingerprint">
             {fmt(wording.terms.fingerprint, { hash: inForce.content_hash })}
           </p>
-          {active && !open && (
+          {active && (
             <div className="actions">
-              <Link className="button" to={paths.revise(exchange.id)}>
-                {w.amend}
-              </Link>
+              {!open && (
+                <Link className="button" to={paths.revise(exchange.id)}>
+                  {w.amend}
+                </Link>
+              )}
+              {/* One way in to the ways out (DESIGN.md §5.3). */}
+              <button
+                type="button"
+                aria-expanded={troubleSituationOf(actions.panel) !== undefined}
+                disabled={actions.busy}
+                onClick={() => actions.open(troublePanel())}
+              >
+                {wording.trouble.open}
+              </button>
             </div>
+          )}
+          {active && troubleSituationOf(actions.panel) !== undefined && (
+            <Trouble
+              key={actions.panel}
+              exchange={exchange}
+              otherName={otherName}
+              actions={actions}
+            />
           )}
         </section>
       )}
@@ -433,6 +456,9 @@ function OpenRevision({ exchange, revision, otherName, actions }: OpenRevisionPr
       <p className="hint fingerprint">
         {fmt(wording.terms.fingerprint, { hash: revision.content_hash })}
       </p>
+
+      {/* What it changes, for the person asked to sign it: the author saw this while writing it. */}
+      {!yours && <ProposalChanges exchange={exchange} revision={revision} />}
 
       <ul className="plain">
         <li>{youSigned ? w.signedByYou : w.unsignedByYou}</li>
