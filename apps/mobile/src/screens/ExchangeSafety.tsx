@@ -1,10 +1,10 @@
-import type { ExchangeView } from '@exchange/api-client';
+import type { ExchangeView } from '@yuppers/api-client';
 import {
   hasOtherParty,
   isUnconfirmedClaimant,
   useExchangeSafety,
   type Actions as ExchangeActions,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import { useRouter } from 'expo-router';
 
 import { ReportForm } from '../components/ReportForm';

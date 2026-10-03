@@ -1,4 +1,4 @@
-import { createI18n, wordingFor } from '@exchange/shared';
+import { createI18n, wordingFor } from '@yuppers/shared';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Platform } from 'react-native';

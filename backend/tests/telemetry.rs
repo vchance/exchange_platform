@@ -11,13 +11,13 @@ use std::sync::{Arc, Mutex};
 
 use axum::http::{Method, StatusCode};
 use common::App;
-use exchange_backend::auth::{CodeMessage, CodeSender, SendFuture};
-use exchange_backend::domain::Rules;
-use exchange_backend::metrics::Text;
-use exchange_backend::telemetry::{self, LogFormat};
 use serde_json::{Value, json};
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
+use yuppers_backend::auth::{CodeMessage, CodeSender, SendFuture};
+use yuppers_backend::domain::Rules;
+use yuppers_backend::metrics::Text;
+use yuppers_backend::telemetry::{self, LogFormat};
 
 /// Every test here takes turns. A log subscriber set for one test's thread
 /// misses events while other threads are registering the same call sites,

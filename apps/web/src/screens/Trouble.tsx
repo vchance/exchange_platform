@@ -1,4 +1,4 @@
-import type { ExchangeView } from '@exchange/api-client'
+import type { ExchangeView } from '@yuppers/api-client'
 import {
   moveWording,
   TROUBLE_SITUATIONS,
@@ -8,7 +8,7 @@ import {
   type TroubleSituation,
   type TroubleWay,
   type Wording,
-} from '@exchange/shared'
+} from '@yuppers/shared'
 import { useEffect, useId, useRef, useState } from 'react'
 
 import { useI18n } from '../app/context'

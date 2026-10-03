@@ -1,10 +1,10 @@
-import type { components, ErrorCode, ExchangeView as Exchange } from '@exchange/api-client';
+import type { components, ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client';
 import {
   isInvitationSpent,
   leaveExchange,
   verificationText,
   type Actions as ExchangeActions,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 

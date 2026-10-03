@@ -5,8 +5,8 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use common::App;
-use exchange_backend::client_version::MinimumClientVersions;
 use serde_json::{Value, json};
+use yuppers_backend::client_version::MinimumClientVersions;
 
 const DATABASE: &str = "exchange_test_client_version";
 

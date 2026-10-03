@@ -1,4 +1,4 @@
-import type { ErrorCode } from '@exchange/api-client'
+import type { ErrorCode } from '@yuppers/api-client'
 import { useId, useState } from 'react'
 
 import { useI18n } from '../app/context'

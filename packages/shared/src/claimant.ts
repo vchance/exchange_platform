@@ -1,4 +1,4 @@
-import type { ErrorCode, ExchangeView } from '@exchange/api-client'
+import type { ErrorCode, ExchangeView } from '@yuppers/api-client'
 
 import { failureCode } from './api'
 

@@ -1,4 +1,4 @@
-import { createI18n, wordingFor } from '@exchange/shared';
+import { createI18n, wordingFor } from '@yuppers/shared';
 
 import { recordOf } from '../../__tests__/fake-record';
 import { fakeService } from '../../__tests__/fake-service';

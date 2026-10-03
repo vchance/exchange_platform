@@ -1,4 +1,4 @@
-import { invitationToken } from '@exchange/shared';
+import { invitationToken } from '@yuppers/shared';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 

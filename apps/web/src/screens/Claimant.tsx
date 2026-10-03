@@ -1,5 +1,5 @@
-import type { components, ErrorCode, ExchangeView as Exchange } from '@exchange/api-client'
-import { leaveExchange } from '@exchange/shared'
+import type { components, ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client'
+import { leaveExchange } from '@yuppers/shared'
 import { useState } from 'react'
 
 import { useI18n } from '../app/context'

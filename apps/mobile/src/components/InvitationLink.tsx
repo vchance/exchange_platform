@@ -1,4 +1,4 @@
-import { invitationLink } from '@exchange/shared';
+import { invitationLink } from '@yuppers/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import { Platform, Share, StyleSheet, Text, View } from 'react-native';

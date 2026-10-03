@@ -1,4 +1,4 @@
-import { directionOf } from '@exchange/shared';
+import { directionOf } from '@yuppers/shared';
 import { DarkTheme, DefaultTheme, LocaleProvider, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';

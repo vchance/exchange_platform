@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import type { components, ExchangeView, RevisionTerms } from '@exchange/api-client'
-import { useProposalBase, type ProposalBase, type RecordDocument } from '@exchange/shared'
+import type { components, ExchangeView, RevisionTerms } from '@yuppers/api-client'
+import { useProposalBase, type ProposalBase, type RecordDocument } from '@yuppers/shared'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, test } from 'vitest'

@@ -1,4 +1,4 @@
-import type { Command, ErrorCode, ExchangeView } from '@exchange/api-client'
+import type { Command, ErrorCode, ExchangeView } from '@yuppers/api-client'
 import { useCallback, useState } from 'react'
 
 import { failureCode } from './api'

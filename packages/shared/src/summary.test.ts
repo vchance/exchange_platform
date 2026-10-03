@@ -1,4 +1,4 @@
-import type { components } from '@exchange/api-client'
+import type { components } from '@yuppers/api-client'
 import { describe, expect, test } from 'vitest'
 
 import { createI18n } from './i18n'

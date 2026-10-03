@@ -12,16 +12,16 @@ use std::sync::{Arc, Mutex};
 
 use axum::http::StatusCode;
 use common::{App, User, accept};
-use exchange_backend::auth::SendFuture;
-use exchange_backend::domain::Rules;
-use exchange_backend::exchanges::reminders::run_reminders;
-use exchange_backend::notifications::outbox::{Delivered, Delivery, DeliveryRules, deliver_due};
-use exchange_backend::notifications::wording::Wording;
-use exchange_backend::notifications::{Email, EmailSender};
 use serde_json::{Value, json};
 use time::{Date, Duration, OffsetDateTime};
 use tokio::sync::MutexGuard;
 use uuid::Uuid;
+use yuppers_backend::auth::SendFuture;
+use yuppers_backend::domain::Rules;
+use yuppers_backend::exchanges::reminders::run_reminders;
+use yuppers_backend::notifications::outbox::{Delivered, Delivery, DeliveryRules, deliver_due};
+use yuppers_backend::notifications::wording::Wording;
+use yuppers_backend::notifications::{Email, EmailSender};
 
 const DATABASE: &str = "exchange_test_reminders";
 

@@ -1,4 +1,4 @@
-import { clientHeader, createExchangeApi, isClientTooOld } from '@exchange/shared';
+import { clientHeader, createExchangeApi, isClientTooOld } from '@yuppers/shared';
 
 import { buildVersion, clientIdentity } from '../client-identity';
 

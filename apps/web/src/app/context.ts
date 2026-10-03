@@ -1,9 +1,9 @@
-import type { Account, ErrorCode } from '@exchange/api-client'
-import type { I18n } from '@exchange/shared'
+import type { Account, ErrorCode } from '@yuppers/api-client'
+import type { I18n } from '@yuppers/shared'
 import { createContext, useContext } from 'react'
 
 // How a screen speaks the reader's language is the same on every client.
-export { createI18n, isComplete } from '@exchange/shared'
+export { createI18n, isComplete } from '@yuppers/shared'
 export type { I18n }
 
 export const I18nContext = createContext<I18n | null>(null)

@@ -1,5 +1,5 @@
-import type { ExchangeView } from '@exchange/api-client';
-import { NOTE_MAX_CHARS, type Actions as ExchangeActions } from '@exchange/shared';
+import type { ExchangeView } from '@yuppers/api-client';
+import { NOTE_MAX_CHARS, type Actions as ExchangeActions } from '@yuppers/shared';
 import { useState } from 'react';
 
 import { Actions, Button, Failure, Heading, Notice, P, Panel, TextField } from '../components/ui';

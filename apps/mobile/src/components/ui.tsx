@@ -1,4 +1,4 @@
-import type { ErrorCode } from '@exchange/api-client';
+import type { ErrorCode } from '@yuppers/api-client';
 import { createContext, useContext, useEffect, useRef, type ReactNode, type Ref } from 'react';
 import {
   KeyboardAvoidingView,

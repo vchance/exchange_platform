@@ -1,5 +1,5 @@
-import type { ErrorCode, ExchangeSummary } from '@exchange/api-client';
-import { failureCode, groupExchanges, labelText } from '@exchange/shared';
+import type { ErrorCode, ExchangeSummary } from '@yuppers/api-client';
+import { failureCode, groupExchanges, labelText } from '@yuppers/shared';
 import { getCalendars } from 'expo-localization';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';

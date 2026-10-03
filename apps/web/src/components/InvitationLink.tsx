@@ -1,4 +1,4 @@
-import { invitationLink } from '@exchange/shared'
+import { invitationLink } from '@yuppers/shared'
 import { useState } from 'react'
 
 import { useI18n } from '../app/context'

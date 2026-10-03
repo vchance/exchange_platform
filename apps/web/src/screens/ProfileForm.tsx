@@ -1,5 +1,5 @@
-import type { Account, ErrorCode } from '@exchange/api-client'
-import { languages, pickLanguage, type Language } from '@exchange/shared'
+import type { Account, ErrorCode } from '@yuppers/api-client'
+import { languages, pickLanguage, type Language } from '@yuppers/shared'
 import { useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'

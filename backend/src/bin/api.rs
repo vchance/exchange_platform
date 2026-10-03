@@ -2,12 +2,12 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
-use exchange_backend::config::ApiConfig;
-use exchange_backend::domain::Rules;
-use exchange_backend::http::{self, AppState, Settings, WebApp};
-use exchange_backend::metrics::{self, HttpMetrics, Text};
-use exchange_backend::notifications::outbox::DeliveryRules;
-use exchange_backend::{db, shutdown, telemetry};
+use yuppers_backend::config::ApiConfig;
+use yuppers_backend::domain::Rules;
+use yuppers_backend::http::{self, AppState, Settings, WebApp};
+use yuppers_backend::metrics::{self, HttpMetrics, Text};
+use yuppers_backend::notifications::outbox::DeliveryRules;
+use yuppers_backend::{db, shutdown, telemetry};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

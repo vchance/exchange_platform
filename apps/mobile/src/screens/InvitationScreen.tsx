@@ -1,10 +1,10 @@
-import type { ErrorCode } from '@exchange/api-client';
+import type { ErrorCode } from '@yuppers/api-client';
 import {
   failureCode,
   invitationTokenIn,
   isComplete,
   type InvitationPreview,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';

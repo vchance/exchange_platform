@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 
-import type { ApiClient } from '@exchange/api-client'
+import type { ApiClient } from '@yuppers/api-client'
 
 import { createExchangeApi } from './api'
 import { clientHeader, compareVersions, isClientTooOld, parseVersion } from './client-version'

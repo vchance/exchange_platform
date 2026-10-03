@@ -1,4 +1,4 @@
-import type { ErrorCode, ExchangeView as Exchange } from '@exchange/api-client'
+import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client'
 import {
   consentShown,
   isInvitationSpent,
@@ -11,7 +11,7 @@ import {
   troubleSituationOf,
   useHistory,
   type ClosedReason,
-} from '@exchange/shared'
+} from '@yuppers/shared'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'

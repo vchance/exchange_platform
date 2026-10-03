@@ -1,4 +1,4 @@
-import type { FocusKeeper } from '@exchange/shared';
+import type { FocusKeeper } from '@yuppers/shared';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Platform, type View } from 'react-native';
 

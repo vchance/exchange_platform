@@ -1,4 +1,4 @@
-import { useInvitationReport } from '@exchange/shared'
+import { useInvitationReport } from '@yuppers/shared'
 import { useEffect, useRef } from 'react'
 
 import { useI18n } from '../app/context'

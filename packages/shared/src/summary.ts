@@ -1,4 +1,4 @@
-import type { components } from '@exchange/api-client'
+import type { components } from '@yuppers/api-client'
 
 import type { I18n } from './i18n'
 import { isMoney } from './money'

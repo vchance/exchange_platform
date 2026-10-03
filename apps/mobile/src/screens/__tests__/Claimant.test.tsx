@@ -1,5 +1,5 @@
-import type { Command, ExchangeView } from '@exchange/api-client';
-import { ApiFailure, createI18n, wordingFor, type Actions } from '@exchange/shared';
+import type { Command, ExchangeView } from '@yuppers/api-client';
+import { ApiFailure, createI18n, wordingFor, type Actions } from '@yuppers/shared';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useState } from 'react';
 

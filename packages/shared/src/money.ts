@@ -1,4 +1,4 @@
-import type { components, RevisionTerms } from '@exchange/api-client'
+import type { components, RevisionTerms } from '@yuppers/api-client'
 
 import type { Move } from './fulfillment'
 import type { Wording } from './wording/types'

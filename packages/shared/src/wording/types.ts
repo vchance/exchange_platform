@@ -1,4 +1,4 @@
-import type { components, ErrorCode } from '@exchange/api-client'
+import type { components, ErrorCode } from '@yuppers/api-client'
 
 import type { AmendmentEffect } from '../amendment'
 import type { ChangedField, ItemChangeKind } from '../changes'

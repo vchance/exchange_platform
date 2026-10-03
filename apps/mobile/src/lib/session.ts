@@ -1,5 +1,5 @@
-import { createApiClient } from '@exchange/api-client';
-import { createExchangeApi, type ClientIdentity } from '@exchange/shared';
+import { createApiClient } from '@yuppers/api-client';
+import { createExchangeApi, type ClientIdentity } from '@yuppers/shared';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import * as Crypto from 'expo-crypto';

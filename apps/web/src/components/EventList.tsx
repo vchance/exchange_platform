@@ -1,5 +1,5 @@
-import type { components } from '@exchange/api-client'
-import { eventMessage, noteKind, type RecordEvent } from '@exchange/shared'
+import type { components } from '@yuppers/api-client'
+import { eventMessage, noteKind, type RecordEvent } from '@yuppers/shared'
 
 import { useI18n } from '../app/context'
 import './history.css'

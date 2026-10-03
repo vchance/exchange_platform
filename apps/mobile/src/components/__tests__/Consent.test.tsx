@@ -1,4 +1,4 @@
-import { CONSENT_VERSION, createI18n, wordingFor } from '@exchange/shared';
+import { CONSENT_VERSION, createI18n, wordingFor } from '@yuppers/shared';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { I18nContext } from '../../lib/context';

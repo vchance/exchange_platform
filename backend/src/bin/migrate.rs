@@ -2,8 +2,8 @@
 //! schema owner), falling back to `DATABASE_URL` in development.
 
 use anyhow::Context;
-use exchange_backend::{db, telemetry};
 use sqlx::postgres::PgPoolOptions;
+use yuppers_backend::{db, telemetry};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

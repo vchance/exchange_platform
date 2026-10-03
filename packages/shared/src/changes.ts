@@ -1,4 +1,4 @@
-import type { components, ExchangeView, RevisionTerms } from '@exchange/api-client'
+import type { components, ExchangeView, RevisionTerms } from '@yuppers/api-client'
 import { useEffect, useState } from 'react'
 
 import { amendmentEffects, type AmendmentEffect } from './amendment'

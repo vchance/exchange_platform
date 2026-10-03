@@ -1,4 +1,4 @@
-import { pickLanguage, type Language, type Wording } from '@exchange/shared'
+import { pickLanguage, type Language, type Wording } from '@yuppers/shared'
 
 /*
  * Each language's wording is its own file, fetched when that language is

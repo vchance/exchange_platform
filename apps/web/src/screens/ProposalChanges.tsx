@@ -1,11 +1,11 @@
-import type { ExchangeView } from '@exchange/api-client'
+import type { ExchangeView } from '@yuppers/api-client'
 import {
   fieldChangeText,
   proposalChanges,
   statusWording,
   useProposalBase,
   type RevisionView,
-} from '@exchange/shared'
+} from '@yuppers/shared'
 import { useId, useMemo } from 'react'
 
 import { useI18n } from '../app/context'

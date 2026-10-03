@@ -1,4 +1,4 @@
-import type { ErrorCode } from '@exchange/api-client';
+import type { ErrorCode } from '@yuppers/api-client';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 

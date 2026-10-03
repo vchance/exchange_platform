@@ -1,4 +1,4 @@
-import { deletedNotice, formatMessage, wordingFor } from '@exchange/shared';
+import { deletedNotice, formatMessage, wordingFor } from '@yuppers/shared';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import { EXCHANGE, fakeService, TOKEN, ana, type FakeService } from './fake-service';

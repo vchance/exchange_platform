@@ -5,10 +5,10 @@
 mod common;
 
 use common::App;
-use exchange_backend::exchanges::service::run_timers;
 use serde_json::json;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
+use yuppers_backend::exchanges::service::run_timers;
 
 async fn events(app: &App, exchange: &str) -> Vec<(String, String)> {
     sqlx::query_as(

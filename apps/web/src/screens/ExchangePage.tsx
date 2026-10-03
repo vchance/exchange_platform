@@ -1,4 +1,4 @@
-import type { ErrorCode, ExchangeView as Exchange } from '@exchange/api-client'
+import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client'
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 
 import { useI18n } from '../app/context'

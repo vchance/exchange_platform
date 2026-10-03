@@ -13,7 +13,7 @@
 # `.env`. A real deployment sets each of these (README, "Deploying").
 
 x-service: &service
-  image: ${EXCHANGE_IMAGE:-exchange-platform:local}
+  image: ${YUPPERS_IMAGE:-yuppers:local}
   build: .
   profiles: [full]
 

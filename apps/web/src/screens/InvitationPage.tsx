@@ -1,4 +1,4 @@
-import type { ErrorCode } from '@exchange/api-client'
+import type { ErrorCode } from '@yuppers/api-client'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 
 import { isComplete, useI18n, useSession } from '../app/context'

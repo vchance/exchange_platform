@@ -1,11 +1,11 @@
-import type { Account, ErrorCode } from '@exchange/api-client';
+import type { Account, ErrorCode } from '@yuppers/api-client';
 import {
   failureCode,
   isComplete,
   languages,
   pickLanguage,
   type Language,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { TextInput } from 'react-native';
 

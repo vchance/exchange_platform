@@ -1,5 +1,5 @@
-import type { Account } from '@exchange/api-client'
-import type { Wording } from '@exchange/shared'
+import type { Account } from '@yuppers/api-client'
+import type { Wording } from '@yuppers/shared'
 import axe from 'axe-core'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'

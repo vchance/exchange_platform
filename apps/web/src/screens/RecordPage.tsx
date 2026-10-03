@@ -1,4 +1,4 @@
-import type { components } from '@exchange/api-client'
+import type { components } from '@yuppers/api-client'
 import {
   moneyIds,
   recordFile,
@@ -10,7 +10,7 @@ import {
   type ClosedReason,
   type RecordDocument,
   type RecordRevision,
-} from '@exchange/shared'
+} from '@yuppers/shared'
 import { useMemo } from 'react'
 
 import { useI18n } from '../app/context'

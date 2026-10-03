@@ -121,11 +121,11 @@ jobs:
 
       - name: Lint the web app
         if: ${{ !cancelled() }}
-        run: npm run lint -w @exchange/web
+        run: npm run lint -w @yuppers/web
 
       - name: Lint the mobile app
         if: ${{ !cancelled() }}
-        run: npm run lint -w @exchange/mobile -- --max-warnings 0
+        run: npm run lint -w @yuppers/mobile -- --max-warnings 0
 
       - name: Test
         if: ${{ !cancelled() }}
@@ -154,12 +154,12 @@ jobs:
           context: .
           load: true
           # The name docker-compose.yml uses, so it runs this build.
-          tags: exchange-platform:local
+          tags: yuppers:local
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Image size
-        run: docker image inspect exchange-platform:local --format 'exchange-platform:local is {{.Size}} bytes'
+        run: docker image inspect yuppers:local --format 'yuppers:local is {{.Size}} bytes'
 
       - name: Start the stack
         run: docker compose --profile full up --no-build --detach
@@ -316,7 +316,7 @@ jobs:
           exit 1
 
       - name: Run the tests
-        run: npm run e2e -w @exchange/web
+        run: npm run e2e -w @yuppers/web
 
       - name: Upload the Playwright report
         if: ${{ failure() }}
@@ -392,7 +392,7 @@ jobs:
 
       # With the harness proxy's address baked in (apps/mobile/e2e/support/export-web.mjs).
       - name: Export the app for the web
-        run: npm run e2e:export -w @exchange/mobile
+        run: npm run e2e:export -w @yuppers/mobile
 
       - name: Apply the migrations
         run: backend/target/debug/migrate
@@ -422,7 +422,7 @@ jobs:
           exit 1
 
       - name: Run the tests
-        run: npm run e2e -w @exchange/mobile
+        run: npm run e2e -w @yuppers/mobile
 
       - name: Upload the Playwright report
         if: ${{ failure() }}

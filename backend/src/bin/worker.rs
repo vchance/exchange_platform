@@ -6,18 +6,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use exchange_backend::auth::purge_sign_in_limits;
-use exchange_backend::config::WorkerConfig;
-use exchange_backend::domain::Rules;
-use exchange_backend::error::Redacted;
-use exchange_backend::exchanges::reminders::run_reminders;
-use exchange_backend::exchanges::service::{purge_network_metadata, run_timers};
-use exchange_backend::metrics::{self, Text, WorkerMetrics};
-use exchange_backend::notifications::outbox::{self, Delivery, DeliveryRules};
-use exchange_backend::notifications::wording::Wording;
-use exchange_backend::{db, shutdown, telemetry};
 use time::OffsetDateTime;
 use tokio::sync::watch;
+use yuppers_backend::auth::purge_sign_in_limits;
+use yuppers_backend::config::WorkerConfig;
+use yuppers_backend::domain::Rules;
+use yuppers_backend::error::Redacted;
+use yuppers_backend::exchanges::reminders::run_reminders;
+use yuppers_backend::exchanges::service::{purge_network_metadata, run_timers};
+use yuppers_backend::metrics::{self, Text, WorkerMetrics};
+use yuppers_backend::notifications::outbox::{self, Delivery, DeliveryRules};
+use yuppers_backend::notifications::wording::Wording;
+use yuppers_backend::{db, shutdown, telemetry};
 
 const TICK: Duration = Duration::from_secs(5);
 

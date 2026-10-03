@@ -1,5 +1,5 @@
-import type { ErrorCode } from '@exchange/api-client'
-import { labelText } from '@exchange/shared'
+import type { ErrorCode } from '@yuppers/api-client'
+import { labelText } from '@yuppers/shared'
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 
 import { useI18n } from '../app/context'

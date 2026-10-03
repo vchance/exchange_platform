@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path'
  * Where everything the mobile end-to-end tests need lives. Each can be
  * overridden from the environment; the defaults suit a checkout with the
  * backend built by `cargo build` and the app exported for the web by
- * `npm run e2e:export -w @exchange/mobile`.
+ * `npm run e2e:export -w @yuppers/mobile`.
  *
  * Three processes on this machine: the API, the harness proxy in front of it
  * (scripts/harness-proxy.mjs, which lets a page from another origin call it),

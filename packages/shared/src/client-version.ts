@@ -1,4 +1,4 @@
-import type { Meta } from '@exchange/api-client'
+import type { Meta } from '@yuppers/api-client'
 
 /*
  * Whether this build of a client is too old to act (`CLIENT_TOO_OLD`). The

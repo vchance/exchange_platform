@@ -1,5 +1,5 @@
-import type { ExchangeView } from '@exchange/api-client'
-import { hasOtherParty, isUnconfirmedClaimant, useExchangeSafety } from '@exchange/shared'
+import type { ExchangeView } from '@yuppers/api-client'
+import { hasOtherParty, isUnconfirmedClaimant, useExchangeSafety } from '@yuppers/shared'
 import { useEffect, useRef } from 'react'
 
 import { useI18n } from '../app/context'

@@ -1,4 +1,4 @@
-import type { Account, ErrorCode } from '@exchange/api-client'
+import type { Account, ErrorCode } from '@yuppers/api-client'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 
 import { failureCode, type CodeChannel, type DeletionPreview } from './api'

@@ -1,4 +1,4 @@
-import { wordingFor } from '@exchange/shared';
+import { wordingFor } from '@yuppers/shared';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { AccessibilityInfo, StyleSheet } from 'react-native';
 

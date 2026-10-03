@@ -1,4 +1,4 @@
-import { useBlockedPeople } from '@exchange/shared'
+import { useBlockedPeople } from '@yuppers/shared'
 import { useEffect, useRef } from 'react'
 
 import { useI18n } from '../app/context'

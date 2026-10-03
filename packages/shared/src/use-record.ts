@@ -1,4 +1,4 @@
-import type { ErrorCode, ExchangeView } from '@exchange/api-client'
+import type { ErrorCode, ExchangeView } from '@yuppers/api-client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { failureCode, type ExchangeApi } from './api'

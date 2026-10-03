@@ -1,5 +1,5 @@
-import type { Account } from '@exchange/api-client';
-import { useAccountDeletion, type CodeChannel } from '@exchange/shared';
+import type { Account } from '@yuppers/api-client';
+import { useAccountDeletion, type CodeChannel } from '@yuppers/shared';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import type { TextInput } from 'react-native';

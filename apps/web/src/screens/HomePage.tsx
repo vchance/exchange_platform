@@ -1,5 +1,5 @@
-import type { ErrorCode, ExchangeSummary } from '@exchange/api-client'
-import { groupExchanges } from '@exchange/shared'
+import type { ErrorCode, ExchangeSummary } from '@yuppers/api-client'
+import { groupExchanges } from '@yuppers/shared'
 import { useEffect, useState } from 'react'
 
 import { useI18n } from '../app/context'

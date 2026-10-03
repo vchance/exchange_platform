@@ -1,4 +1,4 @@
-import type { ExchangeView, RevisionTerms } from '@exchange/api-client'
+import type { ExchangeView, RevisionTerms } from '@yuppers/api-client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { RevisionView } from './api'

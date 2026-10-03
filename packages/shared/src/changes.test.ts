@@ -1,4 +1,4 @@
-import type { components, RevisionTerms } from '@exchange/api-client'
+import type { components, RevisionTerms } from '@yuppers/api-client'
 import { describe, expect, test } from 'vitest'
 
 import { contributionChanges, fieldChangeText, proposalChanges } from './changes'

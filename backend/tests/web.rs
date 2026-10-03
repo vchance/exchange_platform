@@ -14,11 +14,11 @@ use axum::http::header::{
     STRICT_TRANSPORT_SECURITY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
 };
 use axum::http::{HeaderMap, Method, Request, StatusCode};
-use exchange_backend::auth::{AuthRules, LogSender};
-use exchange_backend::db;
-use exchange_backend::http::{self, AppState, Settings, TrustedProxies, WebApp};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
+use yuppers_backend::auth::{AuthRules, LogSender};
+use yuppers_backend::db;
+use yuppers_backend::http::{self, AppState, Settings, TrustedProxies, WebApp};
 
 const HOME: &str = "<!doctype html><html lang=\"en\"><title>Exchange</title>home</html>";
 const EN: &str = "<!doctype html><html lang=\"en\"><title>Invitation</title>en</html>";

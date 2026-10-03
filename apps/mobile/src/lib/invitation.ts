@@ -1,4 +1,4 @@
-import { invitationTokenIn } from '@exchange/shared';
+import { invitationTokenIn } from '@yuppers/shared';
 import { useSyncExternalStore } from 'react';
 
 /*

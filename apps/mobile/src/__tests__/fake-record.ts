@@ -1,4 +1,4 @@
-import type { BlockedPerson, HistoryPage, RecordDocument, RecordEvent } from '@exchange/shared';
+import type { BlockedPerson, HistoryPage, RecordDocument, RecordEvent } from '@yuppers/shared';
 
 import type { FakeService } from './fake-service';
 

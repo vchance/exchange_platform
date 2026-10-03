@@ -1,4 +1,4 @@
-import { recordDays, summarizeRecord, summaryText, type RecordDocument } from '@exchange/shared'
+import { recordDays, summarizeRecord, summaryText, type RecordDocument } from '@yuppers/shared'
 import { useMemo } from 'react'
 
 import { useI18n } from '../app/context'

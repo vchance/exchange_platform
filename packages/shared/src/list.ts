@@ -1,4 +1,4 @@
-import type { ExchangeSummary } from '@exchange/api-client'
+import type { ExchangeSummary } from '@yuppers/api-client'
 
 /*
  * The list of a person's exchanges, in groups: what is in progress first,

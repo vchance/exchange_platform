@@ -1,14 +1,14 @@
-import { createApiClient } from '@exchange/api-client'
-import { createExchangeApi, type ClientIdentity } from '@exchange/shared'
+import { createApiClient } from '@yuppers/api-client'
+import { createExchangeApi, type ClientIdentity } from '@yuppers/shared'
 
-export { ApiFailure, failureCode } from '@exchange/shared'
+export { ApiFailure, failureCode } from '@yuppers/shared'
 export type {
   InvitationPreview,
   RevisionSent,
   RevisionView,
   SendRevision,
   Slot,
-} from '@exchange/shared'
+} from '@yuppers/shared'
 
 /** Which client this is and which build, named to the service on every request. */
 export const WEB_CLIENT: ClientIdentity = { name: 'web', version: __WEB_VERSION__ }

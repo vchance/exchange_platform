@@ -1,4 +1,4 @@
-import type { Account, ErrorCode } from '@exchange/api-client'
+import type { Account, ErrorCode } from '@yuppers/api-client'
 import {
   directionOf,
   isClientTooOld,
@@ -6,7 +6,7 @@ import {
   pickLanguage,
   type Language,
   type Wording,
-} from '@exchange/shared'
+} from '@yuppers/shared'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { AccountDeleted } from '../components/AccountDeleted'

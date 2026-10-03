@@ -1,5 +1,5 @@
-import type { Account, ExchangeSummary, ExchangeView } from '@exchange/api-client'
-import type { HistoryPage, RecordDocument, RevisionView } from '@exchange/shared'
+import type { Account, ExchangeSummary, ExchangeView } from '@yuppers/api-client'
+import type { HistoryPage, RecordDocument, RevisionView } from '@yuppers/shared'
 
 /*
  * A stand-in for the service, for rendering the web app's screens in a test
@@ -469,7 +469,7 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     return [
       200,
       {
-        service: 'exchange-backend',
+        service: 'yuppers-backend',
         version: '0.0.0',
         minimum_client_versions: { web: null, ios: null, android: null },
       },

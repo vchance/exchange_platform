@@ -1,4 +1,4 @@
-import type { components, RevisionTerms } from '@exchange/api-client'
+import type { components, RevisionTerms } from '@yuppers/api-client'
 
 import { toMinorUnits } from './decimal'
 import { isUnchanged, type Draft, type DraftContribution } from './draft'

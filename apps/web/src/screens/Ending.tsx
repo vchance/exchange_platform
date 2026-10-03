@@ -1,5 +1,5 @@
-import type { ExchangeView } from '@exchange/api-client'
-import { NOTE_MAX_CHARS } from '@exchange/shared'
+import type { ExchangeView } from '@yuppers/api-client'
+import { NOTE_MAX_CHARS } from '@yuppers/shared'
 import { useId, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'

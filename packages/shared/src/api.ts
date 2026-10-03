@@ -7,7 +7,7 @@ import type {
   ExchangeSummary,
   ExchangeView,
   Meta,
-} from '@exchange/api-client'
+} from '@yuppers/api-client'
 
 import { clientHeader, parseVersion, type ClientIdentity } from './client-version'
 import { idempotencyKeys } from './idempotency'

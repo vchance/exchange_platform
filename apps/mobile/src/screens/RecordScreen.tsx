@@ -1,4 +1,4 @@
-import type { ErrorCode } from '@exchange/api-client';
+import type { ErrorCode } from '@yuppers/api-client';
 import {
   moneyIds,
   recordFile,
@@ -11,7 +11,7 @@ import {
   type RecordDocument,
   type RecordRevision,
   type Slot,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import { useRouter } from 'expo-router';
 import { useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';

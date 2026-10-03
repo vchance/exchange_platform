@@ -1,4 +1,4 @@
-import type { components } from '@exchange/api-client'
+import type { components } from '@yuppers/api-client'
 import {
   moveCommand,
   movePanel,
@@ -11,7 +11,7 @@ import {
   troublePanel,
   waitingLong,
   type Move,
-} from '@exchange/shared'
+} from '@yuppers/shared'
 import { useId, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'

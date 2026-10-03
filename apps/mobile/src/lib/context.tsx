@@ -1,4 +1,4 @@
-import type { Account, ErrorCode } from '@exchange/api-client';
+import type { Account, ErrorCode } from '@yuppers/api-client';
 import {
   createI18n,
   failureCode,
@@ -8,7 +8,7 @@ import {
   type I18n,
   type Language,
   type SessionCreated,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import { useLocales } from 'expo-localization';
 import {
   createContext,

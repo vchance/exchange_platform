@@ -12,20 +12,20 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use common::{App, Deal, User};
-use exchange_backend::auth::{CodeMessage, CodeSender, Purpose};
-use exchange_backend::domain::identity::Identifier;
-use exchange_backend::domain::notification::Notice;
-use exchange_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_due};
-use exchange_backend::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
-use exchange_backend::notifications::wording::{Links, Wording};
-use exchange_backend::notifications::{Email, EmailSender};
-use exchange_backend::telemetry::{self, LogFormat};
 use mail_parser::MessageParser;
 use time::OffsetDateTime;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::MutexGuard;
 use tracing_subscriber::EnvFilter;
+use yuppers_backend::auth::{CodeMessage, CodeSender, Purpose};
+use yuppers_backend::domain::identity::Identifier;
+use yuppers_backend::domain::notification::Notice;
+use yuppers_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_due};
+use yuppers_backend::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
+use yuppers_backend::notifications::wording::{Links, Wording};
+use yuppers_backend::notifications::{Email, EmailSender};
+use yuppers_backend::telemetry::{self, LogFormat};
 
 const DATABASE: &str = "exchange_test_smtp";
 const WEB_ORIGIN: &str = "https://app.test";

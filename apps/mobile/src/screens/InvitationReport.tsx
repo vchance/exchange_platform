@@ -1,4 +1,4 @@
-import { useInvitationReport } from '@exchange/shared';
+import { useInvitationReport } from '@yuppers/shared';
 
 import { ReportForm } from '../components/ReportForm';
 import { Actions, Button, Notice, Panel } from '../components/ui';

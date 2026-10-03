@@ -1,5 +1,5 @@
 {
-  "name": "@exchange/web",
+  "name": "@yuppers/web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -13,8 +13,8 @@
     "e2e": "playwright test -c e2e/playwright.config.ts"
   },
   "dependencies": {
-    "@exchange/api-client": "*",
-    "@exchange/shared": "*",
+    "@yuppers/api-client": "*",
+    "@yuppers/shared": "*",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },

@@ -4,11 +4,11 @@
 //! Needs PostgreSQL and the two connection strings from `.env`. Every test
 //! works inside a transaction that is rolled back, so nothing is left behind.
 
-use exchange_backend::db;
 use sqlx::postgres::{PgConnection, PgPool, PgPoolOptions};
 use sqlx::types::Uuid;
 use sqlx::{Connection, Transaction};
 use tokio::sync::OnceCell;
+use yuppers_backend::db;
 
 const FOREIGN_KEY: &str = "23503";
 const UNIQUE: &str = "23505";

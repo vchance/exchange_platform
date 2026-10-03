@@ -1,7 +1,7 @@
-import { invitationPath } from '@exchange/shared'
+import { invitationPath } from '@yuppers/shared'
 
 // Reading the token back out of a link is the same on every client.
-export { invitationToken } from '@exchange/shared'
+export { invitationToken } from '@yuppers/shared'
 
 /*
  * The app's addresses. Two of them are fixed points other things depend on:

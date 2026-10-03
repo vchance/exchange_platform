@@ -1,5 +1,5 @@
-import type { components, RevisionTerms } from '@exchange/api-client';
-import { isOverdue, todayIn, type Slot } from '@exchange/shared';
+import type { components, RevisionTerms } from '@yuppers/api-client';
+import { isOverdue, todayIn, type Slot } from '@yuppers/shared';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 

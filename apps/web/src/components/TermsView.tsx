@@ -1,5 +1,5 @@
-import type { components, RevisionTerms } from '@exchange/api-client'
-import { isOverdue, todayIn } from '@exchange/shared'
+import type { components, RevisionTerms } from '@yuppers/api-client'
+import { isOverdue, todayIn } from '@yuppers/shared'
 import type { ReactNode } from 'react'
 
 import { useI18n } from '../app/context'

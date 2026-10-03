@@ -1,5 +1,5 @@
-import type { ExchangeView as Exchange } from '@exchange/api-client';
-import type { HistoryReading } from '@exchange/shared';
+import type { ExchangeView as Exchange } from '@yuppers/api-client';
+import type { HistoryReading } from '@yuppers/shared';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 

@@ -1,4 +1,4 @@
-import type { RevisionTerms } from '@exchange/api-client'
+import type { RevisionTerms } from '@yuppers/api-client'
 import { expect, test } from 'vitest'
 
 import { movesFor, type Move } from './fulfillment'

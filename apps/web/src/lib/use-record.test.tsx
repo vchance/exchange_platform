@@ -7,7 +7,7 @@ import {
   type HistoryReading,
   type RecordDocument,
   type RecordReading,
-} from '@exchange/shared'
+} from '@yuppers/shared'
 import { act, useEffect } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, expect, test } from 'vitest'

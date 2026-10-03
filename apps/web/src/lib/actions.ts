@@ -1,5 +1,5 @@
-import type { ExchangeView } from '@exchange/api-client'
-import { useActions as useSharedActions, type Actions, type FocusKeeper } from '@exchange/shared'
+import type { ExchangeView } from '@yuppers/api-client'
+import { useActions as useSharedActions, type Actions, type FocusKeeper } from '@yuppers/shared'
 
 import { api } from './api'
 

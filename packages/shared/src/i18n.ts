@@ -1,4 +1,4 @@
-import type { Account, ErrorCode } from '@exchange/api-client'
+import type { Account, ErrorCode } from '@yuppers/api-client'
 
 import { formatMoney } from './decimal'
 import type { Language } from './language'

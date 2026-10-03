@@ -1,4 +1,4 @@
-import type { components } from '@exchange/api-client';
+import type { components } from '@yuppers/api-client';
 import {
   moveCommand,
   movePanel,
@@ -13,7 +13,7 @@ import {
   type Actions as ExchangeActions,
   type Move,
   type Slot,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import { useState } from 'react';
 
 import { Actions, Button, Failure, Hint, Notice, P, Panel, TextField } from '../components/ui';

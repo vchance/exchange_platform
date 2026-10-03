@@ -1,5 +1,5 @@
 {
-  "name": "@exchange/shared",
+  "name": "@yuppers/shared",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@exchange/api-client": "*"
+    "@yuppers/api-client": "*"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

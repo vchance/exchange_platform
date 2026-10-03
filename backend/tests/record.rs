@@ -5,14 +5,14 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use common::{App, Deal, User, accept, consent, fence_job};
-use exchange_backend::exchanges::record::dto::Continuation;
-use exchange_backend::exchanges::record::{self, Limits};
-use exchange_backend::exchanges::service::run_timers;
-use exchange_backend::http::extract::Session;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
+use yuppers_backend::exchanges::record::dto::Continuation;
+use yuppers_backend::exchanges::record::{self, Limits};
+use yuppers_backend::exchanges::service::run_timers;
+use yuppers_backend::http::extract::Session;
 
 const DATABASE: &str = "exchange_test_record";
 
@@ -949,7 +949,7 @@ async fn the_hash_can_be_recomputed_from_the_copy_alone() {
 
 #[tokio::test]
 async fn a_long_record_comes_in_parts_that_join_up() {
-    let rules = exchange_backend::domain::Rules {
+    let rules = yuppers_backend::domain::Rules {
         changes_per_minute: 1000,
         ..Default::default()
     };

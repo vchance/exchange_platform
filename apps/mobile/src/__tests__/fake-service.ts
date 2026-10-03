@@ -1,5 +1,5 @@
-import type { Account, ExchangeView } from '@exchange/api-client';
-import type { RevisionView } from '@exchange/shared';
+import type { Account, ExchangeView } from '@yuppers/api-client';
+import type { RevisionView } from '@yuppers/shared';
 
 import { answerRecordAndSafety } from './fake-record';
 
@@ -176,7 +176,7 @@ function respond(
     return [
       200,
       {
-        service: 'exchange-backend',
+        service: 'yuppers-backend',
         version: '0.0.0',
         minimum_client_versions: { web: null, ios: null, android: null },
       },

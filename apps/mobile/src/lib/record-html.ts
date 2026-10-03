@@ -14,7 +14,7 @@ import {
   type I18n,
   type RecordDocument,
   type RecordRevision,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 
 /*
  * A record as one HTML page, for the device to print to a PDF (DESIGN.md

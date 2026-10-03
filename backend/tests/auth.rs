@@ -15,14 +15,14 @@ use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE};
 use axum::http::{HeaderMap, Method, Request, StatusCode};
-use exchange_backend::auth::{AuthRules, CodeMessage, CodeSender, SendFuture, token_hash};
-use exchange_backend::db;
-use exchange_backend::http::{self, AppState, Settings, TrustedProxies};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use tower::ServiceExt;
 use uuid::Uuid;
+use yuppers_backend::auth::{AuthRules, CodeMessage, CodeSender, SendFuture, token_hash};
+use yuppers_backend::db;
+use yuppers_backend::http::{self, AppState, Settings, TrustedProxies};
 
 const WEB_ORIGIN: &str = "https://app.test";
 const EMAIL_DOMAIN: &str = "auth-test.invalid";
@@ -701,7 +701,7 @@ async fn counts_from_windows_long_past_are_forgotten() {
     }
 
     let service = connect("DATABASE_URL").await;
-    exchange_backend::auth::purge_sign_in_limits(&service)
+    yuppers_backend::auth::purge_sign_in_limits(&service)
         .await
         .unwrap();
 

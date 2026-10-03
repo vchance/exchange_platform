@@ -1,4 +1,4 @@
-import type { components, ErrorCode, ExchangeView as Exchange } from '@exchange/api-client'
+import type { components, ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client'
 import {
   amendmentEffects,
   baseRevision,
@@ -28,7 +28,7 @@ import {
   type Problem,
   type ProblemField,
   type SaveState,
-} from '@exchange/shared'
+} from '@yuppers/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useI18n, useSession } from '../app/context'

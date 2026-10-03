@@ -1,4 +1,4 @@
-import type { ApiClient } from '@exchange/api-client'
+import type { ApiClient } from '@yuppers/api-client'
 import { expect, test } from 'vitest'
 
 import { ApiFailure, createExchangeApi, type SessionHolding } from './api'

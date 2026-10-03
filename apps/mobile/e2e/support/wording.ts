@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import type { Wording } from '@exchange/shared'
+import type { Wording } from '@yuppers/shared'
 
 import { repoRoot } from './env'
 

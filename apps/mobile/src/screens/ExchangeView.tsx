@@ -1,4 +1,4 @@
-import type { ErrorCode, ExchangeView as Exchange } from '@exchange/api-client';
+import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client';
 import {
   consentShown,
   failureCode,
@@ -15,7 +15,7 @@ import {
   type Actions as ExchangeActions,
   type ClosedReason,
   type RevisionView,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, type ScrollView } from 'react-native';

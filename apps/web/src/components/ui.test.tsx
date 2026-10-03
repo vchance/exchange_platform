@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createI18n, wordingFor } from '@exchange/shared'
+import { createI18n, wordingFor } from '@yuppers/shared'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, expect, test } from 'vitest'

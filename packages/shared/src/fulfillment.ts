@@ -1,4 +1,4 @@
-import type { Command, components, ExchangeView } from '@exchange/api-client'
+import type { Command, components, ExchangeView } from '@yuppers/api-client'
 
 type Status = components['schemas']['Status']
 type Due = components['schemas']['DueDto']

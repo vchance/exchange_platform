@@ -1,4 +1,4 @@
-import type { RecordFile } from '@exchange/shared';
+import type { RecordFile } from '@yuppers/shared';
 
 /**
  * `handed` means the file was given to the system, which is all the app can

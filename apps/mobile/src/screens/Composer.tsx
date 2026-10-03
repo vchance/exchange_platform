@@ -1,4 +1,4 @@
-import type { components, ErrorCode, ExchangeView as Exchange } from '@exchange/api-client';
+import type { components, ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client';
 import {
   amendmentEffects,
   baseRevision,
@@ -32,7 +32,7 @@ import {
   type RevisionSent,
   type SaveState,
   type Slot,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, type ScrollView } from 'react-native';

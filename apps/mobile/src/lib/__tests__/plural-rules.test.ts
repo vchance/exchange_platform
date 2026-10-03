@@ -1,4 +1,4 @@
-import { formatMessage, languages, wordingFor } from '@exchange/shared';
+import { formatMessage, languages, wordingFor } from '@yuppers/shared';
 
 import { installPluralRules, pluralCategory } from '../plural-rules';
 

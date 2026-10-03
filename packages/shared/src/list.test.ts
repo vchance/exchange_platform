@@ -1,4 +1,4 @@
-import type { ExchangeSummary } from '@exchange/api-client'
+import type { ExchangeSummary } from '@yuppers/api-client'
 import { expect, test } from 'vitest'
 
 import { groupExchanges } from './list'

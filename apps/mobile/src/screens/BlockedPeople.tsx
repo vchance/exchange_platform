@@ -1,4 +1,4 @@
-import { labelText, useBlockedPeople, type BlockedPerson } from '@exchange/shared';
+import { labelText, useBlockedPeople, type BlockedPerson } from '@yuppers/shared';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';

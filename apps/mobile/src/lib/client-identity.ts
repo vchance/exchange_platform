@@ -1,4 +1,4 @@
-import { parseVersion, type ClientIdentity } from '@exchange/shared';
+import { parseVersion, type ClientIdentity } from '@yuppers/shared';
 
 /*
  * Which client this is and which build, for the `X-Client-Version` header

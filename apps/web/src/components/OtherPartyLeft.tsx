@@ -1,4 +1,4 @@
-import type { ExchangeView } from '@exchange/api-client'
+import type { ExchangeView } from '@yuppers/api-client'
 
 import { useI18n } from '../app/context'
 

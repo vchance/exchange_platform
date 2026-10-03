@@ -12,17 +12,17 @@ use std::sync::{Arc, Mutex};
 
 use axum::http::{Method, StatusCode};
 use common::{App, Deal, User, accept};
-use exchange_backend::auth::SendFuture;
-use exchange_backend::exchanges::service::run_timers;
-use exchange_backend::notifications::outbox::{
-    Delivered, Delivery, DeliveryRules, deliver_due, deliver_due_until,
-};
-use exchange_backend::notifications::wording::Wording;
-use exchange_backend::notifications::{Email, EmailSender};
 use serde_json::{Value, json};
 use time::{Duration, OffsetDateTime};
 use tokio::sync::MutexGuard;
 use uuid::Uuid;
+use yuppers_backend::auth::SendFuture;
+use yuppers_backend::exchanges::service::run_timers;
+use yuppers_backend::notifications::outbox::{
+    Delivered, Delivery, DeliveryRules, deliver_due, deliver_due_until,
+};
+use yuppers_backend::notifications::wording::Wording;
+use yuppers_backend::notifications::{Email, EmailSender};
 
 const DATABASE: &str = "exchange_test_notifications";
 

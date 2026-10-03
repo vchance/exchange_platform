@@ -1,4 +1,4 @@
-import { deletedNotice, useDeletedNotice } from '@exchange/shared'
+import { deletedNotice, useDeletedNotice } from '@yuppers/shared'
 import { useEffect } from 'react'
 
 import { useI18n, useSession } from '../app/context'

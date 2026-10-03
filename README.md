@@ -56,7 +56,7 @@ The API starts without a database: `/healthz` and `/v1/meta` respond, and `/read
 The web app signs in with a cookie, which the API honors only for requests from `WEB_ORIGIN`. If the dev server runs anywhere but `http://localhost:5173`, set `WEB_ORIGIN` in `.env` to match, or signing in will be refused. If the API listens anywhere but `127.0.0.1:8080`, tell the dev server where:
 
 ```sh
-API_PROXY_TARGET=http://127.0.0.1:8084 npm run dev -w @exchange/web -- --port 5184 --strictPort
+API_PROXY_TARGET=http://127.0.0.1:8084 npm run dev -w @yuppers/web -- --port 5184 --strictPort
 ```
 
 On a physical device the mobile app cannot reach the development machine as `localhost`; set `EXPO_PUBLIC_API_URL` to the machine's LAN address.
@@ -77,7 +77,7 @@ The app in `apps/mobile` takes an exchange from a draft to completion the way th
 - **Languages.** The device's language before sign-in and the account's after. Hermes, the engine the app runs on, has a narrower `Intl` than a browser: the shared formatting avoids what it lacks, and `src/lib/plural-rules.ts` supplies plural rules for every language from the Unicode data, so adding a language needs nothing in the app.
 - **History and the record.** The exchange screen ends with its history, and `/exchanges/{id}/record` lays the whole record out to be read from top to bottom, by eye or with a screen reader, under the same plain summary as the web's (`src/screens/History.tsx`, `src/screens/RecordScreen.tsx`). A party takes their copy away through the system's share sheet, as a PDF or as the JSON document. For the PDF the record is laid out as one HTML page, summary first, with everything escaped and no script allowed (`src/lib/record-html.ts`), and `expo-print` prints it to a file. The share sheet takes a file, so either copy is written to the app's own cache first (`src/lib/record-sharer.ts`, with `expo-file-system`, `expo-print` and `expo-sharing`). There is never more than one such copy, and it goes when the next is made, when the account signs out, and on iOS as soon as the sheet closes.
 - **Report and block.** On the exchange screen once someone has joined, on the invitation screen before signing in (report only), and as a list of the people blocked on the account screen (`src/screens/ExchangeSafety.tsx`, `InvitationReport.tsx`, `BlockedPeople.tsx`). What is sent, and what the person is then told, is decided in `packages/shared` and is the same as on the web.
-- **Tests.** `npm test -w @exchange/mobile` runs every test twice, as an iOS build and as an Android build would load the app, including one that runs the whole app against a stand-in for the service. Native modules are mocked there; nothing replaces running it on devices before a release.
+- **Tests.** `npm test -w @yuppers/mobile` runs every test twice, as an iOS build and as an Android build would load the app, including one that runs the whole app against a stand-in for the service. Native modules are mocked there; nothing replaces running it on devices before a release.
 
 ### Running the screens in a browser
 
@@ -101,7 +101,7 @@ Both apps are meant to be used with a screen reader, a keyboard or switch, text 
 How it is checked:
 
 - `src/a11y.test.tsx` in `apps/web` runs the whole web app in jsdom against a stand-in for the service and checks the invitation page, sign-in, the composer, the exchange view, the record and the rest with [axe-core](https://github.com/dequelabs/axe-core) (WCAG 2.0 to 2.2 A and AA, and axe's best practices). Any violation fails `npm test`. It also checks where the focus goes, what is announced, and the page's title and language. `src/contrast.test.ts` computes the contrast of the colour pairs the stylesheet draws, which axe cannot do in jsdom.
-- `npm run lint -w @exchange/web` includes oxlint's `jsx-a11y` rules.
+- `npm run lint -w @yuppers/web` includes oxlint's `jsx-a11y` rules.
 - `src/__tests__/accessibility.test.tsx` in `apps/mobile` walks the main screens, as iOS and as Android, and fails on any pressable control without a role, label, state or a 44-point target, any input without a label, or a screen without a heading; it also checks what is announced and that panels move the screen reader's focus.
 
 None of this replaces trying the apps with VoiceOver, TalkBack, NVDA and a keyboard, at the largest text sizes, before a release: the automated checks see the structure, not how it sounds or how it lays out.
@@ -113,8 +113,8 @@ None of this replaces trying the apps with VoiceOver, TalkBack, NVDA and a keybo
 | `npm run gen:api` | Regenerates `packages/api-client` from the backend. Run after any change to routes, request or response types, or error codes. |
 | `npm run typecheck` | Typechecks every TypeScript workspace. |
 | `npm test` | Tests for the shared logic, the web app's own and the mobile app's: the API calls and their idempotency keys, the action runner, the working copy and the revision built from it, numbers and money, message formatting, routes, the per-language entry pages, and the mobile app run whole as iOS and as Android. |
-| `npm run lint -w @exchange/web` | Lints the web app. |
-| `npm run lint -w @exchange/mobile` | Lints the mobile app (`expo lint`). |
+| `npm run lint -w @yuppers/web` | Lints the web app. |
+| `npm run lint -w @yuppers/mobile` | Lints the mobile app (`expo lint`). |
 | `npx expo-doctor` (in `apps/mobile/`) | Checks the mobile app's dependencies and configuration against the Expo SDK. |
 | `npx expo export --platform ios --platform android` (in `apps/mobile/`) | Builds both platforms' bundles, which proves they compile. |
 | `npm run build:web` | Production build of the web app, with one entry page per language (`DESIGN.md` §13.5). |
@@ -164,7 +164,7 @@ What the harness cannot show, because it only exists on a device:
 GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Six jobs run side by side:
 
 - **Backend and API client**, against a PostgreSQL 17 container with the same two roles as local development: `cargo fmt --check`, `cargo clippy --all-targets` with warnings as errors, `cargo test`, and then `npm run gen:api`, which fails the job if it changes anything under `packages/api-client`. A stale client means the contract has drifted; regenerate it and commit the result.
-- **TypeScript**: `npm ci`, `npm run typecheck` (which includes the wording check), `npm run lint -w @exchange/web` (warnings fail it), `npm run lint -w @exchange/mobile`, `npm test` and `npm run build:web`.
+- **TypeScript**: `npm ci`, `npm run typecheck` (which includes the wording check), `npm run lint -w @yuppers/web` (warnings fail it), `npm run lint -w @yuppers/mobile`, `npm test` and `npm run build:web`.
 - **Container image**: builds the `Dockerfile`, starts the whole stack from `docker-compose.yml` and checks it from outside: `/healthz` and `/readyz` answer, the web app's entry pages are served in each language with the right cache and security headers, API paths keep precedence, a request ID comes back, metrics answer on their own port and not on the public one, and the worker starts, reports its passes and exits cleanly when stopped. Docker is not needed on a development machine for anything else, so this job is where the image is verified.
 - **End to end**: against a PostgreSQL 17 container, builds the API and the web app, applies the migrations, starts the API in the background and runs `apps/web/e2e` in Chromium. When it fails, the Playwright report, with a trace of each failed test, and the API's log are kept as the run's `playwright-report` artifact.
 - **Mobile end to end**: the same, for `apps/mobile/e2e`: it exports the mobile app for the web instead of building the web app, and the tests start the harness proxy and a server for the export. Its report and the API's log are kept as `mobile-playwright-report` when it fails.

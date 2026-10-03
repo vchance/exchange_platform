@@ -1,4 +1,4 @@
-import { isComplete } from '@exchange/shared';
+import { isComplete } from '@yuppers/shared';
 import { Stack, useRouter } from 'expo-router';
 
 import { AccountDeleted } from '../components/AccountDeleted';

@@ -16,18 +16,18 @@ use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderName, Method, Request, StatusCode};
-use exchange_backend::auth::{AuthRules, CodeSender, LogSender, generate_token, token_hash};
-use exchange_backend::client_version::MinimumClientVersions;
-use exchange_backend::db;
-use exchange_backend::domain::Rules;
-use exchange_backend::http::{self, AppState, Settings, TrustedProxies};
-use exchange_backend::metrics::HttpMetrics;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use tokio::sync::OnceCell;
 use tower::ServiceExt;
 use uuid::Uuid;
+use yuppers_backend::auth::{AuthRules, CodeSender, LogSender, generate_token, token_hash};
+use yuppers_backend::client_version::MinimumClientVersions;
+use yuppers_backend::db;
+use yuppers_backend::domain::Rules;
+use yuppers_backend::http::{self, AppState, Settings, TrustedProxies};
+use yuppers_backend::metrics::HttpMetrics;
 
 pub const CONSENT_VERSION: &str = "test-1";
 

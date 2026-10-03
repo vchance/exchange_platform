@@ -4,10 +4,10 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use common::{App, accept, consent, fence_job};
-use exchange_backend::domain::canonical::content_hash;
-use exchange_backend::exchanges::repo;
 use serde_json::{Value, json};
 use uuid::Uuid;
+use yuppers_backend::domain::canonical::content_hash;
+use yuppers_backend::exchanges::repo;
 
 const DATABASE: &str = "exchange_test_api";
 
@@ -906,7 +906,7 @@ async fn a_close_request_is_shown_to_both_and_can_carry_statements() {
 
 #[tokio::test]
 async fn starting_exchanges_is_limited_per_day_and_needs_a_real_timezone() {
-    let rules = exchange_backend::domain::Rules {
+    let rules = yuppers_backend::domain::Rules {
         exchanges_per_day: 2,
         ..Default::default()
     };
@@ -1369,7 +1369,7 @@ fn moment(value: &Value) -> time::OffsetDateTime {
 
 #[tokio::test]
 async fn a_close_request_says_when_it_lapses_and_a_contribution_says_since_when_it_stands() {
-    let rules = exchange_backend::domain::Rules {
+    let rules = yuppers_backend::domain::Rules {
         close_response_window: time::Duration::days(3),
         ..Default::default()
     };

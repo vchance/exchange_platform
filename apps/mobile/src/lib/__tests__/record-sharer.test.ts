@@ -1,4 +1,4 @@
-import { recordFile, type RecordDocument } from '@exchange/shared';
+import { recordFile, type RecordDocument } from '@yuppers/shared';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';

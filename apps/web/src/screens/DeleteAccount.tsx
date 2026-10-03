@@ -1,5 +1,5 @@
-import type { Account } from '@exchange/api-client'
-import { useAccountDeletion } from '@exchange/shared'
+import type { Account } from '@yuppers/api-client'
+import { useAccountDeletion } from '@yuppers/shared'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'

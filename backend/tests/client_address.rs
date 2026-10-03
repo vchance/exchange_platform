@@ -12,13 +12,13 @@ use std::sync::Arc;
 
 use axum::http::{HeaderName, Method};
 use common::{App, Deal, PEER, accept};
-use exchange_backend::auth::LogSender;
-use exchange_backend::domain::Rules;
-use exchange_backend::exchanges::service::purge_network_metadata;
-use exchange_backend::http::TrustedProxies;
 use serde_json::json;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
+use yuppers_backend::auth::LogSender;
+use yuppers_backend::domain::Rules;
+use yuppers_backend::exchanges::service::purge_network_metadata;
+use yuppers_backend::http::TrustedProxies;
 
 const DATABASE: &str = "exchange_test_client_address";
 const SPOOFED: &str = "203.0.113.7, 10.0.0.2";

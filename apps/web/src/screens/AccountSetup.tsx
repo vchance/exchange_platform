@@ -1,4 +1,4 @@
-import type { ErrorCode } from '@exchange/api-client'
+import type { ErrorCode } from '@yuppers/api-client'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { isComplete, useI18n, useSession } from '../app/context'

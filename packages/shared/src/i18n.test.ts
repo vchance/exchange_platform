@@ -1,4 +1,4 @@
-import type { Account } from '@exchange/api-client'
+import type { Account } from '@yuppers/api-client'
 import { expect, test } from 'vitest'
 
 import { createI18n, isComplete } from './i18n'

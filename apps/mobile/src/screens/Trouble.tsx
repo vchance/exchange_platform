@@ -1,4 +1,4 @@
-import type { ExchangeView } from '@exchange/api-client';
+import type { ExchangeView } from '@yuppers/api-client';
 import {
   labelText,
   moveWording,
@@ -10,7 +10,7 @@ import {
   type TroubleSituation,
   type TroubleWay,
   type Wording,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 

@@ -1,4 +1,4 @@
-import { wordingFor, type RecordDocument } from '@exchange/shared';
+import { wordingFor, type RecordDocument } from '@yuppers/shared';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';

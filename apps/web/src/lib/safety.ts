@@ -1,6 +1,6 @@
 import { api } from './api'
 
-export type { BlockedPerson, BlockStatus } from '@exchange/shared'
+export type { BlockedPerson, BlockStatus } from '@yuppers/shared'
 
 /**
  * Reporting and blocking (DESIGN.md §9). A refusal is thrown as an

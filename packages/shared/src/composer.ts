@@ -1,4 +1,4 @@
-import type { components, ExchangeView } from '@exchange/api-client'
+import type { components, ExchangeView } from '@yuppers/api-client'
 
 import type { RevisionView, SendRevision } from './api'
 import { isUnconfirmedClaimant } from './claimant'

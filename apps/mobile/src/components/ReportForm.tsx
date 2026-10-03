@@ -1,11 +1,11 @@
-import type { ErrorCode } from '@exchange/api-client';
+import type { ErrorCode } from '@yuppers/api-client';
 import {
   checkReport,
   REPORT_DETAILS_MAX_CHARS,
   REPORT_REASONS,
   reportNeedsDetails,
   type ReportReason,
-} from '@exchange/shared';
+} from '@yuppers/shared';
 import { useState } from 'react';
 
 import { useI18n } from '../lib/context';

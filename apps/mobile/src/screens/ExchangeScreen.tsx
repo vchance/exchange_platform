@@ -1,5 +1,5 @@
-import type { ErrorCode, ExchangeView as Exchange } from '@exchange/api-client';
-import { failureCode, type RevisionSent } from '@exchange/shared';
+import type { ErrorCode, ExchangeView as Exchange } from '@yuppers/api-client';
+import { failureCode, type RevisionSent } from '@yuppers/shared';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 

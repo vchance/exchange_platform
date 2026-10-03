@@ -1,4 +1,4 @@
-import type { ExchangeView } from '@exchange/api-client'
+import type { ExchangeView } from '@yuppers/api-client'
 import { expect, test } from 'vitest'
 
 import { createI18n } from './i18n'

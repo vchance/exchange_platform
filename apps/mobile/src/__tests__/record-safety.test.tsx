@@ -1,4 +1,4 @@
-import { wordingFor } from '@exchange/shared';
+import { wordingFor } from '@yuppers/shared';
 import { File } from 'expo-file-system';
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import * as Sharing from 'expo-sharing';
