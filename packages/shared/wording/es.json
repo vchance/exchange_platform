@@ -812,5 +812,11 @@
     "NOT_FOUND": "No pudimos encontrar eso.",
     "SERVICE_UNAVAILABLE": "El servicio no está disponible temporalmente. Inténtalo de nuevo en unos momentos.",
     "INTERNAL": "Algo salió mal de nuestro lado. Inténtalo de nuevo."
+  },
+  "a11y": {
+    "openExchange": "Abre este intercambio.",
+    "required": "Obligatorio.",
+    "signNeedsAgreement": "Disponible cuando confirmes, arriba, que leíste estos términos y los firmas.",
+    "earlierAdded": "{count, plural, one {# entrada anterior agregada al historial.} other {# entradas anteriores agregadas al historial.}}"
   }
 }
