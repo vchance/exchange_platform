@@ -1,0 +1,6 @@
+[toolchain]
+# The Rust CI builds and checks with (.github/workflows/ci.yml, RUST_TOOLCHAIN).
+# Change both together.
+channel = "1.98"
+components = ["clippy", "rustfmt"]
+profile = "minimal"
