@@ -33,7 +33,7 @@ pub struct RequestCode {
     responses(
         (status = 204, description = "A code was sent"),
         (status = 422, description = "Not an email address or phone number", body = ErrorBody),
-        (status = 429, description = "Too many codes requested for this identifier, or from this address", body = ErrorBody)
+        (status = 429, description = "Too many codes requested for this identifier or from this address (`TOO_MANY_REQUESTS`), or too many wrong codes for this identifier today, so none is sent (`TOO_MANY_GUESSES`)", body = ErrorBody)
     )
 )]
 pub async fn request_code(
@@ -102,7 +102,7 @@ pub struct SessionCreated {
         (status = 401, description = "The code is wrong, expired or used up", body = ErrorBody),
         (status = 403, description = "The account is suspended", body = ErrorBody),
         (status = 422, description = "Invalid request", body = ErrorBody),
-        (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or from this address this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody)
+        (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody)
     )
 )]
 pub async fn create_session(

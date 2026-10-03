@@ -47,3 +47,41 @@ test('a replaced invitation link stops working, and the new one opens the propos
   ).toBeVisible()
   await expect(stateTag(page)).toHaveText(en.states.NEGOTIATING)
 })
+
+test('a second invitation link pasted into a tab showing one opens its own proposal', async ({
+  person,
+}) => {
+  const ana = await person('Ana')
+  const bruno = await person('Bruno')
+  await signUp(ana)
+  const { link: first } = await propose(ana, bruno, [
+    { from: 'me', kind: 'ITEM', description: 'A set of garden chairs' },
+  ])
+  const { id: secondId, link: second } = await propose(ana, bruno, [
+    { from: 'me', kind: 'ITEM', description: 'A folding ladder' },
+  ])
+
+  const { page } = bruno
+  await page.goto(first)
+  await expect(page.getByText('A set of garden chairs', { exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/\/en\/i$/)
+
+  // The second link, pasted into the same tab: only the fragment differs, so
+  // the browser does not load the page again, which the mark set here shows.
+  await page.evaluate(() => {
+    ;(window as { samePage?: boolean }).samePage = true
+  })
+  await page.evaluate((link) => {
+    window.location.href = link
+  }, second)
+  await expect(page.getByText('A folding ladder', { exact: true })).toBeVisible()
+  await expect(page.getByText('A set of garden chairs', { exact: true })).toHaveCount(0)
+  await expect(page).toHaveURL(/\/en\/i$/)
+  expect(await page.evaluate(() => (window as { samePage?: boolean }).samePage)).toBe(true)
+
+  // Responding claims the second.
+  await page.getByRole('button', { name: en.invitation.respond }).click()
+  await signIn(bruno)
+  await setUpProfile(bruno)
+  await page.waitForURL(`**/exchanges/${secondId}`)
+})

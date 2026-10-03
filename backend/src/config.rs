@@ -14,7 +14,7 @@ use std::time::Duration;
 use anyhow::{Context, bail};
 use axum::http::HeaderName;
 
-use crate::auth::{CodeSender, LogSender};
+use crate::auth::{AuthRules, CodeSender, LogSender};
 use crate::client_version::{MinimumClientVersions, parse_version};
 use crate::http::TrustedProxies;
 use crate::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
@@ -160,6 +160,16 @@ fn trusted_proxies(get: Lookup<'_>) -> anyhow::Result<TrustedProxies> {
         (Some(header), count) => {
             let name = HeaderName::try_from(header.trim().to_ascii_lowercase())
                 .with_context(|| format!("TRUSTED_PROXY_HEADER={header} is not a header name"))?;
+            // `Forwarded` (RFC 7239) is written `for=192.0.2.7;proto=https`,
+            // which is not read here: every request would fall back to the
+            // proxy's address and share one set of limits.
+            if name == "forwarded" {
+                bail!(
+                    "TRUSTED_PROXY_HEADER={header}: the RFC 7239 Forwarded header is not \
+                     supported; name a header that holds plain addresses, such as \
+                     X-Forwarded-For or the proxy's own (CF-Connecting-IP, Fly-Client-IP)"
+                );
+            }
             let count: usize = match count {
                 None => 1,
                 Some(value) => value
@@ -174,6 +184,55 @@ fn trusted_proxies(get: Lookup<'_>) -> anyhow::Result<TrustedProxies> {
             Ok(TrustedProxies::behind(name, count))
         }
     }
+}
+
+/// An optional limit: unset or empty means `default`, and anything else must
+/// be a whole number of 1 or more. Zero is refused rather than read as "no
+/// limit", which would turn a limit off by a slip; a deployment that wants
+/// one out of the way sets it high.
+fn limit(get: Lookup<'_>, name: &str, default: i64) -> anyhow::Result<i64> {
+    match optional(get, name) {
+        None => Ok(default),
+        Some(value) => value
+            .trim()
+            .parse::<i32>()
+            .ok()
+            .filter(|limit| *limit >= 1)
+            .map(i64::from)
+            .with_context(|| {
+                format!(
+                    "{name}={value} is not a whole number from 1 to {}",
+                    i32::MAX
+                )
+            }),
+    }
+}
+
+/// The rules for one-time codes, with the limits on sign-in that a
+/// deployment may set (`SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR`,
+/// `SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR`,
+/// `SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY`). Each defaults to the
+/// placeholder in [`AuthRules::default`].
+fn auth_rules(get: Lookup<'_>) -> anyhow::Result<AuthRules> {
+    let defaults = AuthRules::default();
+    Ok(AuthRules {
+        code_requests_per_address_per_hour: limit(
+            get,
+            "SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR",
+            defaults.code_requests_per_address_per_hour,
+        )?,
+        failed_guesses_per_address_per_hour: limit(
+            get,
+            "SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR",
+            defaults.failed_guesses_per_address_per_hour,
+        )?,
+        failed_guesses_per_identifier_per_day: limit(
+            get,
+            "SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY",
+            defaults.failed_guesses_per_identifier_per_day,
+        )?,
+        ..defaults
+    })
 }
 
 /// Configuration for the `worker` process.
@@ -236,6 +295,8 @@ pub struct ApiConfig {
     pub web_dir: Option<PathBuf>,
     pub proxies: TrustedProxies,
     pub min_client_versions: MinimumClientVersions,
+    /// The rules for one-time codes, some of them set by the deployment.
+    pub auth: AuthRules,
 }
 
 impl ApiConfig {
@@ -262,6 +323,7 @@ impl ApiConfig {
             web_dir: optional(get, "WEB_DIR").map(PathBuf::from),
             proxies: trusted_proxies(get)?,
             min_client_versions: min_client_versions(get)?,
+            auth: auth_rules(get)?,
         })
     }
 }
@@ -435,8 +497,73 @@ mod tests {
                 ("TRUSTED_PROXIES", "two"),
             ]),
             table(&[("TRUSTED_PROXY_HEADER", "not a header")]),
+            table(&[("TRUSTED_PROXY_HEADER", "Forwarded")]),
+            table(&[("TRUSTED_PROXY_HEADER", " forwarded ")]),
         ] {
             assert!(trusted_proxies(&lookup(&wrong)).is_err(), "{wrong:?}");
+        }
+    }
+
+    #[test]
+    fn the_sign_in_limits_default_to_the_placeholders_and_may_be_raised_or_lowered() {
+        let defaults = AuthRules::default();
+        for unset in [
+            table(&[]),
+            table(&[
+                ("SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR", ""),
+                ("SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR", " "),
+                ("SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY", ""),
+            ]),
+        ] {
+            let rules = auth_rules(&lookup(&unset)).unwrap();
+            assert_eq!(
+                (
+                    rules.code_requests_per_address_per_hour,
+                    rules.failed_guesses_per_address_per_hour,
+                    rules.failed_guesses_per_identifier_per_day,
+                ),
+                (
+                    defaults.code_requests_per_address_per_hour,
+                    defaults.failed_guesses_per_address_per_hour,
+                    defaults.failed_guesses_per_identifier_per_day,
+                ),
+            );
+        }
+
+        let set = table(&[
+            ("SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR", "10000"),
+            ("SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR", " 3 "),
+            ("SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY", "1"),
+        ]);
+        let rules = auth_rules(&lookup(&set)).unwrap();
+        assert_eq!(rules.code_requests_per_address_per_hour, 10_000);
+        assert_eq!(rules.failed_guesses_per_address_per_hour, 3);
+        assert_eq!(rules.failed_guesses_per_identifier_per_day, 1);
+        // Nothing else is a setting.
+        assert_eq!(rules.codes_per_hour, defaults.codes_per_hour);
+        assert_eq!(
+            rules.failed_deletion_guesses_per_day,
+            defaults.failed_deletion_guesses_per_day
+        );
+        assert_eq!(
+            rules.deletion_codes_per_hour,
+            defaults.deletion_codes_per_hour
+        );
+    }
+
+    #[test]
+    fn a_sign_in_limit_is_a_count_of_one_or_more_and_zero_is_not_no_limit() {
+        for name in [
+            "SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR",
+            "SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR",
+            "SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY",
+        ] {
+            for wrong in ["0", "-1", "ten", "1.5", "2147483648", "unlimited"] {
+                let settings = table(&[(name, wrong)]);
+                assert!(auth_rules(&lookup(&settings)).is_err(), "{name}={wrong}");
+            }
+            let most = table(&[(name, "2147483647")]);
+            assert!(auth_rules(&lookup(&most)).is_ok(), "{name}");
         }
     }
 

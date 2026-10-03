@@ -60,6 +60,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::auth::{CodeCheck, OfferedCode};
 use crate::domain::Rules;
 use crate::domain::exchange::{Actor, Command, Counterparty, State, decide};
 use crate::domain::identity::Identifier;
@@ -138,19 +139,48 @@ const FIRST_WAIT: std::time::Duration = std::time::Duration::from_millis(20);
 
 enum Attempt {
     Done,
-    /// Another transaction held the account row; nothing was changed.
+    /// Another transaction held the account row; nothing was changed, and
+    /// the code offered with the request, if any, was not used up.
     Busy,
 }
 
-/// Deletes the account. The caller has already checked the one-time code.
+/// Deletes the account once the one-time code offered for it checks out.
+///
+/// The code is checked and used up in the transaction that deletes the
+/// account (`auth::OfferedCode::check`), so the two stand or fall together.
+/// When the account is busy and the deletion gives up (`SERVICE_UNAVAILABLE`),
+/// the code is still live and the person can try again with it. A wrong code
+/// is charged, committed and refused at once, before anything is tried, so
+/// trying again costs a guess like any other: only a code that matched is
+/// ever checked more than once.
 ///
 /// Everything happens in one transaction, so an account is never half
-/// deleted. Deleting an account that is already deleted changes nothing and
-/// succeeds: that is what a repeat of the request finds.
+/// deleted.
+pub async fn delete_account_with_code(
+    db: &PgPool,
+    rules: &Rules,
+    account: Uuid,
+    code: &OfferedCode<'_>,
+) -> Result<(), ApiError> {
+    retry(db, rules, account, Some(code)).await
+}
+
+/// Deletes the account, for a caller that has confirmed it some other way.
+/// Deleting an account that is already deleted changes nothing and succeeds:
+/// that is what a repeat finds.
 pub async fn delete_account(db: &PgPool, rules: &Rules, account: Uuid) -> Result<(), ApiError> {
+    retry(db, rules, account, None).await
+}
+
+async fn retry(
+    db: &PgPool,
+    rules: &Rules,
+    account: Uuid,
+    code: Option<&OfferedCode<'_>>,
+) -> Result<(), ApiError> {
     let mut wait = FIRST_WAIT;
     for _ in 0..ATTEMPTS {
-        match attempt(db, rules, account).await? {
+        match attempt(db, rules, account, code).await? {
             Attempt::Done => return Ok(()),
             Attempt::Busy => {
                 tokio::time::sleep(wait).await;
@@ -161,8 +191,24 @@ pub async fn delete_account(db: &PgPool, rules: &Rules, account: Uuid) -> Result
     Err(ErrorCode::ServiceUnavailable.into())
 }
 
-async fn attempt(db: &PgPool, rules: &Rules, account: Uuid) -> Result<Attempt, ApiError> {
+async fn attempt(
+    db: &PgPool,
+    rules: &Rules,
+    account: Uuid,
+    code: Option<&OfferedCode<'_>>,
+) -> Result<Attempt, ApiError> {
     let mut tx = db.begin().await?;
+
+    // The code before anything else, so that a refusal is recorded without
+    // waiting on the account. It is used up only if this transaction
+    // commits; a busy attempt rolls back and leaves it live.
+    if let Some(code) = code
+        && let CodeCheck::Refused(error) = code.check(&mut tx).await?
+    {
+        // The wrong guess is counted, as for any code.
+        tx.commit().await?;
+        return Err(error);
+    }
 
     // The account row first, held to the end. Whatever the account is doing
     // from another device at this moment either finished before this or

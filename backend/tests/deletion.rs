@@ -492,8 +492,8 @@ async fn nobody_without_the_session_can_keep_its_owner_from_deleting() {
     assert_eq!(purpose, Purpose::DeleteAccount);
 
     // The stranger asks for sign-in codes for her address and guesses at
-    // them until both of its sign-in limits are used up: twenty wrong
-    // guesses for the day, five codes for the hour.
+    // them until its sign-in limit is used up: twenty wrong guesses for the
+    // day. From then on no sign-in code is sent to it, since none could work.
     for _ in 0..4 {
         done(
             &test
@@ -509,11 +509,6 @@ async fn nobody_without_the_session_can_keep_its_owner_from_deleting() {
                 .refused(StatusCode::UNAUTHORIZED, "INVALID_CODE");
         }
     }
-    done(
-        &test
-            .post_from(STRANGER, None, "/v1/auth/codes", to_ana.clone())
-            .await,
-    );
     let guess = json!({
         "identifier": ana.email, "code": test.never_sent(&ana.email), "delivery": "TOKEN",
     });
@@ -522,7 +517,7 @@ async fn nobody_without_the_session_can_keep_its_owner_from_deleting() {
         .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES");
     test.post_from(STRANGER, None, "/v1/auth/codes", to_ana.clone())
         .await
-        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES");
 
     // It worked against signing in: from anywhere, Ana can neither get a
     // sign-in code nor use the one she was sent.
@@ -531,7 +526,7 @@ async fn nobody_without_the_session_can_keep_its_owner_from_deleting() {
     let own = "198.51.100.40";
     test.post_from(own, None, "/v1/auth/codes", to_ana.clone())
         .await
-        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES");
     let session = json!({ "identifier": ana.email, "code": sign_in_code, "delivery": "TOKEN" });
     test.post_from(own, None, "/v1/auth/sessions", session)
         .await
@@ -1644,6 +1639,54 @@ async fn someone_referring_to_the_account_delays_its_deletion_and_deadlocks_nobo
     };
     let (deleted, ()) = tokio::join!(test.delete_with(ben, "EMAIL", &code), finishing);
     done(&deleted);
+    let after = events(app, &deal.exchange).await;
+    assert_eq!(after.len(), recorded.len() + 1);
+    assert_eq!(after.last().unwrap(), &event("CLOSE_REQUESTED", "B"));
+}
+
+#[tokio::test]
+async fn a_deletion_that_found_the_account_busy_leaves_the_code_for_another_try() {
+    let test = start().await;
+    let app = &test.app;
+    let deal = app.active().await;
+    let ben = &deal.ben;
+    let recorded = events(app, &deal.exchange).await;
+    let failed_guesses = "SELECT coalesce(sum(failed_attempts), 0)::bigint FROM one_time_code
+                          WHERE identifier = (SELECT email FROM account WHERE id = $1)";
+
+    // Another transaction refers to Ben's account and stays open, so the
+    // deletion keeps finding it busy and gives up.
+    let mut other = app.owner.begin().await.unwrap();
+    sqlx::query("SELECT 1 FROM account WHERE id = $1 FOR KEY SHARE")
+        .bind(ben.id)
+        .execute(&mut *other)
+        .await
+        .unwrap();
+    let code = test.deletion_code(ben, "EMAIL", &ben.email).await;
+    test.delete_with(ben, "EMAIL", &code)
+        .await
+        .refused(StatusCode::SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE");
+    assert_eq!(app.get(ben, "/v1/me").await.ok()["email"], ben.email);
+    assert_eq!(events(app, &deal.exchange).await, recorded);
+    assert_eq!(count(app, failed_guesses, ben.id).await, 0);
+
+    // A wrong code meanwhile is refused at once and charged, busy or not, so
+    // trying again is no way around the limits on guessing.
+    let wrong = if code == "000000" { "000001" } else { "000000" };
+    test.delete_with(ben, "EMAIL", wrong)
+        .await
+        .refused(StatusCode::UNAUTHORIZED, "INVALID_CODE");
+    assert_eq!(count(app, failed_guesses, ben.id).await, 1);
+    other.rollback().await.unwrap();
+
+    // Once the account is free, the same code deletes it, without a new one.
+    done(&test.delete_with(ben, "EMAIL", &code).await);
+    let status: String = sqlx::query_scalar("SELECT status FROM account WHERE id = $1")
+        .bind(ben.id)
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(status, "DELETED");
     let after = events(app, &deal.exchange).await;
     assert_eq!(after.len(), recorded.len() + 1);
     assert_eq!(after.last().unwrap(), &event("CLOSE_REQUESTED", "B"));

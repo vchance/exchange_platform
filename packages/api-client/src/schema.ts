@@ -1395,7 +1395,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Too many codes requested for this identifier, or from this address */
+            /** @description Too many codes requested for this identifier or from this address (`TOO_MANY_REQUESTS`), or too many wrong codes for this identifier today, so none is sent (`TOO_MANY_GUESSES`) */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -1482,7 +1482,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or from this address this hour (`TOO_MANY_REQUESTS`) */
+            /** @description Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`) */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2514,6 +2514,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description The account was busy and nothing was done; the code still works */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     request_deletion_code: {
@@ -2614,7 +2623,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or from this address this hour (`TOO_MANY_REQUESTS`) */
+            /** @description Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`) */
             429: {
                 headers: {
                     [name: string]: unknown;

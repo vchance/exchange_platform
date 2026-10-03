@@ -1,7 +1,9 @@
 import { wordingFor } from '@exchange/shared';
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { router } from 'expo-router';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { Platform } from 'react-native';
 
+import { redirectSystemPath } from '../app/+native-intent';
 import { forgetInvitation, heldInvitation } from '../lib/invitation';
 import {
   DRAFT,
@@ -251,6 +253,27 @@ test('an invitation address gives up its token: it is sent in a body and kept ou
   const preview = service.sent.find((request) => request.path === '/v1/invitations/preview');
   expect(preview).toMatchObject({ method: 'POST', body: { token: INVITATION } });
   for (const request of service.sent) expect(request.path).not.toContain(INVITATION);
+});
+
+test('a second invitation link arriving while one is open shows the new proposal', async () => {
+  await open(`/en/i#${INVITATION}`, { signedIn: false });
+  await screen.findByText(w.invitation.notBinding);
+
+  // The system hands the app another link, as it does when one is tapped
+  // with the app already open on an invitation.
+  const other = 'b4'.repeat(32);
+  await act(async () => {
+    router.navigate(redirectSystemPath({ path: `exchange://es/i#${other}`, initial: false }));
+  });
+  await waitFor(() =>
+    expect(service.sent.at(-1)).toMatchObject({
+      path: '/v1/invitations/preview',
+      body: { token: other },
+    }),
+  );
+  await screen.findByText(w.invitation.notBinding);
+  expect(heldInvitation()).toBe(other);
+  for (const request of service.sent) expect(request.path).not.toContain(other);
 });
 
 test('with no link to open, an invitation can be pasted', async () => {

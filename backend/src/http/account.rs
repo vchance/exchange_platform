@@ -159,7 +159,7 @@ pub struct AddIdentifier {
         (status = 401, description = "Not signed in, or the code is wrong", body = ErrorBody),
         (status = 409, description = "The identifier belongs to another account", body = ErrorBody),
         (status = 422, description = "Not an email address or phone number", body = ErrorBody),
-        (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or from this address this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody)
+        (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or a wrong code from an address that has offered too many this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody)
     )
 )]
 pub async fn add_identifier(
