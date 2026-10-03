@@ -480,3 +480,60 @@ async fn a_directory_that_is_not_a_build_is_refused() {
     assert!(WebApp::open(&empty.join("missing")).is_err());
     std::fs::remove_dir_all(&empty).ok();
 }
+
+#[tokio::test]
+async fn the_web_app_is_compressed_for_clients_that_ask_and_the_api_never_is() {
+    let build = Build::write();
+    // Big enough to be worth compressing.
+    let big = "console.log('yup');\n".repeat(200);
+    std::fs::write(build.path().join("assets/app-Big12345.js"), &big).unwrap();
+    let app = service(
+        "http://localhost:8080",
+        Some(WebApp::open(build.path()).unwrap()),
+    );
+
+    let ask = |path: &'static str, encoding: &'static str| {
+        let app = app.clone();
+        async move {
+            let request = Request::builder()
+                .uri(path)
+                .header("accept-encoding", encoding)
+                .body(Body::empty())
+                .unwrap();
+            app.oneshot(request).await.unwrap()
+        }
+    };
+
+    for (encoding, expected) in [("br", "br"), ("gzip", "gzip")] {
+        let response = ask("/assets/app-Big12345.js", encoding).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["content-encoding"], expected);
+        assert!(
+            response.headers()["vary"]
+                .to_str()
+                .unwrap()
+                .to_ascii_lowercase()
+                .contains("accept-encoding")
+        );
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        assert!(
+            bytes.len() < big.len() / 4,
+            "{encoding}: {} bytes",
+            bytes.len()
+        );
+    }
+
+    // Without asking, the file comes as it is.
+    let plain = get(&app, "/assets/app-Big12345.js").await;
+    assert_eq!(plain.header("content-encoding"), "");
+    assert_eq!(plain.body, big);
+
+    // API answers are never compressed, whatever the client accepts.
+    for path in ["/v1/meta", "/v1/nothing", "/healthz"] {
+        let response = ask(path, "br, gzip").await;
+        assert!(
+            response.headers().get("content-encoding").is_none(),
+            "{path} was compressed"
+        );
+    }
+}

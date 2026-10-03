@@ -38,6 +38,7 @@ use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderValue, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
+use tower_http::compression::CompressionLayer;
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::error::{ApiError, ErrorCode};
@@ -111,9 +112,14 @@ impl WebApp {
             .append_index_html_on_directories(true)
             .redirect_to_trailing_slash(false)
             .fallback(ServeFile::new(self.directory.join("index.html")));
+        // The web app's own files are compressed here, so the invitation page
+        // is small on a phone whatever sits in front of the service. Only
+        // these: API responses carry personal data next to what a request
+        // sent, which is the shape compression side channels need.
         Router::new()
             .fallback_service(files)
             .layer(middleware::from_fn(cache_control))
+            .layer(CompressionLayer::new().br(true).gzip(true))
             .layer(middleware::from_fn_with_state(self, route))
     }
 }
