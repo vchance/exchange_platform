@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 
 import { codeFrom } from './codes'
 import { apiURL, webURL } from './env'
-import { addressHeaders, networkAddress } from './network-address'
 
 /*
  * Someone acting through the API rather than the app: in most tests, the
@@ -47,7 +46,6 @@ export class ApiPerson {
     readonly name: string,
     readonly email: string,
     readonly token: string,
-    private readonly address: string,
   ) {}
 
   /**
@@ -55,21 +53,19 @@ export class ApiPerson {
    * account, or a second session for one made in the app.
    */
   static async signUp(name: string, email: string, language = 'en'): Promise<ApiPerson> {
-    const address = networkAddress()
     const code = await codeFrom(email, 'sign-in', () =>
-      call('POST', '/v1/auth/codes', { body: { identifier: email }, address }),
+      call('POST', '/v1/auth/codes', { body: { identifier: email } }),
     )
     const session = (await call('POST', '/v1/auth/sessions', {
       body: { identifier: email, code, delivery: 'TOKEN', language },
-      address,
     })) as { token: string }
-    const person = new ApiPerson(name, email, session.token, address)
+    const person = new ApiPerson(name, email, session.token)
     await person.call('PATCH', '/v1/me', { display_name: name, adult_confirmed: true })
     return person
   }
 
   call(method: string, path: string, body?: unknown, idempotent = false): Promise<unknown> {
-    return call(method, path, { body, token: this.token, address: this.address, idempotent })
+    return call(method, path, { body, token: this.token, idempotent })
   }
 
   view(id: string): Promise<Exchange> {
@@ -176,9 +172,9 @@ export class ApiPerson {
 async function call(
   method: string,
   path: string,
-  options: { body?: unknown; token?: string; address: string; idempotent?: boolean },
+  options: { body?: unknown; token?: string; idempotent?: boolean },
 ): Promise<unknown> {
-  const headers: Record<string, string> = addressHeaders(options.address)
+  const headers: Record<string, string> = {}
   if (options.token) headers.authorization = `Bearer ${options.token}`
   if (options.body !== undefined) headers['content-type'] = 'application/json'
   if (options.idempotent) headers['idempotency-key'] = randomUUID()
