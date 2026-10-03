@@ -481,6 +481,8 @@ function Report({ detail }: { detail: ReportDetail }) {
         <dt>{w.details}</dt>
         <dd>{report.details ? <Written>{report.details}</Written> : w.noDetails}</dd>
         <dt>{w.reporter}</dt>
+        {/* Every report has a reporter now; only one made through an
+            invitation link before reporting needed an account has none. */}
         <dd>{reporter ? who(reporter) : w.reporterLink}</dd>
         {subject && (
           <>

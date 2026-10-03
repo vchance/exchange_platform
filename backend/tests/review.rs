@@ -276,7 +276,9 @@ async fn the_queue_lists_open_reports_oldest_first_with_their_age() {
     let deal = app.active().await;
     let fresh = ben_reports(&app, &deal).await;
 
-    // One filed through the invitation link without signing in, two days ago.
+    // One filed through the invitation link without signing in, two days ago,
+    // as could be done before reporting needed an account: the column allows
+    // it, so the queue and the screen still show such a report.
     let old: Uuid = sqlx::query_scalar(
         "INSERT INTO report (subject_exchange_id, subject_account_id, reason, created_at)
          VALUES ($1::uuid, $2, 'SCAM', now() - interval '2 days') RETURNING id",

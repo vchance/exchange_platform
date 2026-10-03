@@ -53,11 +53,10 @@ use crate::exchanges::service;
 
 /// Longest details a report may carry, in characters.
 pub const REPORT_DETAILS_MAX_CHARS: usize = 2000;
-/// Reports one account may file in a day, over all exchanges.
+/// Reports one account may file in a day, over all exchanges, invitation
+/// links included. Every report has an account behind it: reporting the
+/// proposal behind a link needs signing in, as reading it does.
 pub const REPORTS_PER_ACCOUNT_PER_DAY: i64 = 10;
-/// Reports that may be filed in a day through one exchange's invitation link
-/// by people who are not signed in.
-pub const REPORTS_PER_LINK_PER_DAY: i64 = 3;
 /// How many blocked people the list returns.
 const BLOCK_LIST_MAX: i64 = 200;
 
@@ -107,8 +106,8 @@ pub struct NewReport {
     pub details: Option<String>,
 }
 
-/// A report on the proposal behind an invitation link, from someone who need
-/// not be signed in. The token is their proof of having received it.
+/// A report on the proposal behind an invitation link, from someone signed
+/// in who holds the link. The token is their proof of having received it.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct NewInvitationReport {
     pub token: String,
@@ -212,8 +211,9 @@ fn checked(
 }
 
 struct Report<'a> {
-    /// Nobody, for a report made through an invitation link without signing in.
-    reporter: Option<Uuid>,
+    /// The account reporting. There always is one: reporting through an
+    /// invitation link needs signing in too.
+    reporter: Uuid,
     exchange: Uuid,
     /// The party the report is about.
     subject: Uuid,
@@ -230,58 +230,28 @@ struct Report<'a> {
 async fn file(conn: &mut PgConnection, report: Report<'_>) -> Result<(), ApiError> {
     // One at a time per reporter, so that looking for an earlier report,
     // counting and inserting cannot be raced past the limit.
-    let turn = match report.reporter {
-        Some(account) => format!("report by {account}"),
-        None => format!("report through a link to {}", report.exchange),
-    };
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-        .bind(turn)
+        .bind(format!("report by {}", report.reporter))
         .execute(&mut *conn)
         .await?;
 
-    let (repeated, recent, limit): (bool, i64, i64) = match report.reporter {
-        Some(account) => {
-            let (repeated, recent) = sqlx::query_as(
-                "SELECT
-                    EXISTS (SELECT 1 FROM report
-                            WHERE reporter_account_id = $1 AND subject_exchange_id = $2
-                              AND status = 'OPEN'),
-                    (SELECT count(*) FROM report
-                     WHERE reporter_account_id = $1
-                       AND created_at > now() - interval '1 day')",
-            )
-            .bind(account)
-            .bind(report.exchange)
-            .fetch_one(&mut *conn)
-            .await?;
-            (repeated, recent, REPORTS_PER_ACCOUNT_PER_DAY)
-        }
-        // Without an account there is no telling one holder of the link from
-        // another. The same report again is a repeat; anything else counts
-        // against what the link may file in a day.
-        None => {
-            let (repeated, recent) = sqlx::query_as(
-                "SELECT
-                    EXISTS (SELECT 1 FROM report
-                            WHERE reporter_account_id IS NULL AND subject_exchange_id = $1
-                              AND status = 'OPEN' AND reason = $2
-                              AND details IS NOT DISTINCT FROM $3),
-                    (SELECT count(*) FROM report
-                     WHERE reporter_account_id IS NULL AND subject_exchange_id = $1
-                       AND created_at > now() - interval '1 day')",
-            )
-            .bind(report.exchange)
-            .bind(report.reason.as_str())
-            .bind(report.details)
-            .fetch_one(&mut *conn)
-            .await?;
-            (repeated, recent, REPORTS_PER_LINK_PER_DAY)
-        }
-    };
+    let (repeated, recent): (bool, i64) = sqlx::query_as(
+        "SELECT
+            EXISTS (SELECT 1 FROM report
+                    WHERE reporter_account_id = $1 AND subject_exchange_id = $2
+                      AND status = 'OPEN'),
+            (SELECT count(*) FROM report
+             WHERE reporter_account_id = $1
+               AND created_at > now() - interval '1 day')",
+    )
+    .bind(report.reporter)
+    .bind(report.exchange)
+    .fetch_one(&mut *conn)
+    .await?;
     if repeated {
         return Ok(());
     }
-    if recent >= limit {
+    if recent >= REPORTS_PER_ACCOUNT_PER_DAY {
         return Err(ErrorCode::TooManyRequests.into());
     }
 
@@ -316,7 +286,7 @@ pub async fn report_exchange(
     file(
         &mut tx,
         Report {
-            reporter: Some(reporter),
+            reporter,
             exchange,
             subject,
             reason,
@@ -363,7 +333,7 @@ pub async fn report_invitation(
     file(
         &mut tx,
         Report {
-            reporter: Some(reporter),
+            reporter,
             exchange,
             subject,
             reason,

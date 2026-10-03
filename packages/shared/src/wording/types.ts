@@ -556,6 +556,11 @@ export interface Wording {
     details: string
     noDetails: string
     reporter: string
+    /**
+     * Who reported, for a report with no account behind it: one made through
+     * an invitation link without signing in, before reporting needed an
+     * account. No report made now reads this.
+     */
     reporterLink: string
     subject: string
     /** Uses `{id}`. */
