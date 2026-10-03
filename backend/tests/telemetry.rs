@@ -24,7 +24,7 @@ use yuppers_backend::telemetry::{self, LogFormat};
 /// so nothing else may run while a test reads back what was logged.
 static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-const DATABASE: &str = "exchange_test_telemetry";
+const DATABASE: &str = "yuppers_test_telemetry";
 
 /// Keeps the codes the service "sent", without logging them.
 #[derive(Default)]
@@ -372,11 +372,11 @@ async fn requests_are_counted_by_route_template_not_by_path() {
     let page = text.finish();
 
     for line in [
-        r#"exchange_http_requests_total{route="/v1/exchanges/{id}",method="GET",status="4xx"} 2"#,
-        r#"exchange_http_requests_total{route="/v1/exchanges/{id}",method="GET",status="2xx"} 1"#,
-        r#"exchange_http_requests_total{route="/v1/exchanges",method="POST",status="2xx"} 1"#,
-        r#"exchange_http_requests_total{route="/v1/meta",method="GET",status="2xx"} 1"#,
-        r#"exchange_http_requests_total{route="unmatched",method="GET",status="4xx"} 1"#,
+        r#"yuppers_http_requests_total{route="/v1/exchanges/{id}",method="GET",status="4xx"} 2"#,
+        r#"yuppers_http_requests_total{route="/v1/exchanges/{id}",method="GET",status="2xx"} 1"#,
+        r#"yuppers_http_requests_total{route="/v1/exchanges",method="POST",status="2xx"} 1"#,
+        r#"yuppers_http_requests_total{route="/v1/meta",method="GET",status="2xx"} 1"#,
+        r#"yuppers_http_requests_total{route="unmatched",method="GET",status="4xx"} 1"#,
     ] {
         assert!(page.contains(&format!("{line}\n")), "{line} in\n{page}");
     }

@@ -23,7 +23,7 @@ use yuppers_backend::notifications::outbox::{Delivered, Delivery, DeliveryRules,
 use yuppers_backend::notifications::wording::Wording;
 use yuppers_backend::notifications::{Email, EmailSender};
 
-const DATABASE: &str = "exchange_test_reminders";
+const DATABASE: &str = "yuppers_test_reminders";
 
 static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -498,17 +498,13 @@ async fn a_reminder_is_in_its_readers_language_and_says_nothing_of_the_terms() {
         to_ana.subject,
         format!("Something you owe is overdue ({code})")
     );
-    assert!(to_ana.body.contains(&format!("Open the exchange: {link}")));
+    assert!(to_ana.body.contains(&format!("Open the yup: {link}")));
     assert_eq!(to_ben.to, pair.ben.email);
     assert_eq!(
         to_ben.subject,
         format!("Algo que te deben está atrasado ({code})")
     );
-    assert!(
-        to_ben
-            .body
-            .contains(&format!("Abre el intercambio: {link}"))
-    );
+    assert!(to_ben.body.contains(&format!("Abre el yup: {link}")));
     emails.extend(sent);
 
     // Sent, and so never again.

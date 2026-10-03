@@ -222,7 +222,7 @@ impl HttpMetrics {
             .clone();
 
         text.family(
-            "exchange_http_requests_total",
+            "yuppers_http_requests_total",
             Kind::Counter,
             "HTTP requests answered, by route template, method and status class.",
         );
@@ -233,13 +233,13 @@ impl HttpMetrics {
                 ("status", series.status),
             ];
             text.sample(
-                "exchange_http_requests_total",
+                "yuppers_http_requests_total",
                 &labels,
                 histogram.count as f64,
             );
         }
 
-        let name = "exchange_http_request_duration_seconds";
+        let name = "yuppers_http_request_duration_seconds";
         text.family(
             name,
             Kind::Histogram,
@@ -278,19 +278,19 @@ pub fn render_pool(text: &mut Text, pool: &PgPool) {
     let size = pool.size();
     let idle = u32::try_from(pool.num_idle()).unwrap_or(u32::MAX);
     text.single(
-        "exchange_db_pool_max",
+        "yuppers_db_pool_max",
         Kind::Gauge,
         "Connections the pool may open at most.",
         f64::from(pool.options().get_max_connections()),
     );
     text.single(
-        "exchange_db_pool_size",
+        "yuppers_db_pool_size",
         Kind::Gauge,
         "Connections the pool has open.",
         f64::from(size),
     );
     text.single(
-        "exchange_db_pool_in_use",
+        "yuppers_db_pool_in_use",
         Kind::Gauge,
         "Open connections in use by a request or a job.",
         f64::from(size.saturating_sub(idle)),
@@ -303,7 +303,7 @@ pub fn render_pool(text: &mut Text, pool: &PgPool) {
 /// sending. Both the API and the worker report it, so it can still be seen
 /// while the worker is down.
 ///
-/// Also `exchange_database_up`, 0 when the database could not be read.
+/// Also `yuppers_database_up`, 0 when the database could not be read.
 pub async fn render_outbox(text: &mut Text, pool: &PgPool, max_attempts: i32) {
     // Only rows not yet completed, which the partial index
     // `outbox_pending_idx` holds; the sent ones are never read.
@@ -322,28 +322,28 @@ pub async fn render_outbox(text: &mut Text, pool: &PgPool, max_attempts: i32) {
     match state {
         Ok((pending, given_up, oldest)) => {
             text.single(
-                "exchange_database_up",
+                "yuppers_database_up",
                 Kind::Gauge,
                 "1 if the database answered the last scrape's query, 0 if not.",
                 1.0,
             );
             text.family(
-                "exchange_outbox_messages",
+                "yuppers_outbox_messages",
                 Kind::Gauge,
                 "Notifications not yet completed: pending (waiting, or between retries) and given_up (out of attempts, left for someone to look at).",
             );
             text.sample(
-                "exchange_outbox_messages",
+                "yuppers_outbox_messages",
                 &[("state", "pending")],
                 pending as f64,
             );
             text.sample(
-                "exchange_outbox_messages",
+                "yuppers_outbox_messages",
                 &[("state", "given_up")],
                 given_up as f64,
             );
             text.single(
-                "exchange_outbox_oldest_pending_age_seconds",
+                "yuppers_outbox_oldest_pending_age_seconds",
                 Kind::Gauge,
                 "How long the oldest pending notification has waited since it was queued; 0 when none is pending.",
                 oldest.unwrap_or(0.0).max(0.0),
@@ -352,7 +352,7 @@ pub async fn render_outbox(text: &mut Text, pool: &PgPool, max_attempts: i32) {
         Err(error) => {
             tracing::warn!(%error, "metrics could not read the outbox");
             text.single(
-                "exchange_database_up",
+                "yuppers_database_up",
                 Kind::Gauge,
                 "1 if the database answered the last scrape's query, 0 if not.",
                 0.0,
@@ -421,7 +421,7 @@ impl WorkerMetrics {
     }
 
     pub fn render(&self, text: &mut Text) {
-        let name = "exchange_outbox_deliveries_total";
+        let name = "yuppers_outbox_deliveries_total";
         text.family(
             name,
             Kind::Counter,
@@ -436,7 +436,7 @@ impl WorkerMetrics {
             text.sample(name, &[("result", result)], read(counter));
         }
 
-        let name = "exchange_worker_runs_total";
+        let name = "yuppers_worker_runs_total";
         text.family(
             name,
             Kind::Counter,
@@ -452,19 +452,19 @@ impl WorkerMetrics {
         }
 
         text.single(
-            "exchange_worker_timer_changes_total",
+            "yuppers_worker_timer_changes_total",
             Kind::Counter,
             "Exchanges the timers changed: revisions expired, close requests lapsed, inactivity prompts and closures.",
             read(&self.timer_changes),
         );
         text.single(
-            "exchange_worker_reminders_queued_total",
+            "yuppers_worker_reminders_queued_total",
             Kind::Counter,
             "Reminders queued in the outbox.",
             read(&self.reminders_queued),
         );
         text.single(
-            "exchange_worker_last_pass_timestamp_seconds",
+            "yuppers_worker_last_pass_timestamp_seconds",
             Kind::Gauge,
             "When the worker last finished a pass over its jobs, in seconds since the Unix epoch; 0 before the first.",
             read(&self.last_pass),
@@ -560,12 +560,14 @@ mod tests {
 
         let ok = r#"route="/v1/exchanges/{id}",method="GET",status="2xx""#;
         assert!(
-            page.contains(&format!("exchange_http_requests_total{{{ok}}} 2\n")),
+            page.contains(&format!("yuppers_http_requests_total{{{ok}}} 2\n")),
             "{page}"
         );
-        assert!(page.contains(r#"exchange_http_requests_total{route="/v1/exchanges/{id}",method="GET",status="4xx"} 1"#));
         assert!(page.contains(
-            r#"exchange_http_requests_total{route="unmatched",method="OTHER",status="5xx"} 1"#
+            r#"yuppers_http_requests_total{route="/v1/exchanges/{id}",method="GET",status="4xx"} 1"#
+        ));
+        assert!(page.contains(
+            r#"yuppers_http_requests_total{route="unmatched",method="OTHER",status="5xx"} 1"#
         ));
         // Cumulative buckets: 3 ms is under 5 ms, 30 ms only from 50 ms.
         for (le, count) in [
@@ -576,14 +578,14 @@ mod tests {
             ("+Inf", 2),
         ] {
             let line = format!(
-                "exchange_http_request_duration_seconds_bucket{{{ok},le=\"{le}\"}} {count}\n"
+                "yuppers_http_request_duration_seconds_bucket{{{ok},le=\"{le}\"}} {count}\n"
             );
             assert!(page.contains(&line), "{line} in {page}");
         }
         assert!(page.contains(&format!(
-            "exchange_http_request_duration_seconds_count{{{ok}}} 2\n"
+            "yuppers_http_request_duration_seconds_count{{{ok}}} 2\n"
         )));
-        let sum_prefix = format!("exchange_http_request_duration_seconds_sum{{{ok}}} ");
+        let sum_prefix = format!("yuppers_http_request_duration_seconds_sum{{{ok}}} ");
         let sum: f64 = page
             .lines()
             .find_map(|line| line.strip_prefix(&sum_prefix))
@@ -592,8 +594,8 @@ mod tests {
             .unwrap();
         assert!((sum - 0.033).abs() < 1e-9, "{sum}");
         // Slower than every bound: only in +Inf.
-        assert!(page.contains(r#"exchange_http_request_duration_seconds_bucket{route="unmatched",method="OTHER",status="5xx",le="10"} 0"#));
-        assert!(page.contains(r#"exchange_http_request_duration_seconds_bucket{route="unmatched",method="OTHER",status="5xx",le="+Inf"} 1"#));
+        assert!(page.contains(r#"yuppers_http_request_duration_seconds_bucket{route="unmatched",method="OTHER",status="5xx",le="10"} 0"#));
+        assert!(page.contains(r#"yuppers_http_request_duration_seconds_bucket{route="unmatched",method="OTHER",status="5xx",le="+Inf"} 1"#));
         assert_eq!(page.matches("# TYPE").count(), 2);
     }
 
@@ -615,17 +617,17 @@ mod tests {
         metrics.render(&mut text);
         let page = text.finish();
         for line in [
-            r#"exchange_outbox_deliveries_total{result="sent"} 4"#,
-            r#"exchange_outbox_deliveries_total{result="failed"} 2"#,
-            r#"exchange_outbox_deliveries_total{result="given_up"} 1"#,
-            r#"exchange_outbox_deliveries_total{result="dropped"} 1"#,
-            r#"exchange_worker_runs_total{job="timers",result="ok"} 1"#,
-            r#"exchange_worker_runs_total{job="timers",result="error"} 1"#,
-            r#"exchange_worker_runs_total{job="reminders",result="ok"} 1"#,
-            r#"exchange_worker_runs_total{job="reminders",result="error"} 0"#,
-            "exchange_worker_timer_changes_total 2",
-            "exchange_worker_reminders_queued_total 5",
-            "exchange_worker_last_pass_timestamp_seconds 1790000000",
+            r#"yuppers_outbox_deliveries_total{result="sent"} 4"#,
+            r#"yuppers_outbox_deliveries_total{result="failed"} 2"#,
+            r#"yuppers_outbox_deliveries_total{result="given_up"} 1"#,
+            r#"yuppers_outbox_deliveries_total{result="dropped"} 1"#,
+            r#"yuppers_worker_runs_total{job="timers",result="ok"} 1"#,
+            r#"yuppers_worker_runs_total{job="timers",result="error"} 1"#,
+            r#"yuppers_worker_runs_total{job="reminders",result="ok"} 1"#,
+            r#"yuppers_worker_runs_total{job="reminders",result="error"} 0"#,
+            "yuppers_worker_timer_changes_total 2",
+            "yuppers_worker_reminders_queued_total 5",
+            "yuppers_worker_last_pass_timestamp_seconds 1790000000",
         ] {
             assert!(page.contains(&format!("{line}\n")), "{line} in {page}");
         }

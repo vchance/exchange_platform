@@ -30,8 +30,8 @@ jobs:
       # it out shortens the build and shrinks the cache.
       CARGO_PROFILE_DEV_DEBUG: "0"
       # The same two connections as .env.example.
-      DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/exchange
-      MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/exchange
+      DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers
+      MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/yuppers
     services:
       # The same database as docker-compose.yml. As the container's own user,
       # `exchange` is a superuser here, so it may create the throwaway
@@ -41,12 +41,12 @@ jobs:
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange
-          POSTGRES_DB: exchange
+          POSTGRES_DB: yuppers
         ports:
           - 5432:5432
         # Over TCP, which answers only once initialization has finished.
         options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d exchange"
+          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d yuppers"
           --health-interval 2s
           --health-timeout 5s
           --health-retries 30
@@ -70,7 +70,7 @@ jobs:
       # A service container starts before the checkout, so it cannot mount the
       # init script the way docker-compose.yml does.
       - name: Create the application role
-        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d exchange < docker/postgres-init.sql
+        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d yuppers < docker/postgres-init.sql
 
       # Each check below runs even when an earlier one has failed, so one run
       # reports everything that is wrong.
@@ -203,9 +203,9 @@ jobs:
           curl --silent --fail --head --header 'X-Request-Id: ci-smoke-1' http://127.0.0.1:8080/healthz | grep --ignore-case --quiet '^x-request-id: ci-smoke-1'
           # Metrics on their own port, counted by route template; never on
           # the public one, where /metrics is just another page of the app.
-          curl --silent --fail http://127.0.0.1:9100/metrics | grep --quiet '^exchange_http_requests_total{route="/healthz",method="GET",status="2xx"}'
-          curl --silent --fail http://127.0.0.1:9100/metrics | grep --quiet '^exchange_database_up 1'
-          if curl --silent http://127.0.0.1:8080/metrics | grep --quiet exchange_http_requests_total; then
+          curl --silent --fail http://127.0.0.1:9100/metrics | grep --quiet '^yuppers_http_requests_total{route="/healthz",method="GET",status="2xx"}'
+          curl --silent --fail http://127.0.0.1:9100/metrics | grep --quiet '^yuppers_database_up 1'
+          if curl --silent http://127.0.0.1:8080/metrics | grep --quiet yuppers_http_requests_total; then
             echo "::error::metrics are served on the public port"
             exit 1
           fi
@@ -214,7 +214,7 @@ jobs:
         run: |
           sleep 5
           docker compose --profile full logs worker | grep --quiet 'worker started'
-          curl --silent --fail http://127.0.0.1:9101/metrics | grep --quiet '^exchange_worker_runs_total{job="timers",result="ok"} [1-9]'
+          curl --silent --fail http://127.0.0.1:9101/metrics | grep --quiet '^yuppers_worker_runs_total{job="timers",result="ok"} [1-9]'
           docker compose --profile full stop --timeout 20 worker
           docker compose --profile full logs worker | grep --quiet 'worker shutting down'
           code="$(docker inspect --format '{{.State.ExitCode}}' "$(docker compose --profile full ps --all --quiet worker)")"
@@ -235,8 +235,8 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       CARGO_PROFILE_DEV_DEBUG: "0"
-      DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/exchange
-      MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/exchange
+      DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers
+      MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/yuppers
       APP_SECRET: ci-only-secret-for-the-end-to-end-tests-0123456789
       # Where the API started below writes its log; the tests read codes from it.
       E2E_API_LOG: ${{ github.workspace }}/apps/web/e2e/.output/api.log
@@ -246,11 +246,11 @@ jobs:
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange
-          POSTGRES_DB: exchange
+          POSTGRES_DB: yuppers
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d exchange"
+          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d yuppers"
           --health-interval 2s
           --health-timeout 5s
           --health-retries 30
@@ -272,7 +272,7 @@ jobs:
           cache: npm
 
       - name: Create the application role
-        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d exchange < docker/postgres-init.sql
+        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d yuppers < docker/postgres-init.sql
 
       - name: Install dependencies
         run: npm ci
@@ -340,8 +340,8 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       CARGO_PROFILE_DEV_DEBUG: "0"
-      DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/exchange
-      MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/exchange
+      DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers
+      MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/yuppers
       APP_SECRET: ci-only-secret-for-the-end-to-end-tests-0123456789
       # Where the API started below writes its log; the tests read codes from it.
       E2E_MOBILE_API_LOG: ${{ github.workspace }}/apps/mobile/e2e/.output/api.log
@@ -351,11 +351,11 @@ jobs:
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange
-          POSTGRES_DB: exchange
+          POSTGRES_DB: yuppers
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d exchange"
+          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d yuppers"
           --health-interval 2s
           --health-timeout 5s
           --health-retries 30
@@ -377,7 +377,7 @@ jobs:
           cache: npm
 
       - name: Create the application role
-        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d exchange < docker/postgres-init.sql
+        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d yuppers < docker/postgres-init.sql
 
       - name: Install dependencies
         run: npm ci
@@ -449,10 +449,10 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       CARGO_PROFILE_DEV_DEBUG: "0"
-      SOURCE_URL: postgres://exchange:exchange@127.0.0.1:5432/exchange
-      SOURCE_APP_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/exchange
-      RESTORED_URL: postgres://exchange:exchange@127.0.0.1:5432/exchange_restored
-      RESTORED_APP_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/exchange_restored
+      SOURCE_URL: postgres://exchange:exchange@127.0.0.1:5432/yuppers
+      SOURCE_APP_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers
+      RESTORED_URL: postgres://exchange:exchange@127.0.0.1:5432/yuppers_restored
+      RESTORED_APP_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/yuppers_restored
       APP_SECRET: ci-only-secret-for-the-backup-check-0123456789
     services:
       postgres:
@@ -460,11 +460,11 @@ jobs:
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange
-          POSTGRES_DB: exchange
+          POSTGRES_DB: yuppers
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d exchange"
+          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d yuppers"
           --health-interval 2s
           --health-timeout 5s
           --health-retries 30
@@ -486,7 +486,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Create the application role
-        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d exchange < docker/postgres-init.sql
+        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d yuppers < docker/postgres-init.sql
 
       # The server's own major version of pg_dump, pg_restore and psql, from
       # the image the database runs, whatever the runner has installed.
@@ -537,26 +537,26 @@ jobs:
           sleep 2
 
       - name: Back up
-        run: scripts/backup.sh -d "$SOURCE_URL" .backup/exchange.dump
+        run: scripts/backup.sh -d "$SOURCE_URL" .backup/yuppers.dump
 
       - name: A database that is not empty is refused
         run: |
-          if scripts/restore.sh -d "$SOURCE_URL" .backup/exchange.dump; then
+          if scripts/restore.sh -d "$SOURCE_URL" .backup/yuppers.dump; then
             echo "::error::restore.sh restored over a database that holds tables"
             exit 1
           fi
 
       - name: Restore into a new database
         run: |
-          "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "CREATE DATABASE exchange_restored OWNER exchange"
-          scripts/restore.sh -d "$RESTORED_URL" .backup/exchange.dump
+          "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 "$SOURCE_URL" -c "CREATE DATABASE yuppers_restored OWNER exchange"
+          scripts/restore.sh -d "$RESTORED_URL" .backup/yuppers.dump
 
       - name: The copy matches the source
         run: scripts/check-restore.sh "$SOURCE_URL" "$RESTORED_URL"
 
       - name: Restoring again over the copy, when told to
         run: |
-          scripts/restore.sh --overwrite -d "$RESTORED_URL" .backup/exchange.dump
+          scripts/restore.sh --overwrite -d "$RESTORED_URL" .backup/yuppers.dump
           scripts/check-restore.sh "$SOURCE_URL" "$RESTORED_URL"
 
       # backend/tests/schema.rs against the copy: the application role can

@@ -25,7 +25,7 @@ use yuppers_backend::notifications::outbox::{Delivery, DeliveryRules, deliver_du
 use yuppers_backend::notifications::wording::Wording;
 use yuppers_backend::notifications::{Email, EmailSender};
 
-const DATABASE: &str = "exchange_test_deletion";
+const DATABASE: &str = "yuppers_test_deletion";
 const WEB_ORIGIN: &str = "https://app.test";
 
 static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());

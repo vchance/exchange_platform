@@ -14,7 +14,7 @@ use yuppers_backend::exchanges::record::{self, Limits};
 use yuppers_backend::exchanges::service::run_timers;
 use yuppers_backend::http::extract::Session;
 
-const DATABASE: &str = "exchange_test_record";
+const DATABASE: &str = "yuppers_test_record";
 
 async fn app() -> App {
     App::start(DATABASE).await

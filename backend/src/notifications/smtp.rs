@@ -82,7 +82,7 @@ pub struct SmtpSettings {
     pub tls: TlsMode,
     /// A username and password, if the server wants them.
     pub credentials: Option<(String, Secret)>,
-    /// The sender address, with an optional name: `Exchange <no-reply@example.com>`.
+    /// The sender address, with an optional name: `Yuppers <no-reply@example.com>`.
     pub from: String,
     /// How long one connection may be silent before the send fails.
     pub timeout: Duration,
@@ -232,7 +232,7 @@ mod tests {
             port: 465,
             tls: TlsMode::Tls,
             credentials: Some(("user".to_owned(), Secret::new("hunter2".to_owned()))),
-            from: "Exchange <no-reply@example.test>".to_owned(),
+            from: "Yuppers <no-reply@example.test>".to_owned(),
             timeout: Duration::from_secs(30),
         };
         let shown = format!("{settings:?}");
@@ -253,6 +253,6 @@ mod tests {
         let wording = || Wording::embedded().unwrap();
         assert!(SmtpSender::new(settings("not an address"), wording()).is_err());
         assert!(SmtpSender::new(settings("no-reply@example.test"), wording()).is_ok());
-        assert!(SmtpSender::new(settings("Exchange <no-reply@example.test>"), wording()).is_ok());
+        assert!(SmtpSender::new(settings("Yuppers <no-reply@example.test>"), wording()).is_ok());
     }
 }

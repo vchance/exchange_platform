@@ -371,7 +371,7 @@ mod tests {
 
     const SMTP: &[(&str, &str)] = &[
         ("SMTP_HOST", "smtp.example.test"),
-        ("SMTP_FROM", "Exchange <no-reply@example.test>"),
+        ("SMTP_FROM", "Yuppers <no-reply@example.test>"),
     ];
 
     #[test]

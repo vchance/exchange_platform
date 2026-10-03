@@ -18,7 +18,7 @@ x-service: &service
   profiles: [full]
 
 x-app-environment: &app-environment
-  DATABASE_URL: postgres://exchange_app:exchange_app@postgres:5432/exchange
+  DATABASE_URL: postgres://exchange_app:exchange_app@postgres:5432/yuppers
   WEB_ORIGIN: http://localhost:8080
   RUST_LOG: ${RUST_LOG:-info}
   LOG_FORMAT: ${LOG_FORMAT:-text}
@@ -32,7 +32,7 @@ services:
     environment:
       POSTGRES_USER: exchange
       POSTGRES_PASSWORD: exchange
-      POSTGRES_DB: exchange
+      POSTGRES_DB: yuppers
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -51,7 +51,7 @@ services:
     <<: *service
     command: ["/usr/local/bin/migrate"]
     environment:
-      MIGRATION_DATABASE_URL: postgres://exchange:exchange@postgres:5432/exchange
+      MIGRATION_DATABASE_URL: postgres://exchange:exchange@postgres:5432/yuppers
       RUST_LOG: ${RUST_LOG:-info}
     depends_on:
       postgres:

@@ -20,7 +20,7 @@ use yuppers_backend::domain::Rules;
 use yuppers_backend::exchanges::service::purge_network_metadata;
 use yuppers_backend::http::TrustedProxies;
 
-const DATABASE: &str = "exchange_test_client_address";
+const DATABASE: &str = "yuppers_test_client_address";
 const SPOOFED: &str = "203.0.113.7, 10.0.0.2";
 
 static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());

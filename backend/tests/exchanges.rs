@@ -9,7 +9,7 @@ use uuid::Uuid;
 use yuppers_backend::domain::canonical::content_hash;
 use yuppers_backend::exchanges::repo;
 
-const DATABASE: &str = "exchange_test_api";
+const DATABASE: &str = "yuppers_test_api";
 
 async fn app() -> App {
     App::start(DATABASE).await

@@ -13,7 +13,7 @@
 //
 //   node scripts/load-check.mjs --pairs 50 --concurrency 10 \
 //     --base-url http://127.0.0.1:8100 --api-log /path/to/api.log \
-//     --database-url postgres://exchange:exchange@127.0.0.1:5432/exchange
+//     --database-url postgres://exchange:exchange@127.0.0.1:5432/yuppers_load
 //
 // The database URL is only read from: pg_stat_activity and the outbox. Give
 // the schema owner's, which can see every connection's state.

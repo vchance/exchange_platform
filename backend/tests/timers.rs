@@ -22,7 +22,7 @@ async fn events(app: &App, exchange: &str) -> Vec<(String, String)> {
 
 #[tokio::test]
 async fn timers_expire_offers_lapse_close_requests_and_close_idle_exchanges() {
-    let app = App::start("exchange_test_timers").await;
+    let app = App::start("yuppers_test_timers").await;
     let now = OffsetDateTime::now_utc();
     let at = |days: i64| now + Duration::days(days);
 

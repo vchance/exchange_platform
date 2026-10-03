@@ -13,7 +13,7 @@ use yuppers_backend::safety::{
     REPORT_DETAILS_MAX_CHARS, REPORTS_PER_ACCOUNT_PER_DAY, REPORTS_PER_LINK_PER_DAY,
 };
 
-const DATABASE: &str = "exchange_test_safety";
+const DATABASE: &str = "yuppers_test_safety";
 
 async fn app() -> App {
     App::start(DATABASE).await

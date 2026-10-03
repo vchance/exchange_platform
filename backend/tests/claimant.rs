@@ -9,7 +9,7 @@ use common::{App, Deal, Reply, User, accept, consent, fence_job};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-const DATABASE: &str = "exchange_test_claimant";
+const DATABASE: &str = "yuppers_test_claimant";
 
 const FOREIGN_KEY: &str = "23503";
 const CHECK: &str = "23514";

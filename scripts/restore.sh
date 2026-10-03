@@ -7,7 +7,7 @@
 # Connects as the schema owner: -d, or else MIGRATION_DATABASE_URL. The
 # database must exist, and should be a new, empty one owned by that role:
 #
-#   CREATE DATABASE exchange_restored OWNER exchange;
+#   CREATE DATABASE yuppers_restored OWNER exchange;
 #
 # It refuses a database that already holds tables, unless given
 # --overwrite, which drops and recreates every object the backup holds.

@@ -24,7 +24,7 @@ use yuppers_backend::notifications::outbox::{
 use yuppers_backend::notifications::wording::Wording;
 use yuppers_backend::notifications::{Email, EmailSender};
 
-const DATABASE: &str = "exchange_test_notifications";
+const DATABASE: &str = "yuppers_test_notifications";
 
 static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -495,15 +495,11 @@ async fn a_message_is_written_in_its_recipients_language() {
         to_ben.subject,
         format!("Algo se marcó como entregado ({code})")
     );
-    assert!(
-        to_ben
-            .body
-            .contains(&format!("Abre el intercambio: {link}"))
-    );
+    assert!(to_ben.body.contains(&format!("Abre el yup: {link}")));
 
     assert_eq!(to_ana.to, deal.ana.email);
     assert_eq!(to_ana.subject, format!("A delivery was confirmed ({code})"));
-    assert!(to_ana.body.contains(&format!("Open the exchange: {link}")));
+    assert!(to_ana.body.contains(&format!("Open the yup: {link}")));
 }
 
 #[tokio::test]
@@ -557,11 +553,7 @@ async fn each_signer_is_told_where_their_signed_agreement_is_kept() {
     assert!(to_ana.body.contains(&format!(
         "Sign in to read, print or download your copy at any time: {record}\n"
     )));
-    assert!(
-        to_ana
-            .body
-            .contains(&format!("Open the exchange: {link}\n"))
-    );
+    assert!(to_ana.body.contains(&format!("Open the yup: {link}\n")));
 
     assert_eq!(to_ben.to, deal.ben.email);
     assert_eq!(
@@ -571,11 +563,7 @@ async fn each_signer_is_told_where_their_signed_agreement_is_kept() {
     assert!(to_ben.body.contains(&format!(
         "Inicia sesión para leer, imprimir o descargar tu copia cuando quieras: {record}\n"
     )));
-    assert!(
-        to_ben
-            .body
-            .contains(&format!("Abre el intercambio: {link}\n"))
-    );
+    assert!(to_ben.body.contains(&format!("Abre el yup: {link}\n")));
 
     // The agreement itself does not travel by email: no terms, no names, no
     // amounts, and nothing attached, since an email here is text and nothing

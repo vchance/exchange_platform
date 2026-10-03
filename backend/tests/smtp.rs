@@ -27,9 +27,9 @@ use yuppers_backend::notifications::wording::{Links, Wording};
 use yuppers_backend::notifications::{Email, EmailSender};
 use yuppers_backend::telemetry::{self, LogFormat};
 
-const DATABASE: &str = "exchange_test_smtp";
+const DATABASE: &str = "yuppers_test_smtp";
 const WEB_ORIGIN: &str = "https://app.test";
-const FROM: &str = "Exchange <no-reply@example.test>";
+const FROM: &str = "Yuppers <no-reply@example.test>";
 const USERNAME: &str = "exchange-user";
 const PASSWORD: &str = "hunter2-not-for-logs";
 
@@ -358,7 +358,7 @@ async fn a_notification_arrives_as_a_message_in_the_recipients_language() {
         .find(|m| m.to[0] == deal.ana.email && m.subject().contains(&code))
         .unwrap();
     assert!(
-        in_force.body().contains("intercambio"),
+        in_force.body().contains("Abre el yup"),
         "{}",
         in_force.body()
     );

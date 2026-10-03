@@ -8,7 +8,7 @@ use common::App;
 use serde_json::{Value, json};
 use yuppers_backend::client_version::MinimumClientVersions;
 
-const DATABASE: &str = "exchange_test_client_version";
+const DATABASE: &str = "yuppers_test_client_version";
 
 #[tokio::test]
 async fn nothing_is_required_until_a_deployment_says_so() {
