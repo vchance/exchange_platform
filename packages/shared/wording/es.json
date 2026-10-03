@@ -836,6 +836,20 @@
       "savePdfHint": "Se abre la ventana de impresión del navegador. Elige “Guardar como PDF” como impresora para conservar esta página, con el resumen y el registro completo, como archivo."
     }
   },
+  "help": {
+    "link": "Ayuda",
+    "newTab": "(se abre en una pestaña nueva)",
+    "inBrowser": "Se abre en tu navegador.",
+    "learnMore": {
+      "signing": "Más información sobre la firma",
+      "moneyOutside": "Más información sobre el dinero y lo que no hacemos",
+      "trouble": "Más información sobre las opciones",
+      "amendment": "Más información sobre cómo cambiar un acuerdo",
+      "blocking": "Más información sobre el bloqueo",
+      "deletion": "Más información sobre eliminar tu cuenta",
+      "record": "Más información sobre el registro"
+    }
+  },
   "errors": {
     "STALE_REVISION": "Los términos cambiaron mientras los revisabas. Revisa la versión más reciente.",
     "WRONG_ACTOR": "Solo la otra parte puede hacer esto.",

@@ -5,6 +5,7 @@ import type { ChangedField, ItemChangeKind } from '../changes'
 import type { ProblemCode } from '../draft'
 import type { Move } from '../fulfillment'
 import type { SummaryOutcome } from '../summary'
+import type { HelpLinkPlace, HelpTopic } from '../help'
 import type { TroubleSituation, TroubleWay } from '../trouble'
 
 type Schemas = components['schemas']
@@ -772,6 +773,21 @@ export interface Wording {
       savePdfHint: string
     }
   }
+  /**
+   * The ways to the help pages from the rest of the product. The pages' own
+   * text is not here but in `wording/help/` (`HelpWording`), so that only
+   * the help pages load it.
+   */
+  help: {
+    /** The link to the help pages: the web app's footer, the mobile account screen. */
+    link: string
+    /** Said after a link that opens in a new browser tab, to screen readers only. */
+    newTab: string
+    /** Hint on a mobile link to help: it leaves the app for the browser. */
+    inBrowser: string
+    /** The link to the topic that explains one place in the product, named for that place. */
+    learnMore: Record<HelpLinkPlace, string>
+  }
   /** One entry per error code the API can return. */
   errors: Record<ErrorCode, string>
   /**
@@ -789,4 +805,36 @@ export interface Wording {
     /** Announced when earlier history has been read in. */
     earlierAdded: string
   }
+}
+
+/**
+ * One piece of a help page, in order: a heading, which starts a section, a
+ * paragraph, or a list. Every language's page has the same pieces in the
+ * same order, which the wording check enforces.
+ */
+export type HelpBlock = { h: string } | { p: string } | { ul: string[] } | { ol: string[] }
+
+export interface HelpTopicWording {
+  title: string
+  /** One sentence, under the topic's name in the list of topics and under its heading. */
+  summary: string
+  blocks: HelpBlock[]
+}
+
+/**
+ * The help pages' own text, one file per language in `wording/help/`. A
+ * message may use the figures in `HELP_FIGURES` as placeholders, such as
+ * `{closeDays}`, and nothing else. Like all wording it is the product
+ * speaking: it says what the product does today, never what is planned.
+ */
+export interface HelpWording {
+  title: string
+  intro: string
+  /** Heading over the list of topics, on the first page and under each topic. */
+  topicsHeading: string
+  /** Heading over the list of a topic's own sections. */
+  onThisPage: string
+  /** The link back to the first page of help. */
+  allTopics: string
+  topics: Record<HelpTopic, HelpTopicWording>
 }

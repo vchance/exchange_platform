@@ -2,6 +2,7 @@ import type { ErrorCode } from '@yuppers/api-client'
 import { useId, useState } from 'react'
 
 import { useI18n } from '../app/context'
+import { HelpLink } from './HelpLink'
 import { Failure } from './ui'
 
 interface Props {
@@ -47,6 +48,7 @@ export function Consent({
       <p>{w.binding}</p>
       <p>{w.electronic}</p>
       <p>{w.noJudge}</p>
+      <HelpLink place="signing" />
       <label className="check">
         <input
           type="checkbox"

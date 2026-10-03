@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 
 import { useI18n } from '../app/context'
 import type { Slot } from '../lib/api'
+import { HelpLink } from './HelpLink'
 import { Written } from './ui'
 
 type Contribution = components['schemas']['ContributionDto']
@@ -95,7 +96,12 @@ export function TermsView({ terms, currency, timezone, you, statuses, footer, le
                       <p>{fmt(w.amount, { amount: money(contribution.amount_minor, currency) })}</p>
                     )}
                     {/* Money is paid outside the product and only recorded here (DESIGN.md §11). */}
-                    {contribution.type === 'MONEY' && <p className="hint">{w.moneyOutside}</p>}
+                    {contribution.type === 'MONEY' && (
+                      <>
+                        <p className="hint">{w.moneyOutside}</p>
+                        <HelpLink place="moneyOutside" />
+                      </>
+                    )}
                     {contribution.quantity && (
                       <p>
                         {contribution.quantity.unit

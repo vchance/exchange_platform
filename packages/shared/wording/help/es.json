@@ -1,0 +1,225 @@
+{
+  "title": "Ayuda",
+  "intro": "Cómo funcionan los yups, qué hacemos y qué no, y qué pasa cuando algo sale mal. Cada tema es breve; elige el que necesites.",
+  "topicsHeading": "Temas de ayuda",
+  "onThisPage": "En esta página",
+  "allTopics": "Todos los temas de ayuda",
+  "topics": {
+    "yups": {
+      "title": "Qué es un yup y cómo funciona",
+      "summary": "Un yup es un trato entre dos personas, escrito entre las dos y firmado por ambas.",
+      "blocks": [
+        { "p": "Un yup es un trato entre dos personas: lo que cada una va a dar o hacer, escrito entre las dos. Cuando ambas firman la misma versión, es un acuerdo vinculante, y aquí llevan la cuenta de lo que cada una ha entregado." },
+        { "h": "Cómo avanza un yup" },
+        {
+          "ol": [
+            "Borrador. Escribes entre quiénes es y lo que aporta cada parte: artículos, servicios, tareas o dinero, cada uno con su fecha. El borrador se guarda mientras escribes, y nadie más lo ve hasta que lo envías. Puedes descartar un borrador que no quieras.",
+            "Envío. Firmar y enviar es un solo paso: al enviar los términos, los firmas. Después recibes un enlace de invitación para enviárselo a la otra persona, por el medio que uses normalmente. Nosotros no lo enviamos por ti.",
+            "Lectura. La otra persona abre el enlace y puede leer toda la propuesta sin tener cuenta.",
+            "Inicio de sesión. Para responder, inicia sesión con un código de un solo uso que le enviamos. No hay contraseña.",
+            "Firma. Puede firmar los términos tal como están, rechazarlos o proponer cambios."
+          ]
+        },
+        { "h": "El enlace de invitación" },
+        { "p": "Un enlace de invitación se puede usar durante {invitationDays} días, y solo lo ves una vez. Si lo pierdes, crea uno nuevo; el anterior deja de funcionar. Puedes vincular un enlace al correo electrónico o al número de teléfono de la otra persona, para que solo ella pueda usarlo. Si no lo haces, a quien abra el enlace se le pide iniciar sesión, y tú confirmas que es la persona que querías invitar. Hasta que lo confirmes, puede leer y firmar, pero su firma solo surte efecto cuando la confirmes." },
+        { "h": "Versiones y contraofertas" },
+        { "p": "Cada conjunto de términos que se envía es una versión, numerada en orden. Solo una versión espera firma a la vez." },
+        { "p": "Proponer cambios envía una contraoferta: una versión nueva que reemplaza a la anterior. Quien la envía la firma al enviarla, y la otra persona puede firmarla, rechazarla o proponer cambios a su vez. Antes de firmar una contraoferta ves qué cambia respecto a la versión a la que responde." },
+        { "p": "Una versión sigue abierta durante {proposalDays} días. Si para entonces no la han firmado ambos, caduca. Quien la envió puede retirarla, y la otra persona puede rechazarla. Mientras no se haya acordado nada, una versión que caduca, se retira o se rechaza termina el yup, y no se puede reabrir." },
+        { "h": "Cuándo pasa a ser vinculante" },
+        { "p": "Nada obliga a ninguna de las partes mientras un yup se escribe o se negocia. Cuando ambas han firmado la misma versión, esa versión pasa a ser el acuerdo, vigente desde ese momento." },
+        { "p": "El acuerdo se completa cuando cada elemento obligatorio está confirmado o dispensado. Hasta entonces sigue abierto, y pueden ver cómo va cada elemento." }
+      ]
+    },
+    "signing": {
+      "title": "Qué significa firmar",
+      "summary": "Firmar significa que aceptas exactamente los términos que ves, y con tu firma se registran algunos datos.",
+      "blocks": [
+        { "p": "Al firmar, aceptas exactamente estos términos. Tu firma es electrónica y tiene la intención de obligarte igual que una firma a mano. También aceptas firmar electrónicamente y recibir el acuerdo y sus registros en formato electrónico." },
+        { "p": "Firmas cuando envías términos y cuando aceptas términos que alguien te envió. Antes de firmar, marcas una casilla para indicar que leíste los términos y los firmas. Nada se firma por defecto." },
+        { "p": "El mensaje enviado con una versión y la fecha hasta la que sigue abierta no forman parte de lo que firmas." },
+        { "h": "Qué se registra con tu firma" },
+        {
+          "ul": [
+            "Tu cuenta y la versión que firmaste.",
+            "Cómo se te verificó: un código de un solo uso enviado a tu correo electrónico o a tu número de teléfono, y cuándo lo ingresaste.",
+            "Cuándo firmaste.",
+            "La huella de los términos: un código que se calcula a partir de los términos exactos que firmaste. Cualquiera que tenga una copia del registro puede calcularla de nuevo y comprobar que los términos no han cambiado.",
+            "Qué versión del texto de firma se te mostró, y en qué idioma.",
+            "Tu dirección de red y lo que tu navegador o la app informan sobre sí mismos y sobre tu dispositivo. Estos dos datos se guardan {networkDays} días y después se eliminan. El resto de la firma se guarda con el acuerdo."
+          ]
+        },
+        { "h": "En qué se basa una firma" },
+        { "p": "La única comprobación de quién firmó es el código de un solo uso que ingresó al iniciar sesión, lo que pudo ocurrir algún tiempo antes de firmar. No se pide ninguna otra prueba de identidad, y el registro lo dice." },
+        { "p": "Registramos lo que ambas partes acordaron y lo que cada una informa. No guardamos dinero, no decidimos disputas ni garantizamos que alguien cumpla." }
+      ]
+    },
+    "what-we-dont-do": {
+      "title": "Lo que no hacemos",
+      "summary": "Guardamos el acuerdo y un registro de lo que dice cada parte. No manejamos dinero, no juzgamos ni garantizamos nada.",
+      "blocks": [
+        { "p": "Yuppers guarda un acuerdo escrito y un registro compartido de lo que cada parte dice que se hizo. Eso es todo lo que hace." },
+        {
+          "ul": [
+            "No guardamos ni movemos dinero. Nada se paga a través de nosotros.",
+            "No decidimos disputas. Cuando no están de acuerdo, registramos lo que dice cada uno. No decidimos quién tiene razón.",
+            "No garantizamos que alguien cumpla. No podemos obligar a nadie a cumplir con su parte.",
+            "No comprobamos lo que registran. Marcar algo como entregado, confirmarlo, disputarlo o dispensarlo, y cada nota que escriban, son declaraciones de ustedes mismos. Las guardamos tal como se hicieron."
+          ]
+        },
+        { "h": "El dinero" },
+        { "p": "El dinero de un yup se paga fuera de nuestro servicio, como lo acuerden entre ustedes. El yup solo lo registra: quien paga registra que pagó, y solo quien recibe puede confirmar que lo recibió. Confirmar es definitivo." },
+        { "p": "Registrar un pago aquí no le paga a nadie, y nada de lo que hay aquí demuestra que el dinero llegó, aparte de lo que dice quien lo recibe." }
+      ]
+    },
+    "keeping-track": {
+      "title": "Llevar la cuenta, y cuando algo no está funcionando",
+      "summary": "Cómo se marca y se confirma cada elemento, y las salidas cuando no pueden seguir según lo acordado.",
+      "blocks": [
+        { "p": "Cuando un yup es un acuerdo, cada elemento muestra cómo va. Quien aporta un elemento lo marca como entregado, y solo quien lo recibe puede confirmarlo." },
+        { "h": "Cada elemento" },
+        {
+          "ul": [
+            "Marcar como entregado (para el dinero, “Ya pagué”): quien lo aporta dice que está hecho. Puede deshacerlo mientras espera confirmación.",
+            "Confirmar recepción: quien lo recibe lo acepta como hecho. Confirmar es definitivo.",
+            "Disputar: quien lo recibe dice qué está mal en algo marcado como entregado. Quien lo aporta puede corregirlo y marcarlo como entregado de nuevo, diciendo qué hizo.",
+            "Dispensar: quien lo recibe libera a quien lo aporta de ese elemento, para siempre."
+          ]
+        },
+        { "p": "Quien recibe también puede confirmar o dispensar un elemento que no se ha marcado como entregado. Cada paso, y cualquier nota que lo acompañe, queda en el historial." },
+        { "p": "El acuerdo se completa cuando cada elemento obligatorio está confirmado o dispensado. Los elementos opcionales no lo mantienen abierto. Enviamos un recordatorio cuando un elemento vence pronto y cuando está atrasado." },
+        { "h": "Algo no está funcionando" },
+        { "p": "En un acuerdo en curso, “Algo no está funcionando” pregunta cuál es la situación:" },
+        {
+          "ul": [
+            "la otra persona no ha cumplido con su parte;",
+            "no puedes cumplir con tu parte;",
+            "los dos quieren dejarlo;",
+            "no están de acuerdo en si algo se hizo."
+          ]
+        },
+        { "p": "Después muestra las opciones que corresponden y lo que significa cada una sobre quién queda liberado de qué. No hace nada por sí solo: eliges una opción y la confirmas." },
+        { "h": "Las tres salidas" },
+        {
+          "ul": [
+            "Dispensar. Liberas a la otra persona de un elemento que te debe. Todo lo demás sigue como se acordó. Solo la persona a quien se le debe un elemento puede dispensarlo, así que si no puedes cumplir con tu parte, solo la otra persona puede liberarte de ella.",
+            "Terminar de común acuerdo. Uno de ustedes propone terminar y el otro acepta. El acuerdo termina de inmediato, y los dos quedan liberados de todo lo que siga pendiente. Mientras no se responda, cualquiera de los dos puede dejar la propuesta de lado.",
+            "Cerrar sin acuerdo. Para cuando no pueden resolver las cosas entre ustedes. Uno de ustedes pide cerrar, y el otro tiene {closeDays} días para responder. Después, el acuerdo se cierra sin resolver. Nadie queda liberado: cada elemento conserva el estado que tenga, y el registro lo muestra así."
+          ]
+        },
+        { "p": "Mientras haya una solicitud de cierre abierta, quien la hizo puede retirarla, cualquiera de los dos puede agregar una declaración al registro, y todavía pueden resolver lo pendiente o terminar de común acuerdo. Si en ese tiempo cada elemento obligatorio queda confirmado o dispensado, el acuerdo se completa." },
+        { "p": "También pueden proponer un cambio al acuerdo, que solo entra en vigor cuando ambos lo firman." },
+        { "h": "Si no pasa nada durante mucho tiempo" },
+        { "p": "Si ninguno de los dos hace nada en un acuerdo durante {inactivityPromptDays} días, contados desde la última fecha de vencimiento si es posterior, les preguntamos a ambos si sigue en marcha. Si no pasa nada en los {inactivityCloseDays} días siguientes, se cierra sin resolver, y cada elemento conserva el estado que tenga. Cualquier cosa que haga cualquiera de los dos reinicia la cuenta." }
+      ]
+    },
+    "changing": {
+      "title": "Cambiar un acuerdo",
+      "summary": "Un acuerdo solo cambia cuando ambos firman el cambio, y el estado de cada elemento sigue reglas fijas.",
+      "blocks": [
+        { "p": "Un acuerdo vigente se puede cambiar con una enmienda: una versión nueva de los términos que ambos firman. Cualquiera de los dos puede proponerla con “Proponer un cambio”." },
+        { "p": "El acuerdo sigue como está hasta que ambos hayan firmado el cambio. La otra persona puede firmarlo, rechazarlo o proponerle cambios. Si se rechaza, se retira o no se firma en {proposalDays} días, el acuerdo sigue sin cambios. Solo un cambio espera firma a la vez." },
+        { "h": "Qué pasa con cada elemento" },
+        { "p": "Antes de firmar, ves qué hace el cambio con cada elemento. Cuando ambos lo hayan firmado:" },
+        {
+          "ul": [
+            "Un elemento que queda exactamente como estaba conserva su estado.",
+            "Un elemento cuyos términos cambian vuelve al inicio, aún sin entregar ni pagar. Lo que se haya marcado como entregado o pagado deja de contar, aunque el historial lo conserva.",
+            "Un elemento nuevo empieza como aún sin entregar ni pagar.",
+            "Un elemento que se deja fuera se quita del acuerdo y no puede volver. Para tenerlo otra vez, agrégalo como un elemento nuevo.",
+            "Un elemento ya confirmado no se puede cambiar ni quitar. Para compensarlo, agrega un elemento nuevo."
+          ]
+        },
+        { "h": "Firmar un cambio que te enviaron" },
+        { "p": "Encima de la forma de firmar, ves qué hace el cambio campo por campo, comparado con el acuerdo vigente, y cómo quedará cada elemento cuando ambos lo hayan firmado. Las versiones anteriores siguen en el registro." }
+      ]
+    },
+    "blocking": {
+      "title": "Bloquear y denunciar",
+      "summary": "Qué hace un bloqueo y qué no, y cómo denunciar algo que está mal.",
+      "blocks": [
+        { "p": "Puedes bloquear o denunciar a la otra persona desde un yup que compartan, una vez que se haya unido. También puedes denunciar una propuesta desde la página de invitación, antes de iniciar sesión." },
+        { "h": "Qué hace el bloqueo" },
+        {
+          "ul": [
+            "Ninguno de los dos puede unirse a un yup que inicie el otro, mientras dure el bloqueo.",
+            "Toda propuesta que siga pendiente de firma entre ustedes termina: una que enviaste se retira, y una que te enviaron se rechaza. Eso incluye un cambio propuesto a un acuerdo.",
+            "Si habías abierto su invitación y todavía no te había confirmado, sales de ese yup, y lo que hayas firmado en él queda anulado."
+          ]
+        },
+        { "h": "Qué no hace el bloqueo" },
+        {
+          "ul": [
+            "Un acuerdo que ya firmaron ambos sigue vigente. Cualquiera de los dos puede todavía marcar elementos, confirmarlos, y completarlo o cerrarlo, como antes.",
+            "A la otra persona no se le avisa. Lo que termina con el bloqueo le parece una retirada o un rechazo como cualquier otro.",
+            "Desbloquear no recupera nada de lo que terminó con el bloqueo."
+          ]
+        },
+        { "p": "Es posible que una persona bloqueada llegue a darse cuenta de que la bloqueaste." },
+        { "p": "Tus bloqueos aparecen en la página de tu cuenta, en “Personas que bloqueaste”, donde puedes quitarlos." },
+        { "h": "Denunciar" },
+        { "p": "Denuncia un yup o una propuesta si algo está mal, como acoso, una estafa, algo ilegal, alguien que se hace pasar por otra persona o alguien menor de 18 años. A la persona denunciada no se le avisa. Una denuncia no cambia nada en el yup; bloquea también a la persona si quieres dejar de tratar con ella." }
+      ]
+    },
+    "deleting": {
+      "title": "Eliminar tu cuenta",
+      "summary": "Qué se elimina, qué pasa con los yups abiertos y qué conserva la otra persona.",
+      "blocks": [
+        { "p": "Puedes eliminar tu cuenta desde la página de tu cuenta. No se puede deshacer. Para confirmar que eres tú, enviamos un código de un solo uso que solo sirve para eliminar tu cuenta." },
+        { "h": "Qué se elimina" },
+        {
+          "ul": [
+            "Se cierra tu sesión en todos los dispositivos.",
+            "Tu correo electrónico, tu número de teléfono, tu nombre y tu idioma.",
+            "Tu lista de personas bloqueadas y los enlaces de invitación que nadie usó."
+          ]
+        },
+        { "h": "Qué pasa con los yups abiertos" },
+        {
+          "ul": [
+            "Un borrador que no has enviado se descarta.",
+            "Una propuesta pendiente de firma termina sin acuerdo: una que enviaste se retira, y una que te enviaron se rechaza.",
+            "Si habías abierto la invitación de alguien y todavía no te había confirmado, sales de ella, y su propuesta sigue abierta para otra persona.",
+            "Un acuerdo en curso recibe una solicitud de cierre, hecha en tu nombre. La otra persona tiene {closeDays} días para responder. Después se cierra sin resolver, y cada elemento conserva el estado que tenga."
+          ]
+        },
+        { "p": "Nada se marca como entregado, recibido o dispensado por ti. Si algo sigue pendiente, considera resolverlo, o acordar con la otra persona terminar el acuerdo, antes." },
+        { "h": "Qué conserva la otra persona" },
+        { "p": "Los acuerdos que firmaste siguen en el registro de la otra persona: los términos, tu nombre como aparece en el acuerdo, tu firma y el historial. Esa persona conserva su copia. Mientras un yup siga abierto, se le muestra que eliminaste tu cuenta." },
+        { "p": "Más adelante puedes registrarte de nuevo con el mismo correo electrónico o número de teléfono. Será una cuenta nueva, sin ninguno de tus yups anteriores." }
+      ]
+    },
+    "record": {
+      "title": "Leer el registro y guardarlo",
+      "summary": "Todo lo que se envió, se firmó y se registró, para leerlo, guardarlo como PDF o conservarlo como archivo.",
+      "blocks": [
+        { "p": "Cada yup tiene un registro: todo lo que se envió, se firmó y se registró, desde el principio. Solo ustedes dos pueden verlo. Los nombra a ambos como lo hace el acuerdo, y no muestra ningún correo electrónico ni número de teléfono. Ábrelo desde un yup con “Abrir el registro completo”." },
+        { "h": "Qué contiene" },
+        {
+          "ul": [
+            "Un resumen en palabras sencillas: entre quiénes es, qué acordó dar cada uno, quién firmó y cuándo, cómo va o cómo terminó, y cómo está cada elemento. Si el resumen y el registro completo no coinciden, lo que cuenta es el registro completo.",
+            "Cada versión que se envió y qué pasó con ella, con su huella.",
+            "Cada firma, con cómo se verificó a quien firmó.",
+            "Todo lo que pasó, en orden, con los mensajes, notas, motivos y declaraciones que se escribieron en el camino."
+          ]
+        },
+        { "h": "Guardarlo" },
+        { "p": "En la web, “Guardar como PDF” abre la ventana de impresión del navegador. Elige “Guardar como PDF” como impresora para conservar el resumen y el registro completo como archivo. “Descargar una copia (JSON)” guarda el registro como datos, incluidos los términos exactos de cada versión, para que cualquiera pueda calcular de nuevo su huella." },
+        { "p": "En la app, “Guardar como PDF” crea un PDF del registro, con el resumen al principio, para guardarlo o enviarlo, y también puedes compartir la copia JSON." },
+        { "p": "Una copia contiene todo lo que hay en el registro, incluidos los términos y los dos nombres. Cualquier persona a la que se la envíes podrá leerlo todo." }
+      ]
+    },
+    "languages": {
+      "title": "Idiomas",
+      "summary": "El producto habla tu idioma. Lo que escriben las personas nunca se traduce.",
+      "blocks": [
+        { "h": "Las palabras del producto" },
+        { "p": "Todo lo que dice el producto, como los botones, las explicaciones, los correos que enviamos y esta ayuda, está en tu idioma." },
+        { "p": "En la web, elígelo en el menú de idioma, arriba en cualquier página. Antes de iniciar sesión, la app usa el idioma de tu dispositivo. Cuando inicias sesión, se usa el idioma de tu cuenta en todas partes, también en los correos; cámbialo en la página de tu cuenta." },
+        { "h": "Lo que escriben las personas" },
+        { "p": "Los nombres, términos, descripciones y mensajes son palabras de las propias partes. Aparecen exactamente como los escribió cada persona, en el idioma en que los escribió. Nunca los traducimos ni los cambiamos." },
+        { "p": "Así que si la otra persona escribe en otro idioma, lo que firmas son sus palabras tal como las escribió. Asegúrate de entender los términos antes de firmar. Si no los entiendes, pregúntale o propón cambios." }
+      ]
+    }
+  }
+}

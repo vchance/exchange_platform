@@ -1,4 +1,4 @@
-import { invitationPath } from '@yuppers/shared'
+import { helpPath, invitationPath } from '@yuppers/shared'
 
 // Reading the token back out of a link is the same on every client.
 export { invitationToken } from '@yuppers/shared'
@@ -19,6 +19,8 @@ export type Route =
   | { name: 'revise'; id: string }
   /** The whole record of an exchange, laid out for reading and printing. */
   | { name: 'record'; id: string }
+  /** The help pages: the list of topics, or one topic, which may not exist. */
+  | { name: 'help'; topic: string | null }
   | { name: 'notFound' }
 
 const UUID = '[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}'
@@ -28,12 +30,16 @@ const EXCHANGE = new RegExp(`^/exchanges/(${UUID})$`)
 const REVISE = new RegExp(`^/exchanges/(${UUID})/revise$`)
 const RECORD = new RegExp(`^/exchanges/(${UUID})/record$`)
 const INVITATION = new RegExp(`^/(${LANGUAGE_TAG})/i$`)
+const HELP_TOPIC = /^\/help\/([a-z0-9-]+)$/
 
 export function matchRoute(pathname: string): Route {
   // A static host may answer `/en/i` at `/en/i/`.
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
   if (path === '/' || path === '') return { name: 'home' }
   if (path === '/account') return { name: 'account' }
+  if (path === '/help') return { name: 'help', topic: null }
+  const help = HELP_TOPIC.exec(path)
+  if (help) return { name: 'help', topic: help[1] }
 
   const invitation = INVITATION.exec(path)
   if (invitation) return { name: 'invitation', language: invitation[1] }
@@ -52,6 +58,7 @@ export const paths = {
   exchange: (id: string) => `/exchanges/${id}`,
   revise: (id: string) => `/exchanges/${id}/revise`,
   record: (id: string) => `/exchanges/${id}/record`,
+  help: helpPath,
   /**
    * The link an initiator shares. The token goes in the fragment, which a
    * browser never sends, so it cannot end up in a server log; the path names

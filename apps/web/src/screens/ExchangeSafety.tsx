@@ -5,6 +5,7 @@ import { useEffect, useRef } from 'react'
 import { useI18n } from '../app/context'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
+import { HelpLink } from '../components/HelpLink'
 import { Panel } from '../components/Panel'
 import { ReportForm } from '../components/ReportForm'
 import { Failure } from '../components/ui'
@@ -123,6 +124,7 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
             </>
           )}
           <p>{fmt(w.blockQuiet, name)}</p>
+          <HelpLink place="blocking" />
           <Failure code={failure} />
           <div className="actions">
             <button type="button" className="primary" disabled={busy} onClick={safety.block}>

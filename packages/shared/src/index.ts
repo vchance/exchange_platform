@@ -1,6 +1,21 @@
 export { defaultLanguage, directionOf, languages, pickLanguage, wordingFor } from './language'
 export type { Language, LanguageInfo } from './language'
-export type { ClosedReason, Wording } from './wording/types'
+export type {
+  ClosedReason,
+  HelpBlock,
+  HelpTopicWording,
+  HelpWording,
+  Wording,
+} from './wording/types'
+export {
+  HELP_FIGURES,
+  HELP_LINKS,
+  HELP_TOPICS,
+  helpAddress,
+  helpPath,
+  isHelpTopic,
+} from './help'
+export type { HelpLinkPlace, HelpTopic } from './help'
 export { CONSENT_VERSION, consentShown } from './consent'
 export { formatMessage } from './message'
 export { labelText } from './label'

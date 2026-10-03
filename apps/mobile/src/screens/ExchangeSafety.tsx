@@ -7,6 +7,7 @@ import {
 } from '@yuppers/shared';
 import { useRouter } from 'expo-router';
 
+import { HelpLink } from '../components/HelpLink';
 import { ReportForm } from '../components/ReportForm';
 import { Actions, Button, Failure, Heading, Notice, P, Panel } from '../components/ui';
 import { useI18n } from '../lib/context';
@@ -108,6 +109,7 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
             </>
           )}
           <P>{fmt(w.blockQuiet, name)}</P>
+          <HelpLink place="blocking" />
           <Failure code={failure} />
           <Actions>
             <Button

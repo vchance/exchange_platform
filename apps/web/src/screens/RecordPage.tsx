@@ -17,6 +17,7 @@ import { useI18n } from '../app/context'
 import { Link } from '../app/Link'
 import { paths } from '../app/routes'
 import { EventList } from '../components/EventList'
+import { HelpLink } from '../components/HelpLink'
 import { RecordSummary } from '../components/RecordSummary'
 import { TermsView } from '../components/TermsView'
 import { Failure, PageHeading, Written } from '../components/ui'
@@ -94,6 +95,7 @@ function Record({ record }: { record: RecordDocument }) {
         </button>
       </div>
       <p className="hint no-print">{w.summary.savePdfHint}</p>
+      <HelpLink place="record" />
       <p className="hint">
         {fmt(w.madeFor, { name: parties[record.prepared_for], date: when(record.generated_at) })}
         <br />
