@@ -265,8 +265,8 @@ test('how a signer was verified is told in the reader’s language when this bui
 
 test('the copy to keep is the record itself as a JSON file, nothing added or left out', () => {
   const record = part([0, 0], null, [1], [1, 2])
-  const file = recordFile(record, 'exchange-record-AB12-CD34')
-  expect(file.name).toBe('exchange-record-AB12-CD34.json')
+  const file = recordFile(record, 'agreement-record-AB12-CD34')
+  expect(file.name).toBe('agreement-record-AB12-CD34.json')
   expect(file.type).toBe('application/json')
   expect(JSON.parse(file.text)).toEqual(record)
   // Laid out to be read, and ending as a text file does.

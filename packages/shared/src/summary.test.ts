@@ -248,7 +248,7 @@ test('closed unresolved: each item as it was left, and why it closed', () => {
   })
   const text = say(record)
   expect(text.sides[0].items[0].outcome).toBe('Delivered, and Ben Ortiz confirmed receiving it.')
-  expect(text.sides[1].items[0].outcome).toBe('Never recorded as paid before the exchange closed.')
+  expect(text.sides[1].items[0].outcome).toBe('Never recorded as paid before it closed.')
   expect(text.standing).toEqual([
     `It closed on ${day('2026-10-20T18:00:00Z')} without agreement, as unresolved. Nobody was released: each item kept the status it had.`,
     en.wording.record.closedReasons.CLOSE_REQUEST,
@@ -280,7 +280,7 @@ test('ended by agreement: who proposed it, and what was released by it', () => {
     `It ended by agreement on ${day('2026-10-20T18:00:00Z')}. Whatever was still outstanding was waived, for both of them.`,
     'Ben Ortiz proposed ending it and Ana Ruiz agreed.',
   ])
-  expect(text.sides[1].items[0].outcome).toBe('Waived when the exchange ended by agreement.')
+  expect(text.sides[1].items[0].outcome).toBe('Waived when the two of them agreed to end it.')
 })
 
 test('an amendment in force: the latest agreement, without what it removed', () => {

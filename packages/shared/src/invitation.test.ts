@@ -23,7 +23,7 @@ test('the token is found in a link however it arrives, or on its own', () => {
   for (const text of [
     `https://app.example/es/i#${token}`,
     `http://localhost:5173/en/i/#${token}`,
-    `exchange://pt-BR/i#${token}`,
+    `yuppers://pt-BR/i#${token}`,
     `/zh-Hant/i#${token}`,
     `  https://app.example/en/i#${token}\n`,
     token,
