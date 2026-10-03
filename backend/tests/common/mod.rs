@@ -218,6 +218,7 @@ impl App {
                 consent_version: CONSENT_VERSION.to_owned(),
                 proxies,
                 min_client_versions,
+                app_links: Default::default(),
             }),
             code_sender,
             metrics: metrics.clone(),

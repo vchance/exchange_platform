@@ -21,6 +21,11 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    let app_link_files = config.app_links.served();
+    if !app_link_files.is_empty() {
+        tracing::info!(files = ?app_link_files, "serving app link association files");
+    }
+
     let state = AppState {
         db: db::pool(&config.database_url)?,
         settings: Arc::new(Settings {
@@ -33,6 +38,7 @@ async fn main() -> anyhow::Result<()> {
             consent_version: "draft-1".to_owned(),
             proxies: config.proxies,
             min_client_versions: config.min_client_versions,
+            app_links: config.app_links,
         }),
         code_sender: config.code_sender,
         metrics: Arc::new(HttpMetrics::default()),

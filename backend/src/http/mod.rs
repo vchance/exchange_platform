@@ -35,7 +35,7 @@ pub mod v1;
 pub mod web;
 
 pub use client_address::{ClientAddress, TrustedProxies};
-pub use web::WebApp;
+pub use web::{AppLinks, WebApp};
 
 /// What the handlers need besides the database.
 pub struct Settings {
@@ -50,6 +50,9 @@ pub struct Settings {
     /// The oldest build of each client that may still change anything
     /// (`crate::client_version`). None required unless configured.
     pub min_client_versions: MinimumClientVersions,
+    /// Which apps may open the web origin's invitation links
+    /// (`web::AppLinks`). None unless configured.
+    pub app_links: AppLinks,
 }
 
 #[derive(Clone)]
@@ -71,6 +74,13 @@ pub fn router(state: AppState, web: Option<WebApp>) -> Router {
     let api = Router::new()
         .route("/healthz", get(health::live))
         .route("/readyz", get(health::ready))
+        // Routed here, not left to the web app, so that an unset file is a
+        // plain "not found", never the app's page, with or without WEB_DIR.
+        .route(
+            web::APPLE_APP_SITE_ASSOCIATION_PATH,
+            get(web::apple_app_site_association),
+        )
+        .route(web::ASSET_LINKS_PATH, get(web::asset_links))
         .nest("/v1", v1::router())
         .layer(middleware::from_fn_with_state(
             state.clone(),

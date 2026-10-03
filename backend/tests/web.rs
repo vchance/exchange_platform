@@ -18,7 +18,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 use yuppers_backend::auth::{AuthRules, LogSender};
 use yuppers_backend::db;
-use yuppers_backend::http::{self, AppState, Settings, TrustedProxies, WebApp};
+use yuppers_backend::http::{self, AppLinks, AppState, Settings, TrustedProxies, WebApp};
 
 const HOME: &str = "<!doctype html><html lang=\"en\"><title>Yuppers</title>home</html>";
 const EN: &str = "<!doctype html><html lang=\"en\"><title>Invitation</title>en</html>";
@@ -61,6 +61,10 @@ impl Drop for Build {
 }
 
 fn service(web_origin: &str, web: Option<WebApp>) -> Router {
+    service_with_links(web_origin, web, AppLinks::default())
+}
+
+fn service_with_links(web_origin: &str, web: Option<WebApp>, app_links: AppLinks) -> Router {
     let state = AppState {
         // Never connected to: nothing here needs a database.
         db: db::pool("postgres://nobody@127.0.0.1:1/nothing").unwrap(),
@@ -72,6 +76,7 @@ fn service(web_origin: &str, web: Option<WebApp>) -> Router {
             consent_version: "test".to_owned(),
             proxies: TrustedProxies::none(),
             min_client_versions: Default::default(),
+            app_links,
         }),
         code_sender: Arc::new(LogSender),
         metrics: Default::default(),
@@ -355,6 +360,109 @@ async fn without_a_web_directory_the_api_stands_alone() {
     assert_eq!(get(&app, "/").await.status, StatusCode::NOT_FOUND);
     assert_eq!(get(&app, "/es/i").await.status, StatusCode::NOT_FOUND);
     assert_eq!(get(&app, "/healthz").await.header(X_FRAME_OPTIONS), "DENY");
+}
+
+const APPLE: &str = "/.well-known/apple-app-site-association";
+const ANDROID: &str = "/.well-known/assetlinks.json";
+
+fn app_links() -> AppLinks {
+    AppLinks::new(
+        &["ABCDE12345.app.yuppers".to_owned()],
+        "app.yuppers",
+        &[["ab"; 32].join(":")],
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn the_app_link_files_name_the_apps_as_json_without_a_redirect() {
+    let build = Build::write();
+    let app = service_with_links(
+        "https://app.example.test",
+        Some(WebApp::open(build.path()).unwrap()),
+        app_links(),
+    );
+
+    let apple = get(&app, APPLE).await;
+    assert_eq!(apple.status, StatusCode::OK);
+    assert_eq!(apple.header(CONTENT_TYPE), "application/json");
+    assert_eq!(apple.header(LOCATION), "");
+    assert_eq!(apple.header(CACHE_CONTROL), "public, max-age=3600");
+    let apple: serde_json::Value = serde_json::from_str(&apple.body).unwrap();
+    assert_eq!(
+        apple,
+        serde_json::json!({
+            "applinks": {
+                "details": [{
+                    "appIDs": ["ABCDE12345.app.yuppers"],
+                    "components": [
+                        { "/": "/*/i", "comment": "An invitation link" },
+                        { "/": "/*/i/", "comment": "An invitation link" },
+                    ],
+                }],
+            },
+        })
+    );
+
+    let android = get(&app, ANDROID).await;
+    assert_eq!(android.status, StatusCode::OK);
+    assert_eq!(android.header(CONTENT_TYPE), "application/json");
+    assert_eq!(android.header(LOCATION), "");
+    let fingerprint = ["AB"; 32].join(":");
+    let android: serde_json::Value = serde_json::from_str(&android.body).unwrap();
+    assert_eq!(
+        android,
+        serde_json::json!([{
+            "relation": ["delegate_permission/common.handle_all_urls"],
+            "target": {
+                "namespace": "android_app",
+                "package_name": "app.yuppers",
+                "sha256_cert_fingerprints": [fingerprint],
+            },
+        }])
+    );
+
+    // HEAD as GET, and the same files without the web app.
+    assert_eq!(
+        fetch(&app, Method::HEAD, APPLE).await.status,
+        StatusCode::OK
+    );
+    let alone = service_with_links("https://app.example.test", None, app_links());
+    assert_eq!(get(&alone, APPLE).await.status, StatusCode::OK);
+    assert_eq!(get(&alone, ANDROID).await.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn unset_app_link_files_are_not_found_and_never_the_apps_page() {
+    let build = Build::write();
+    let with_web = service(
+        "https://app.example.test",
+        Some(WebApp::open(build.path()).unwrap()),
+    );
+    let alone = service("https://app.example.test", None);
+    for app in [&with_web, &alone] {
+        for path in [APPLE, ANDROID] {
+            let reply = get(app, path).await;
+            assert_eq!(reply.status, StatusCode::NOT_FOUND, "{path}");
+            assert_ne!(reply.body, HOME, "{path}");
+            assert!(
+                !reply.header(CONTENT_TYPE).starts_with("text/html"),
+                "{path}"
+            );
+        }
+    }
+
+    // One set and the other not: only the one is served.
+    let apple_only = service_with_links(
+        "https://app.example.test",
+        Some(WebApp::open(build.path()).unwrap()),
+        AppLinks::new(&["ABCDE12345.app.yuppers".to_owned()], "app.yuppers", &[]).unwrap(),
+    );
+    assert_eq!(get(&apple_only, APPLE).await.status, StatusCode::OK);
+    assert_eq!(
+        get(&apple_only, ANDROID).await.status,
+        StatusCode::NOT_FOUND
+    );
 }
 
 #[tokio::test]

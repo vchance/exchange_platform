@@ -16,7 +16,8 @@ use axum::http::HeaderName;
 
 use crate::auth::{AuthRules, CodeSender, LogSender};
 use crate::client_version::{MinimumClientVersions, parse_version};
-use crate::http::TrustedProxies;
+use crate::http::web::DEFAULT_ANDROID_PACKAGE;
+use crate::http::{AppLinks, TrustedProxies};
 use crate::notifications::smtp::{Secret, SmtpSender, SmtpSettings, TlsMode};
 use crate::notifications::wording::Wording;
 use crate::notifications::{EmailSender, LogEmailSender};
@@ -297,6 +298,35 @@ fn min_client_versions(get: Lookup<'_>) -> anyhow::Result<MinimumClientVersions>
     })
 }
 
+/// A comma-separated setting as its non-empty items, trimmed.
+fn list(get: Lookup<'_>, name: &str) -> Vec<String> {
+    optional(get, name)
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Which apps may open the web origin's invitation links, from
+/// `APPLE_APP_ID`, `ANDROID_SHA256_CERT_FINGERPRINTS` and `ANDROID_PACKAGE`
+/// (`crate::http::web::AppLinks`). Nothing unless they are set.
+fn app_links(get: Lookup<'_>) -> anyhow::Result<AppLinks> {
+    let package =
+        optional(get, "ANDROID_PACKAGE").unwrap_or_else(|| DEFAULT_ANDROID_PACKAGE.to_owned());
+    AppLinks::new(
+        &list(get, "APPLE_APP_ID"),
+        package.trim(),
+        &list(get, "ANDROID_SHA256_CERT_FINGERPRINTS"),
+    )
+    .map_err(|error| anyhow::anyhow!(error))
+    .context("APPLE_APP_ID, ANDROID_SHA256_CERT_FINGERPRINTS or ANDROID_PACKAGE")
+}
+
 /// Configuration for the `api` process.
 pub struct ApiConfig {
     pub database_url: String,
@@ -311,6 +341,8 @@ pub struct ApiConfig {
     pub web_dir: Option<PathBuf>,
     pub proxies: TrustedProxies,
     pub min_client_versions: MinimumClientVersions,
+    /// Which apps may open the web origin's invitation links, if any.
+    pub app_links: AppLinks,
     /// Where to serve the API's metrics, if anywhere. Never `bind_addr`.
     pub metrics_addr: Option<SocketAddr>,
     /// The rules for one-time codes, some of them set by the deployment.
@@ -347,6 +379,7 @@ impl ApiConfig {
             web_dir: optional(get, "WEB_DIR").map(PathBuf::from),
             proxies: trusted_proxies(get)?,
             min_client_versions: min_client_versions(get)?,
+            app_links: app_links(get)?,
             auth: auth_rules(get)?,
         })
     }
@@ -618,5 +651,41 @@ mod tests {
         assert_eq!(read(Some(" ")).unwrap(), None);
         assert_eq!(read(Some(" 1.4.0 ")).unwrap().as_deref(), Some("1.4.0"));
         assert!(read(Some("v1")).is_err());
+    }
+
+    #[test]
+    fn app_links_are_off_unless_named_and_a_wrong_value_stops_the_start() {
+        let read = |pairs: &[(&str, &str)]| app_links(&lookup(&table(pairs)));
+        assert!(read(&[]).unwrap().served().is_empty());
+        assert!(
+            read(&[
+                ("APPLE_APP_ID", " "),
+                ("ANDROID_SHA256_CERT_FINGERPRINTS", "")
+            ])
+            .unwrap()
+            .served()
+            .is_empty()
+        );
+
+        let fingerprint = ["AB"; 32].join(":");
+        let both = read(&[
+            (
+                "APPLE_APP_ID",
+                "ABCDE12345.app.yuppers, VWXYZ67890.app.yuppers",
+            ),
+            ("ANDROID_SHA256_CERT_FINGERPRINTS", &fingerprint),
+        ])
+        .unwrap();
+        assert_eq!(both.served().len(), 2);
+
+        assert!(read(&[("APPLE_APP_ID", "app.yuppers")]).is_err());
+        assert!(read(&[("ANDROID_SHA256_CERT_FINGERPRINTS", "AB:CD")]).is_err());
+        assert!(
+            read(&[
+                ("ANDROID_SHA256_CERT_FINGERPRINTS", &fingerprint),
+                ("ANDROID_PACKAGE", "yuppers"),
+            ])
+            .is_err()
+        );
     }
 }

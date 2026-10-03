@@ -116,6 +116,7 @@ impl App {
                 consent_version: "test".to_owned(),
                 proxies: TrustedProxies::none(),
                 min_client_versions: Default::default(),
+                app_links: Default::default(),
             }),
             code_sender: outbox.clone(),
             metrics: Default::default(),
