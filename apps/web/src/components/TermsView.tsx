@@ -1,6 +1,6 @@
 import type { components, RevisionTerms } from '@yuppers/api-client'
-import { isOverdue, todayIn } from '@yuppers/shared'
-import type { ReactNode } from 'react'
+import { dueDateZone, dueOnDateText, isOverdue, todayIn } from '@yuppers/shared'
+import { useMemo, type ReactNode } from 'react'
 
 import { useI18n } from '../app/context'
 import type { Slot } from '../lib/api'
@@ -35,14 +35,17 @@ interface Props {
  */
 export function TermsView({ terms, currency, timezone, you, statuses, footer, level = 3 }: Props) {
   const H = level === 2 ? 'h2' : 'h3'
-  const { wording, fmt, day, money } = useI18n()
+  const i18n = useI18n()
+  const { wording, fmt, money } = i18n
   const w = wording.terms
   const today = timezone ? todayIn(timezone) : null
+  // Named beside each due date when the reader's device keeps another zone.
+  const zone = useMemo(() => dueDateZone(timezone), [timezone])
   const nameOf = (slot: Slot) => (slot === 'A' ? terms.party_a_name : terms.party_b_name)
 
   function due(contribution: Contribution): string {
     const condition = contribution.due
-    if (condition.kind === 'DATE') return fmt(w.dueOnDate, { date: day(condition.date) })
+    if (condition.kind === 'DATE') return dueOnDateText(i18n, condition.date, zone)
     if (condition.kind === 'ON_AGREEMENT') return w.dueOnAgreement
     const awaited = terms.contributions.find((other) => other.id === condition.contribution)
     return fmt(w.dueAfter, { description: awaited?.description ?? '' })

@@ -288,6 +288,11 @@ export interface Wording {
     criteriaLabel: string
     dueOnAgreement: string
     dueOnDate: string
+    /**
+     * A due date shown to someone whose device keeps another time zone than
+     * the exchange's; `zone` is the exchange's, by its city.
+     */
+    dueOnDateInZone: string
     dueAfter: string
     overdue: string
     timezone: string
@@ -324,6 +329,8 @@ export interface Wording {
     dueOnDate: string
     dueAfter: string
     dateLabel: string
+    /** Under the due date, when the writer's device keeps another time zone than the exchange's. */
+    dateInZone: string
     afterLabel: string
     afterChoose: string
     itemOption: string

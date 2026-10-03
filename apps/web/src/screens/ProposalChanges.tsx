@@ -1,5 +1,6 @@
 import type { ExchangeView } from '@yuppers/api-client'
 import {
+  dueDateZone,
   fieldChangeText,
   proposalChanges,
   statusWording,
@@ -39,6 +40,8 @@ export function ProposalChanges({ exchange, revision }: Props) {
 
   const amendment = base.against === 'IN_FORCE'
   const terms = { before: base.terms, after: revision.terms }
+  // Named beside a due date when the reader's device keeps another zone.
+  const zone = dueDateZone(exchange.timezone)
   // For an amendment every item is shown, with where it would stand; for a
   // counteroffer only what differs, and how many items did not.
   const shown = amendment ? changes.items : changes.items.filter((item) => item.kind !== 'UNCHANGED')
@@ -73,7 +76,7 @@ export function ProposalChanges({ exchange, revision }: Props) {
               </p>
               <Written>{item.description}</Written>
               {item.fields.map((change) => {
-                const text = fieldChangeText(change, i18n, exchange.currency, terms)
+                const text = fieldChangeText(change, i18n, exchange.currency, terms, zone)
                 return text.sentence ? (
                   <p key={change.field}>{text.sentence}</p>
                 ) : (

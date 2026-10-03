@@ -53,6 +53,10 @@ jest.mock('@react-native-community/datetimepicker', () => {
 // build that cannot read one names none (`lib/client-identity.ts`).
 jest.mock('expo-application', () => ({ nativeApplicationVersion: '1.2.0' }));
 
+// The device keeps the exchanges' own time zone unless a test says otherwise.
+const mockDeviceZone = { current: 'America/Chicago' };
+jest.mock('../lib/time-zone', () => ({ deviceTimezone: () => mockDeviceZone.current }));
+
 jest.mock('expo-crypto', () => {
   let next = 0;
   return { randomUUID: () => `00000000-0000-4000-8000-${String((next += 1)).padStart(12, '0')}` };
@@ -80,7 +84,10 @@ async function open(initialUrl: string, { signedIn }: { signedIn: boolean }) {
   return { app };
 }
 
-afterEach(() => forgetInvitation());
+afterEach(() => {
+  forgetInvitation();
+  mockDeviceZone.current = 'America/Chicago';
+});
 
 test('this is a device build, not the browser harness', () => {
   expect(['ios', 'android']).toContain(Platform.OS);
@@ -222,6 +229,14 @@ test('when the exchange changed underneath, it is reloaded and the person is tol
       `GET /v1/exchanges/${EXCHANGE}/history`,
     ]);
   });
+});
+
+test('a due date names the exchange’s time zone for a device that keeps another', async () => {
+  mockDeviceZone.current = 'Europe/Madrid';
+  await open(`/exchanges/${EXCHANGE}`, { signedIn: true });
+  await screen.findByText('Yup with Ben Ortiz');
+  screen.getByText(w.terms.dueOnDateInZone.replace('{date}', 'October 30, 2026').replace('{zone}', 'Chicago'));
+  expect(screen.queryByText('Due October 30, 2026')).toBeNull();
 });
 
 test('a draft opens in the composer, with the platform’s own date control', async () => {

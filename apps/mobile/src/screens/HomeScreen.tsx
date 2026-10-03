@@ -1,6 +1,5 @@
 import type { ErrorCode, ExchangeSummary } from '@yuppers/api-client';
 import { failureCode, groupExchanges, labelText } from '@yuppers/shared';
-import { getCalendars } from 'expo-localization';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
@@ -21,13 +20,9 @@ import {
 } from '../components/ui';
 import { useI18n } from '../lib/context';
 import { forgetInvitation } from '../lib/invitation';
+import { deviceTimezone } from '../lib/time-zone';
 import { api } from '../lib/session';
 import { TOUCH_TARGET } from '../lib/theme';
-
-/** The timezone due dates are read in: that of whoever starts the exchange. */
-function deviceTimezone(): string {
-  return getCalendars()[0]?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
 
 /**
  * The signed-in person's exchanges, the way to start one, and the way to

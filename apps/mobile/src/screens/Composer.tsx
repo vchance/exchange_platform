@@ -22,6 +22,8 @@ import {
   startingDraft,
   statusesOf,
   todayIn,
+  dueDateZone,
+  timeZoneCity,
   toMinorUnits,
   type Draft,
   type DraftContribution,
@@ -61,6 +63,7 @@ import {
 } from '../components/ui';
 import { useReduceMotion } from '../lib/accessibility';
 import { useI18n, useSession } from '../lib/context';
+import { deviceTimezone } from '../lib/time-zone';
 import { api } from '../lib/session';
 
 type ContributionType = components['schemas']['ContributionType'];
@@ -305,6 +308,8 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
     change(slot === 'A' ? { partyA: name } : { partyB: name });
   const general = problems.filter((problem) => problem.field === 'contributions');
   const today = todayIn(exchange.timezone);
+  // Due dates are read in the exchange's zone; named when this device keeps another.
+  const zone = dueDateZone(exchange.timezone, deviceTimezone());
 
   const fromOptions = [
     { value: you, label: wording.party.you },
@@ -485,6 +490,7 @@ function Editor({ exchange, reload, onSent, onLeave }: Props) {
               {item.due.kind === 'DATE' && (
                 <DateField
                   label={w.dateLabel}
+                  hint={zone ? fmt(w.dateInZone, { zone: timeZoneCity(zone) }) : undefined}
                   error={errorFor('date', item.id)}
                   value={item.due.date}
                   today={today}

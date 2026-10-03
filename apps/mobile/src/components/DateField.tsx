@@ -11,6 +11,8 @@ export interface DateFieldProps {
   value: string;
   onChange(value: string): void;
   error?: string | null;
+  /** Said under the label, such as the time zone the date is read in. */
+  hint?: string;
   /** Today's date where the exchange keeps its dates: what the picker opens on. */
   today: string;
   disabled?: boolean;
@@ -26,7 +28,7 @@ const toMoment = (date: string) => new Date(`${date}T00:00:00Z`);
 const toDate = (moment: Date) => moment.toISOString().slice(0, 10);
 
 /** A date chosen with the platform's own date picker. */
-export function DateField({ label, value, onChange, error, today, disabled }: DateFieldProps) {
+export function DateField({ label, hint, value, onChange, error, today, disabled }: DateFieldProps) {
   const { wording, fmt, day, language } = useI18n();
   const scheme = useScheme();
   const w = wording.mobile.date;
@@ -35,7 +37,7 @@ export function DateField({ label, value, onChange, error, today, disabled }: Da
   if (Platform.OS === 'android') {
     // Android's picker is a dialog, opened from a button that shows the date.
     return (
-      <Field label={label} error={error}>
+      <Field label={label} hint={hint} error={error}>
         <View style={styles.start}>
           <Button
             label={chosen ? day(value) : w.choose}
@@ -58,7 +60,7 @@ export function DateField({ label, value, onChange, error, today, disabled }: Da
   // iOS shows the picker in place. It always shows some date, so it appears
   // only once there is a date to show: nothing is chosen for the person.
   return (
-    <Field label={label} error={error}>
+    <Field label={label} hint={hint} error={error}>
       <View style={styles.start}>
         {chosen ? (
           <DateTimePicker

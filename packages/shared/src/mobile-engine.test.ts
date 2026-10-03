@@ -6,6 +6,7 @@ import { createI18n } from './i18n'
 import { wordingFor } from './language'
 import { formatMessage } from './message'
 import { recordMoments } from './record'
+import { dueDateZone, dueOnDateText } from './time-zone'
 
 /*
  * The mobile apps run on Hermes, whose `Intl` is narrower than a browser's:
@@ -66,4 +67,12 @@ test('dates and refusals are still told in the reader’s language', () => {
 test('a time in a record is still written in the exchange’s zone', () => {
   const when = recordMoments('en', 'America/Chicago')
   expect(when('2026-11-01T03:30:15Z')).toBe('October 31, 2026 at 10:30:15 PM CDT')
+})
+
+test('a due date still names the exchange’s zone for a device elsewhere', () => {
+  expect(dueDateZone('US/Central', 'America/Chicago')).toBeNull()
+  const zone = dueDateZone('America/Chicago', 'Europe/Madrid')
+  expect(zone).toBe('America/Chicago')
+  const es = createI18n('es', wordingFor('es'), () => {})
+  expect(dueOnDateText(es, '2026-03-12', zone)).toBe('Vence el 12 de marzo de 2026 (hora de Chicago)')
 })

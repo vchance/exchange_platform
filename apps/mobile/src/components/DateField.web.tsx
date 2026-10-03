@@ -10,10 +10,10 @@ import { Field } from './ui';
  * screens, the browser's own date input stands in. The bundler resolves this
  * file for the web target alone; iOS and Android get `DateField.tsx`.
  */
-export function DateField({ label, value, onChange, error, disabled }: DateFieldProps) {
+export function DateField({ label, hint, value, onChange, error, disabled }: DateFieldProps) {
   const colors = useColors();
   return (
-    <Field label={label} error={error} labelled>
+    <Field label={label} hint={hint} error={error} labelled>
       {createElement('input', {
         type: 'date',
         'aria-label': label,

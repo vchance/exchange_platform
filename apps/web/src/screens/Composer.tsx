@@ -28,6 +28,8 @@ import {
   type Problem,
   type ProblemField,
   type SaveState,
+  dueDateZone,
+  timeZoneCity,
 } from '@yuppers/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -302,6 +304,8 @@ function Editor({ exchange, reload, onSent }: Props) {
 
   // An accepted contribution is locked: an amendment may not touch it.
   const locked = lockedContributions(exchange)
+  // Due dates are read in the exchange's zone; named when this device keeps another.
+  const zone = dueDateZone(exchange.timezone)
   const nameOf = (slot: Slot) => (slot === 'A' ? draft.partyA : draft.partyB)
   const setName = (slot: Slot, name: string) =>
     change(slot === 'A' ? { partyA: name } : { partyB: name })
@@ -546,6 +550,7 @@ function Editor({ exchange, reload, onSent }: Props) {
               {item.due.kind === 'DATE' && (
                 <Field
                   label={w.dateLabel}
+                  hint={zone ? fmt(w.dateInZone, { zone: timeZoneCity(zone) }) : undefined}
                   id={`${item.id}-date`}
                   required
                   error={errorFor('date', item.id)}

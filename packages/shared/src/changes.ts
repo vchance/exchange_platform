@@ -7,6 +7,7 @@ import { statusesOf } from './fulfillment'
 import type { I18n } from './i18n'
 import { isMoney } from './money'
 import { readWholeRecord, termsOfRevision } from './record'
+import { dueOnDateText } from './time-zone'
 
 type Schemas = components['schemas']
 type Contribution = Schemas['ContributionDto']
@@ -172,15 +173,18 @@ export interface FieldChangeText {
 
 /**
  * A changed field in words. `before` and `after` are the two versions'
- * terms, for party names and for an item another is due after.
+ * terms, for party names and for an item another is due after. `zone` is
+ * the exchange's time zone when the reader's device keeps another one
+ * (`dueDateZone`), to be named beside a due date.
  */
 export function fieldChangeText(
   change: FieldChange,
   i18n: Pick<I18n, 'wording' | 'fmt' | 'day' | 'money'>,
   currency: string,
   terms: { before: RevisionTerms; after: RevisionTerms },
+  zone: string | null = null,
 ): FieldChangeText {
-  const { wording, fmt, day, money } = i18n
+  const { wording, fmt, money } = i18n
   const w = wording.proposalChanges
   const nothing = w.notSet
   const label = w.fields[change.field as ItemField]
@@ -188,7 +192,7 @@ export function fieldChangeText(
   const nameIn = (revision: RevisionTerms, slot: Slot) =>
     slot === 'A' ? revision.party_a_name : revision.party_b_name
   const dueText = (due: Schemas['DueDto'], revision: RevisionTerms) => {
-    if (due.kind === 'DATE') return fmt(wording.terms.dueOnDate, { date: day(due.date) })
+    if (due.kind === 'DATE') return dueOnDateText(i18n, due.date, zone)
     if (due.kind === 'ON_AGREEMENT') return wording.terms.dueOnAgreement
     const awaited = revision.contributions.find((other) => other.id === due.contribution)
     return fmt(wording.terms.dueAfter, { description: awaited?.description ?? '' })
