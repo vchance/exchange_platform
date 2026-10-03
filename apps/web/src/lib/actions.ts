@@ -12,8 +12,18 @@ const focus: FocusKeeper = {
     opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
   },
   restore() {
-    opener?.focus()
+    restoreFocus()
   },
+}
+
+/**
+ * Puts the keyboard back on whatever opened the last panel, if it is still
+ * on the page. Says whether it could.
+ */
+export function restoreFocus(): boolean {
+  if (!opener?.isConnected) return false
+  opener.focus()
+  return true
 }
 
 /**

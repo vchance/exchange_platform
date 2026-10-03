@@ -10,6 +10,7 @@ import {
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { AccountDeleted } from '../components/AccountDeleted'
+import { LiveRegions } from '../components/LiveRegions'
 import { Failure, PageHeading } from '../components/ui'
 import { api, failureCode, onClientTooOld, onSignedOut, WEB_CLIENT } from '../lib/api'
 import { InvitationPage } from '../screens/InvitationPage'
@@ -255,6 +256,7 @@ function Shell({ outdated }: { outdated: boolean }) {
         <AccountDeleted />
         <Suspense fallback={<p>{wording.common.loading}</p>}>{page}</Suspense>
       </main>
+      <LiveRegions />
     </>
   )
 }

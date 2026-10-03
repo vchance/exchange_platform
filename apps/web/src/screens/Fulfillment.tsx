@@ -10,7 +10,7 @@ import {
   waitingLong,
   type Move,
 } from '@exchange/shared'
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
 import { Panel } from '../components/Panel'
@@ -42,7 +42,15 @@ interface Props {
  * outside the product and only recorded here, so for money the words are for
  * paying and receiving, never for delivering (DESIGN.md §11).
  */
-export function Fulfillment({ contribution, status, since, you, otherName, active, actions }: Props) {
+export function Fulfillment({
+  contribution,
+  status,
+  since,
+  you,
+  otherName,
+  active,
+  actions,
+}: Props) {
   const { wording, fmt, moment } = useI18n()
   const w = wording.exchange
   const money = contribution.type === 'MONEY'
@@ -108,14 +116,19 @@ function MovePanel({ move, money, contribution, otherName, actions }: MovePanelP
   const [note, setNote] = useState('')
   const [missing, setMissing] = useState(false)
 
-  const { takes: takesNote, label } = noteFor(move)
+  const { takes: takesNote, needs, label } = noteFor(move)
   const title = moveWording(wording, move, money)
+  const noteId = useId()
 
   function submit(event: FormEvent) {
     event.preventDefault()
     const command = moveCommand(move, contribution, note)
     if (command) void actions.run(command)
-    else setMissing(true)
+    else {
+      setMissing(true)
+      // Back to the note, whose error is read with it.
+      document.getElementById(noteId)?.focus()
+    }
   }
 
   return (
@@ -123,7 +136,13 @@ function MovePanel({ move, money, contribution, otherName, actions }: MovePanelP
       <form noValidate onSubmit={submit}>
         <p>{fmt(moveTextWording(wording, move, money), { name: otherName })}</p>
         {takesNote && (
-          <Field label={w[label]} hint={w.noteRecord} error={missing ? w.noteRequired : null}>
+          <Field
+            label={w[label]}
+            hint={w.noteRecord}
+            id={noteId}
+            required={needs}
+            error={missing ? w.noteRequired : null}
+          >
             {(control) => (
               <textarea
                 {...control}

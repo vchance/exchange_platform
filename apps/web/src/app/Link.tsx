@@ -17,5 +17,7 @@ export function Link({ to, onClick, ...rest }: LinkProps) {
     event.preventDefault()
     navigate(to)
   }
+  // The content is the caller's children, passed through `rest`.
+  // oxlint-disable-next-line jsx-a11y/anchor-has-content
   return <a {...rest} href={to} onClick={follow} />
 }

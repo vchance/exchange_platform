@@ -33,7 +33,7 @@ export function BlockedPeople() {
       <h2 id="blocked-heading">{w.blockedHeading}</h2>
       <Failure code={failure} />
       {unblocked !== null && (
-        <p className="notice" role="status" tabIndex={-1} ref={announced}>
+        <p className="notice" tabIndex={-1} ref={announced}>
           {fmt(w.unblocked, { name: unblocked })}
         </p>
       )}

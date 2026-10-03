@@ -1,8 +1,8 @@
 import type { ErrorCode } from '@exchange/api-client'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { isComplete, useI18n, useSession } from '../app/context'
-import { Failure, Field, Notice, PageHeading } from '../components/ui'
+import { Failure, Field, Notice, PageHeading, StepHeading } from '../components/ui'
 import { api, failureCode } from '../lib/api'
 import { ProfileForm } from './ProfileForm'
 
@@ -15,8 +15,14 @@ import { ProfileForm } from './ProfileForm'
 export default function AccountSetup({ headingLevel = 'h1' }: { headingLevel?: 'h1' | 'h2' }) {
   const { wording } = useI18n()
   const { account } = useSession()
+  // Below the invitation, the step opens where the button that asked for it
+  // was, and the keyboard is taken to it.
   const heading = (text: string) =>
-    headingLevel === 'h1' ? <PageHeading>{text}</PageHeading> : <h2>{text}</h2>
+    headingLevel === 'h1' ? (
+      <PageHeading key={text}>{text}</PageHeading>
+    ) : (
+      <StepHeading key={text}>{text}</StepHeading>
+    )
 
   if (!account) {
     return (
@@ -56,10 +62,17 @@ function SignIn() {
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [resent, setResent] = useState(false)
   const codeInput = useRef<HTMLInputElement>(null)
+  const identifierInput = useRef<HTMLInputElement>(null)
+  const changing = useRef(false)
+  const failureId = useId()
 
-  // Each step starts with the focus on the one thing it asks for.
+  // Each step starts with the focus on the one thing it asks for. The first
+  // step does so only when the person came back to it; arriving on the page
+  // leaves the focus where the browser put it.
   useEffect(() => {
     if (sentTo) codeInput.current?.focus()
+    else if (changing.current) identifierInput.current?.focus()
+    changing.current = false
   }, [sentTo])
 
   async function requestCode(to: string, again: boolean) {
@@ -106,10 +119,16 @@ function SignIn() {
         }}
       >
         <p>{w.intro}</p>
-        <Field label={w.identifierLabel} hint={w.identifierHint}>
+        <Field
+          label={w.identifierLabel}
+          hint={w.identifierHint}
+          required
+          problem={failure ? failureId : null}
+        >
           {(control) => (
             <input
               {...control}
+              ref={identifierInput}
               type="text"
               inputMode="email"
               autoComplete="username"
@@ -120,7 +139,7 @@ function SignIn() {
             />
           )}
         </Field>
-        <Failure code={failure} />
+        <Failure code={failure} id={failureId} />
         <div className="actions">
           <button type="submit" className="primary" disabled={busy}>
             {w.sendCode}
@@ -133,7 +152,7 @@ function SignIn() {
   return (
     <form key="code" noValidate onSubmit={signIn}>
       <p>{fmt(w.codeSent, { identifier: sentTo })}</p>
-      <Field label={w.codeLabel} hint={w.codeHint}>
+      <Field label={w.codeLabel} hint={w.codeHint} required problem={failure ? failureId : null}>
         {(control) => (
           <input
             {...control}
@@ -148,7 +167,7 @@ function SignIn() {
           />
         )}
       </Field>
-      <Failure code={failure} />
+      <Failure code={failure} id={failureId} />
       {resent && <Notice>{w.resent}</Notice>}
       <div className="actions">
         <button type="submit" className="primary" disabled={busy}>
@@ -162,6 +181,7 @@ function SignIn() {
           className="link"
           disabled={busy}
           onClick={() => {
+            changing.current = true
             setSentTo(null)
             setCode('')
             setFailure(null)

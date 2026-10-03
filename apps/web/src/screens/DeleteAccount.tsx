@@ -68,6 +68,12 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
   useEffect(() => {
     if (step === 'code') codeInput.current?.focus()
   }, [step])
+  // Sent without a code, the keyboard goes back to it, and its error is read with it.
+  const codeMissing = deletion.codeMissing
+  useEffect(() => {
+    if (codeMissing) codeInput.current?.focus()
+  }, [codeMissing])
+  const failureId = useId()
 
   if (step === 'confirm') {
     return (
@@ -105,6 +111,8 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
         <Field
           label={wording.signIn.codeLabel}
           hint={wording.signIn.codeHint}
+          required
+          problem={deletion.failure ? failureId : null}
           error={deletion.codeMissing ? w.codeRequired : null}
         >
           {(control) => (
@@ -121,7 +129,7 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
             />
           )}
         </Field>
-        <Failure code={deletion.failure} />
+        <Failure code={deletion.failure} id={failureId} />
         {deletion.resent && <Notice>{wording.signIn.resent}</Notice>}
         <div className="actions">
           <button type="submit" className="primary" disabled={busy}>

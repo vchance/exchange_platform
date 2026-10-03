@@ -39,7 +39,15 @@ import { Consent } from '../components/Consent'
 import { InvitationFor } from '../components/InvitationLink'
 import { Panel } from '../components/Panel'
 import { TermsView } from '../components/TermsView'
-import { Failure, Field, PageHeading, Written, type ControlProps } from '../components/ui'
+import {
+  ErrorNote,
+  Failure,
+  Field,
+  PageHeading,
+  Written,
+  type ControlProps,
+} from '../components/ui'
+import { useAnnouncement } from '../lib/announce'
 import { api, failureCode, type RevisionSent, type Slot } from '../lib/api'
 
 type ContributionType = components['schemas']['ContributionType']
@@ -274,6 +282,7 @@ function Editor({ exchange, reload, onSent }: Props) {
             currency={exchange.currency}
             timezone={exchange.timezone}
             you={you}
+            level={2}
           />
         </section>
         {predicted && <Effects effects={predicted} />}
@@ -285,6 +294,7 @@ function Editor({ exchange, reload, onSent }: Props) {
           onSign={() => void send()}
           onCancel={() => setStep('edit')}
           cancelLabel={w.backToEdit}
+          level={2}
         />
       </>
     )
@@ -299,6 +309,11 @@ function Editor({ exchange, reload, onSent }: Props) {
 
   return (
     <>
+      <EditAnnouncements
+        stale={stale ? w.staleDraft : null}
+        dropped={dropped.length > 0 ? fmt(w.removedCount, { count: dropped.length }) : null}
+        saveFailed={saveState === 'failed' ? w.saveFailed : null}
+      />
       {/* Coming back from the signing step, the keyboard starts from the top again. */}
       <PageHeading key="edit" step={returned}>
         {title}
@@ -306,13 +321,9 @@ function Editor({ exchange, reload, onSent }: Props) {
       <p>{kind === 'first' ? w.introFirst : kind === 'amend' ? w.introAmend : w.introCounter}</p>
       {kind === 'amend' && <p>{w.effectsSteer}</p>}
 
-      {conflict && (
-        <p className="notice notice-error" role="alert">
-          {w.conflict}
-        </p>
-      )}
+      {conflict && <ErrorNote>{w.conflict}</ErrorNote>}
       {stale && base && (
-        <div className="notice" role="status">
+        <div className="notice">
           <p>{w.staleDraft}</p>
           <div className="actions">
             <button type="button" onClick={() => change({ base: base.id })}>
@@ -332,9 +343,7 @@ function Editor({ exchange, reload, onSent }: Props) {
         </div>
       )}
       {problems.length > 0 && (
-        <p className="notice notice-error" role="alert">
-          {fmt(w.problemsSummary, { count: problems.length })}
-        </p>
+        <ErrorNote>{fmt(w.problemsSummary, { count: problems.length })}</ErrorNote>
       )}
 
       <form
@@ -350,6 +359,7 @@ function Editor({ exchange, reload, onSent }: Props) {
           <Field
             label={w.yourName}
             id={`party-${you}`}
+            required
             error={errorFor(you === 'A' ? 'partyA' : 'partyB')}
           >
             {(control) => (
@@ -365,6 +375,7 @@ function Editor({ exchange, reload, onSent }: Props) {
           <Field
             label={w.otherName}
             id={`party-${other}`}
+            required
             error={errorFor(other === 'A' ? 'partyA' : 'partyB')}
           >
             {(control) => (
@@ -401,18 +412,7 @@ function Editor({ exchange, reload, onSent }: Props) {
               <legend>{fmt(w.itemLegend, { number })}</legend>
               {locked.has(item.id) && <p className="notice">{w.locked}</p>}
               {/* What the amendment does to this item, as it is being written. */}
-              {effect && !locked.has(item.id) && (
-                <p
-                  className={
-                    effect.effect === 'LOCKED' || effect.effect === 'REUSED'
-                      ? 'notice notice-error'
-                      : 'hint'
-                  }
-                  role="status"
-                >
-                  {w.effects[effect.effect]}
-                </p>
-              )}
+              {effect && !locked.has(item.id) && <EffectNote effect={effect.effect} />}
 
               <div className="pair">
                 <Field label={w.fromLabel}>
@@ -451,6 +451,7 @@ function Editor({ exchange, reload, onSent }: Props) {
               <Field
                 label={w.descriptionLabel}
                 id={`${item.id}-description`}
+                required
                 error={errorFor('description', item.id)}
               >
                 {(control) => (
@@ -467,23 +468,34 @@ function Editor({ exchange, reload, onSent }: Props) {
                 <Field
                   label={fmt(w.amountLabel, { currency: exchange.currency })}
                   id={`${item.id}-amount`}
+                  required
                   error={errorFor('amount', item.id)}
                 >
                   {(control) => (
                     <>
                       <DecimalInput
                         {...control}
+                        // Read with the field, rather than announced at every keystroke.
+                        aria-describedby={[
+                          control['aria-describedby'],
+                          minor !== null ? `${item.id}-amount-preview` : null,
+                          `${item.id}-amount-outside`,
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
                         value={item.amount}
                         onChange={(amount) => changeItem(item.id, { amount })}
                       />
                       {/* What the typed number will be signed as. */}
                       {minor !== null && (
-                        <p className="hint" role="status">
+                        <p className="hint" id={`${item.id}-amount-preview`}>
                           {fmt(w.amountPreview, { amount: money(minor, exchange.currency) })}
                         </p>
                       )}
                       {/* Money is paid outside the product and only recorded here (DESIGN.md §11). */}
-                      <p className="hint">{w.moneyOutside}</p>
+                      <p className="hint" id={`${item.id}-amount-outside`}>
+                        {w.moneyOutside}
+                      </p>
                     </>
                   )}
                 </Field>
@@ -532,7 +544,12 @@ function Editor({ exchange, reload, onSent }: Props) {
                 )}
               </Field>
               {item.due.kind === 'DATE' && (
-                <Field label={w.dateLabel} id={`${item.id}-date`} error={errorFor('date', item.id)}>
+                <Field
+                  label={w.dateLabel}
+                  id={`${item.id}-date`}
+                  required
+                  error={errorFor('date', item.id)}
+                >
                   {(control) => (
                     <input
                       {...control}
@@ -549,6 +566,7 @@ function Editor({ exchange, reload, onSent }: Props) {
                 <Field
                   label={w.afterLabel}
                   id={`${item.id}-after`}
+                  required
                   error={errorFor('after', item.id)}
                 >
                   {(control) => (
@@ -619,7 +637,7 @@ function Editor({ exchange, reload, onSent }: Props) {
 
         {/* Items of the agreement this change removes, named as the agreement wrote them. */}
         {dropped.length > 0 && (
-          <div className="notice" role="status">
+          <div className="notice">
             <p>{fmt(w.removedCount, { count: dropped.length })}</p>
             <ul className="plain">
               {dropped.map((item) => (
@@ -663,7 +681,7 @@ function Editor({ exchange, reload, onSent }: Props) {
           )}
         </Field>
 
-        <p className="hint" role="status">
+        <p className="hint">
           {saveState === 'saving' && w.saving}
           {saveState === 'saved' && w.saved}
           {saveState === 'failed' && w.saveFailed}
@@ -713,6 +731,34 @@ function Editor({ exchange, reload, onSent }: Props) {
 }
 
 /**
+ * Changes on the editing page that are seen rather than reached: the working
+ * copy turning out to be older than the terms, items of the agreement
+ * dropping out of it, and a save failing. Saving and saved are shown but not
+ * said, or they would be said every few seconds while someone types.
+ */
+function EditAnnouncements(props: {
+  stale: string | null
+  dropped: string | null
+  saveFailed: string | null
+}) {
+  useAnnouncement(props.stale)
+  useAnnouncement(props.dropped)
+  useAnnouncement(props.saveFailed)
+  return null
+}
+
+/** What the amendment does to one item, said as it changes while the item is edited. */
+function EffectNote({ effect }: { effect: ItemEffect['effect'] }) {
+  const { wording } = useI18n()
+  const text = wording.composer.effects[effect]
+  const refused = effect === 'LOCKED' || effect === 'REUSED'
+  // Polite even when refused: it is said while the person is typing, and
+  // nothing is lost by finishing the word first.
+  useAnnouncement(text)
+  return <p className={refused ? 'notice notice-error' : 'hint'}>{text}</p>
+}
+
+/**
  * What an amendment does to each item of the agreement once both have signed
  * it, from the same rule the service applies (DESIGN.md §7): untouched items
  * keep their status, a changed one goes back to the start, a removed one
@@ -729,7 +775,11 @@ function Effects({ effects }: { effects: readonly ItemEffect[] }) {
         {effects.map((item) => (
           <li key={item.id} className="contribution">
             <Written>{item.description}</Written>
-            <p className={item.effect === 'LOCKED' || item.effect === 'REUSED' ? 'notice notice-error' : ''}>
+            <p
+              className={
+                item.effect === 'LOCKED' || item.effect === 'REUSED' ? 'notice notice-error' : ''
+              }
+            >
               {w.effects[item.effect]}
             </p>
           </li>
