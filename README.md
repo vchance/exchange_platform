@@ -89,6 +89,21 @@ API_TARGET=http://127.0.0.1:8080 HARNESS_ORIGIN=http://localhost:8081 PORT=5185 
 EXPO_PUBLIC_API_URL=http://localhost:5185 EXPO_PUBLIC_WEB_URL=http://localhost:8081 npx expo start --web
 ```
 
+## Accessibility
+
+Both apps are meant to be used with a screen reader, a keyboard or switch, text made much larger, and less motion, to WCAG 2.2 AA. What that means here:
+
+- **Web.** One `main` and one `h1` per screen, headings in order below it, and a page title and `lang` that follow the screen and the chosen language. Every control has a label; a field that must be filled in says so (`aria-required`), and its error is tied to it (`aria-describedby`, `aria-invalid`) and the keyboard is taken to it. Panels that open in place take the focus and give it back to the button that opened them; there are no modal dialogs. What changes without the focus moving is said through two live regions that are always on the page (`src/lib/announce.ts`): polite for outcomes, assertive only for a refusal that stops the person. Text is at least 4.5:1 against its background and control edges and the focus ring 3:1, in light and dark; status is said in words, never by colour alone. Nothing animates, and `prefers-reduced-motion` is honoured should anything start to; zoom is never blocked; targets are at least 44 CSS pixels tall.
+- **Mobile.** Every pressable control and input has a role, a label and its state, with a hint where the label does not say enough; headings have the header role; targets are at least 48 points. Text follows the device's text size with no upper limit. The product's words are marked with their language for VoiceOver. What changes without the focus moving is said with `AccessibilityInfo.announceForAccessibility`; a panel takes the screen reader's focus and gives it back on cancel; screen transitions stop when the system asks for less motion.
+
+How it is checked:
+
+- `src/a11y.test.tsx` in `apps/web` runs the whole web app in jsdom against a stand-in for the service and checks the invitation page, sign-in, the composer, the exchange view, the record and the rest with [axe-core](https://github.com/dequelabs/axe-core) (WCAG 2.0 to 2.2 A and AA, and axe's best practices). Any violation fails `npm test`. It also checks where the focus goes, what is announced, and the page's title and language. `src/contrast.test.ts` computes the contrast of the colour pairs the stylesheet draws, which axe cannot do in jsdom.
+- `npm run lint -w @exchange/web` includes oxlint's `jsx-a11y` rules.
+- `src/__tests__/accessibility.test.tsx` in `apps/mobile` walks the main screens, as iOS and as Android, and fails on any pressable control without a role, label, state or a 44-point target, any input without a label, or a screen without a heading; it also checks what is announced and that panels move the screen reader's focus.
+
+None of this replaces trying the apps with VoiceOver, TalkBack, NVDA and a keyboard, at the largest text sizes, before a release: the automated checks see the structure, not how it sounds or how it lays out.
+
 ## Commands
 
 | Command | What it does |
