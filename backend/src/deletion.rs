@@ -26,9 +26,16 @@
 //! like any other (the same way a block ends open offers, `crate::safety`):
 //!
 //! * A draft never sent has no history and nobody else in it. Its working
-//!   copy is deleted and the name on it blanked. Discarding a draft is its
-//!   initiator's own act (`Command::Discard`), and the service may not
-//!   delete an exchange row, so an empty draft remains that nobody can open.
+//!   copy is deleted, the name on it blanked, and the draft is discarded in
+//!   the departing account's name (`Command::Discard`), exactly as its
+//!   initiator could have done: it closes with nothing agreed, reason
+//!   `DISCARDED`, and is nobody's to open. The row is not deleted. The
+//!   service's role may not delete an exchange or a participant, and the
+//!   record of who held a slot cannot be deleted by any role (migration
+//!   0006), so deleting the shell would mean loosening the append-only design
+//!   for the one case where closing it through the rules does the same job.
+//!   What becomes of never-agreed exchanges after that is the retention
+//!   question (DESIGN.md §18), which covers these with all the others.
 //! * In a negotiation, the offer on the table is withdrawn if the departing
 //!   party sent it and declined if the other did, which closes the exchange
 //!   with nothing agreed. The one exception is someone who had opened an
@@ -235,23 +242,10 @@ async fn attempt(
         _ => return Ok(Attempt::Done),
     };
 
-    // Exchanges, through the rules. Always in the same order, so two people
-    // who share exchanges and leave at the same moment cannot each hold a
-    // lock the other is waiting for.
-    let open: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT e.id FROM exchange e JOIN participant p ON p.exchange_id = e.id
-         WHERE p.account_id = $1 AND e.state IN ('NEGOTIATING', 'ACTIVE')
-         ORDER BY e.id",
-    )
-    .bind(account)
-    .fetch_all(&mut *tx)
-    .await?;
-    for exchange in open {
-        leave(&mut tx, rules, exchange, account).await?;
-    }
-
     // Working copies of terms never sent, and the name on drafts that were
     // never sent: no revision carries it, so nothing signed refers to it.
+    // Before the drafts are discarded below, while they can still be told
+    // apart from exchanges that closed after something was sent.
     sqlx::query("DELETE FROM exchange_draft WHERE account_id = $1")
         .bind(account)
         .execute(&mut *tx)
@@ -264,6 +258,21 @@ async fn attempt(
     .bind(account)
     .execute(&mut *tx)
     .await?;
+
+    // Exchanges, through the rules. Always in the same order, so two people
+    // who share exchanges and leave at the same moment cannot each hold a
+    // lock the other is waiting for.
+    let open: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT e.id FROM exchange e JOIN participant p ON p.exchange_id = e.id
+         WHERE p.account_id = $1 AND e.state IN ('DRAFT', 'NEGOTIATING', 'ACTIVE')
+         ORDER BY e.id",
+    )
+    .bind(account)
+    .fetch_all(&mut *tx)
+    .await?;
+    for exchange in open {
+        leave(&mut tx, rules, exchange, account).await?;
+    }
 
     // Invitation links the account issued that nobody took: they stop
     // working, and forget whom they were for, which is an address the
@@ -372,6 +381,8 @@ fn is_lock_not_available(error: &sqlx::Error) -> bool {
 /// What the departing party does in an exchange on the way out, in order.
 #[derive(Clone, Copy)]
 enum Parting {
+    /// Discard a draft that was never sent, as its initiator.
+    DiscardDraft,
     /// End what is waiting to be signed: withdraw their own, decline the
     /// other party's.
     EndOpenRevision,
@@ -387,7 +398,11 @@ async fn leave(
     exchange: Uuid,
     account: Uuid,
 ) -> Result<(), sqlx::Error> {
-    for step in [Parting::EndOpenRevision, Parting::RequestClose] {
+    for step in [
+        Parting::DiscardDraft,
+        Parting::EndOpenRevision,
+        Parting::RequestClose,
+    ] {
         // Loaded again for the second step: the first may have changed it.
         let Some(aggregate) = repo::load(conn, exchange, true).await? else {
             return Ok(());
@@ -399,6 +414,12 @@ async fn leave(
 
         let mut commands = Vec::new();
         match step {
+            // Only its initiator has a draft, and nobody else is in it yet.
+            Parting::DiscardDraft => {
+                if current.state == State::Draft {
+                    commands.push(Command::Discard);
+                }
+            }
             Parting::EndOpenRevision => {
                 // Someone the initiator has not confirmed can neither decline
                 // nor take a signature back. They leave, which undoes both:

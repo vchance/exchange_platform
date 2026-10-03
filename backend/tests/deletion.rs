@@ -823,9 +823,10 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
             .await
             .unwrap();
     assert_eq!(codes_left, 0);
-    // The draft was never anyone else's: nothing of hers is left on it.
-    let (state, name, alias): (String, String, String) = sqlx::query_as(
-        "SELECT e.state, p.display_name, p.alias
+    // The draft was never anyone else's: nothing of hers is left on it, and
+    // it is discarded, as she could have done herself.
+    let (state, reason, name, alias): (String, Option<String>, String, String) = sqlx::query_as(
+        "SELECT e.state, e.closed_reason, p.display_name, p.alias
          FROM exchange e JOIN participant p ON p.exchange_id = e.id AND p.slot = 'A'
          WHERE e.id = $1",
     )
@@ -834,10 +835,15 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
     .await
     .unwrap();
     assert_eq!(
-        (state.as_str(), name.as_str(), alias.as_str()),
-        ("DRAFT", "", "")
+        (
+            state.as_str(),
+            reason.as_deref(),
+            name.as_str(),
+            alias.as_str()
+        ),
+        ("CLOSED", Some("DISCARDED"), "", "")
     );
-    assert!(events(app, &draft).await.is_empty());
+    assert_eq!(events(app, &draft).await, [event("EXCHANGE_CLOSED", "A")]);
     // Ben's block on her is his, and stays his to remove.
     assert_eq!(
         count(
@@ -879,6 +885,100 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
     app.get(ana, "/v1/me")
         .await
         .refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
+}
+
+// ---- Exchanges: drafts -------------------------------------------------------
+
+#[tokio::test]
+async fn a_draft_never_sent_is_discarded_through_the_rules_and_nothing_is_left_open() {
+    let test = start().await;
+    let app = &test.app;
+    let ana = app.user("Ana").await;
+
+    // Two drafts never sent, one with a working copy of terms, and one
+    // proposal that was sent and is closed already, which must not be
+    // mistaken for a draft.
+    let empty = app.draft(&ana).await;
+    let written = app.draft(&ana).await;
+    done(
+        &app.call(
+            Some(&ana),
+            Method::PUT,
+            &format!("/v1/exchanges/{written}/draft"),
+            Some(json!({ "body": { "terms": "Paint the shed" } })),
+            &[],
+        )
+        .await,
+    );
+    let withdrawn = app.draft(&ana).await;
+    let sent = app
+        .send(&ana, &withdrawn, fence_job(Uuid::new_v4(), Uuid::new_v4()))
+        .await
+        .ok();
+    let revision = sent["exchange"]["open_revision"]["id"].as_str().unwrap();
+    app.command(
+        &ana,
+        &withdrawn,
+        json!({ "type": "WITHDRAW", "revision": revision }),
+    )
+    .await
+    .ok();
+    let withdrawn_before = history(app, &withdrawn).await;
+    assert_eq!(
+        app.get(&ana, "/v1/me/deletion").await.ok()["drafts"],
+        json!(2)
+    );
+
+    test.delete(&ana).await;
+
+    // Each draft closed as a discarded draft closes, in her name: one event,
+    // no revision, nobody told. Its row stays, because the history of who
+    // held its slot does; it is simply over, like any other discarded draft.
+    for draft in [&empty, &written] {
+        let (state, outcome, reason): (String, Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT state, closed_outcome, closed_reason FROM exchange WHERE id = $1",
+        )
+        .bind(id(draft))
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+        assert_eq!(
+            (state.as_str(), outcome.as_deref(), reason.as_deref()),
+            ("CLOSED", Some("NOT_AGREED"), Some("DISCARDED")),
+            "{draft}"
+        );
+        assert_eq!(events(app, draft).await, [event("EXCHANGE_CLOSED", "A")]);
+        assert!(history(app, draft).await.fixed.is_empty());
+        let queued: i64 = sqlx::query_scalar("SELECT count(*) FROM outbox WHERE exchange_id = $1")
+            .bind(id(draft))
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
+        assert_eq!(queued, 0);
+    }
+    let left: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM exchange_draft WHERE exchange_id = ANY($1)")
+            .bind(vec![id(&empty), id(&written)])
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
+    assert_eq!(left, 0);
+
+    // No exchange the account was in is still open to anyone.
+    let open: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM exchange e JOIN participant p ON p.exchange_id = e.id
+         WHERE p.account_id = $1 AND e.state <> 'CLOSED'",
+    )
+    .bind(ana.id)
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(open, 0);
+
+    // The proposal that had been sent keeps its history, and its names.
+    let after = history(app, &withdrawn).await;
+    assert_eq!(after.fixed, withdrawn_before.fixed);
+    assert_eq!(after.events, withdrawn_before.events);
 }
 
 // ---- Exchanges: negotiations ------------------------------------------------
@@ -1178,6 +1278,79 @@ async fn someone_the_initiator_had_not_confirmed_leaves_the_exchange_as_they_go(
         closed_as(&app.view(&ana, &unsigned).await),
         ("CLOSED", "NOT_AGREED", "EXPIRED")
     );
+}
+
+#[tokio::test]
+async fn a_signature_waiting_on_confirmation_is_void_at_once_and_waits_on_nobody() {
+    let test = start().await;
+    let app = &test.app;
+    let ana = app.user("Ana").await;
+    let ben = app.user("Ben").await;
+
+    // Ben opened Ana's link and signed. His signature can only take effect
+    // once she confirms him, and she has not.
+    let (exchange, revision) = negotiation(app, &ana, &ben).await;
+    app.command(&ben, &exchange, accept(&revision)).await.ok();
+    let before = app.view(&ana, &exchange).await;
+    assert_eq!(before["counterparty"], "CLAIMED");
+    assert_eq!(before["open_revision"]["accepted_by"], json!(["A", "B"]));
+
+    test.leave(&ben, &[&exchange]).await;
+
+    // He left the way a claimant leaves (DESIGN.md §8), and the release
+    // names the signature it voided.
+    let (kind, slot, voided, void): (String, Option<String>, Option<Uuid>, Option<bool>) =
+        sqlx::query_as(
+            "SELECT type, actor_slot, revision_id, (data->>'signature_void')::boolean
+             FROM exchange_event WHERE exchange_id = $1 ORDER BY sequence DESC LIMIT 1",
+        )
+        .bind(id(&exchange))
+        .fetch_one(&app.owner)
+        .await
+        .unwrap();
+    assert_eq!(
+        (kind.as_str(), slot.as_deref(), voided, void),
+        (
+            "COUNTERPARTY_RELEASED",
+            Some("B"),
+            Some(revision.parse().unwrap()),
+            Some(true)
+        )
+    );
+
+    // Nothing waits on him: there is nobody to confirm, his signature counts
+    // for nothing, and the worker has nothing to do to the exchange now; it
+    // is not left to run out.
+    run_timers(&app.db, &app.rules, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    let view = app.view(&ana, &exchange).await;
+    assert_eq!(
+        (&view["state"], &view["counterparty"], &view["claimant"]),
+        (&json!("NEGOTIATING"), &json!("UNCLAIMED"), &Value::Null)
+    );
+    assert_eq!(view["open_revision"]["accepted_by"], json!(["A"]));
+    app.command(&ana, &exchange, json!({ "type": "CONFIRM_COUNTERPARTY" }))
+        .await
+        .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
+
+    // The record keeps what happened: the signature, apart, void, nameless.
+    let record = app
+        .get(&ana, &format!("/v1/exchanges/{exchange}/record"))
+        .await
+        .ok();
+    let on_it = &record["revisions"][0];
+    let parties: Vec<&str> = on_it["signatures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|signature| signature["party"].as_str().unwrap())
+        .collect();
+    assert_eq!(parties, ["A"]);
+    let void = on_it["void_signatures"].as_array().unwrap();
+    assert_eq!(void.len(), 1);
+    assert_eq!(void[0]["party"], "B");
+    assert!(void[0].get("name").is_none());
 }
 
 // ---- Exchanges: agreements in force -----------------------------------------
