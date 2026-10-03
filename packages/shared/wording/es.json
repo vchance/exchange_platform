@@ -799,6 +799,7 @@
     "INVALID_IDENTIFIER": "Escribe un correo electrónico válido o un número de teléfono con su código de país.",
     "INVALID_CODE": "Ese código no funcionó. Revísalo o pide uno nuevo.",
     "TOO_MANY_REQUESTS": "Demasiadas solicitudes en poco tiempo. Espera un momento e inténtalo de nuevo.",
+    "TOO_MANY_GUESSES": "Se han introducido demasiados códigos incorrectos hoy. Por seguridad, no se podrán usar códigos hasta mañana.",
     "UNAUTHENTICATED": "Inicia sesión para continuar.",
     "ACCOUNT_SUSPENDED": "Esta cuenta ha sido suspendida.",
     "IDENTIFIER_IN_USE": "Ese correo electrónico o número de teléfono pertenece a otra cuenta.",

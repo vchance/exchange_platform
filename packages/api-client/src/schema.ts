@@ -49,7 +49,8 @@ export interface paths {
         put?: never;
         /**
          * Sends a one-time code to an email address or phone number. Answers the
-         *     same way whether or not an account exists for it.
+         *     same way whether or not an account exists for it. Codes sent earlier keep
+         *     working until they expire, up to the newest few.
          */
         post: operations["request_code"];
         delete?: never;
@@ -448,7 +449,9 @@ export interface paths {
         put?: never;
         /**
          * Sends a one-time code for deleting the account to its own email address
-         *     or phone number. The code is good for that and nothing else.
+         *     or phone number. The code is good for that and nothing else. Requests are
+         *     counted against the account, apart from sign-in codes, so nobody asking
+         *     for sign-in codes for the same address can use them up.
          */
         post: operations["request_deletion_code"];
         delete?: never;
@@ -755,7 +758,7 @@ export interface components {
          *     client makes the shared wording tables fail to compile until it is covered.
          * @enum {string}
          */
-        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+        ErrorCode: "STALE_REVISION" | "WRONG_ACTOR" | "ACTION_NOT_ALLOWED" | "CONTRIBUTION_LOCKED" | "REVISION_EXPIRED" | "COUNTERPARTY_NOT_CONFIRMED" | "AWAITING_CONFIRMATION" | "INVALID_REVISION" | "INVALID_REQUEST" | "INVALID_IDENTIFIER" | "INVALID_CODE" | "TOO_MANY_REQUESTS" | "TOO_MANY_GUESSES" | "UNAUTHENTICATED" | "ACCOUNT_SUSPENDED" | "IDENTIFIER_IN_USE" | "VERSION_CONFLICT" | "PROFILE_INCOMPLETE" | "CONSENT_OUTDATED" | "INVITATION_UNAVAILABLE" | "INVITATION_NOT_FOR_YOU" | "IDEMPOTENCY_KEY_REUSED" | "CLIENT_TOO_OLD" | "NOT_FOUND" | "SERVICE_UNAVAILABLE" | "INTERNAL";
         /**
          * @description Everything that can happen to an exchange. Events of any other kind are
          *     not part of what the parties are shown.
@@ -1392,7 +1395,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Too many codes requested */
+            /** @description Too many codes requested for this identifier, or from this address */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -1472,6 +1475,15 @@ export interface operations {
             };
             /** @description Invalid request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or from this address this hour (`TOO_MANY_REQUESTS`) */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2493,6 +2505,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description Too many wrong deletion codes from this account today */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     request_deletion_code: {
@@ -2533,7 +2554,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description Too many codes requested */
+            /** @description Too many deletion codes requested by this account */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2586,6 +2607,15 @@ export interface operations {
             };
             /** @description Not an email address or phone number */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or from this address this hour (`TOO_MANY_REQUESTS`) */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

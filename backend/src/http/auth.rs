@@ -11,8 +11,8 @@ use uuid::Uuid;
 
 use super::account::{self, Account};
 use super::extract::{ApiJson, SESSION_COOKIE, Session, require_web_origin};
-use super::{AppState, Settings};
-use crate::auth::{self, Purpose};
+use super::{AppState, ClientAddress, Settings};
+use crate::auth::{self, Requester};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::languages;
@@ -24,7 +24,8 @@ pub struct RequestCode {
 }
 
 /// Sends a one-time code to an email address or phone number. Answers the
-/// same way whether or not an account exists for it.
+/// same way whether or not an account exists for it. Codes sent earlier keep
+/// working until they expire, up to the newest few.
 #[utoipa::path(
     post,
     path = "/v1/auth/codes",
@@ -32,11 +33,12 @@ pub struct RequestCode {
     responses(
         (status = 204, description = "A code was sent"),
         (status = 422, description = "Not an email address or phone number", body = ErrorBody),
-        (status = 429, description = "Too many codes requested", body = ErrorBody)
+        (status = 429, description = "Too many codes requested for this identifier, or from this address", body = ErrorBody)
     )
 )]
 pub async fn request_code(
     State(state): State<AppState>,
+    ClientAddress(address): ClientAddress,
     headers: HeaderMap,
     ApiJson(body): ApiJson<RequestCode>,
 ) -> Result<StatusCode, ApiError> {
@@ -54,7 +56,7 @@ pub async fn request_code(
         &settings.auth,
         state.code_sender.as_ref(),
         &identifier,
-        Purpose::SignIn,
+        Requester::SignIn { address },
         &language,
     )
     .await?;
@@ -99,11 +101,13 @@ pub struct SessionCreated {
         (status = 200, description = "Signed in", body = SessionCreated),
         (status = 401, description = "The code is wrong, expired or used up", body = ErrorBody),
         (status = 403, description = "The account is suspended", body = ErrorBody),
-        (status = 422, description = "Invalid request", body = ErrorBody)
+        (status = 422, description = "Invalid request", body = ErrorBody),
+        (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or from this address this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody)
     )
 )]
 pub async fn create_session(
     State(state): State<AppState>,
+    ClientAddress(address): ClientAddress,
     headers: HeaderMap,
     ApiJson(body): ApiJson<CreateSession>,
 ) -> Result<Response, ApiError> {
@@ -121,7 +125,7 @@ pub async fn create_session(
         &settings.auth,
         &identifier,
         &body.code,
-        Purpose::SignIn,
+        Requester::SignIn { address },
     )
     .await?;
 

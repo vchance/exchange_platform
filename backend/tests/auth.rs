@@ -3,12 +3,16 @@
 //!
 //! Needs PostgreSQL and the connection strings from `.env`. Each test uses
 //! identifiers of its own under a reserved test domain and number range, and
-//! removes what it created.
+//! removes what it created. Each also makes its requests from network
+//! addresses of its own, so that the limits per address count its requests
+//! and nobody else's; those counts are kept only as keyed hashes and expire.
 
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
 use axum::body::Body;
+use axum::extract::ConnectInfo;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN, SET_COOKIE};
 use axum::http::{HeaderMap, Method, Request, StatusCode};
 use exchange_backend::auth::{AuthRules, CodeMessage, CodeSender, SendFuture, token_hash};
@@ -52,10 +56,13 @@ impl Reply {
     }
 }
 
+#[derive(Clone)]
 struct App {
     router: Router,
     outbox: Arc<Outbox>,
     owner: PgPool,
+    /// Where the requests come from: the connection's peer.
+    peer: IpAddr,
 }
 
 fn env(name: &str) -> String {
@@ -77,6 +84,20 @@ fn email() -> String {
 
 fn phone() -> String {
     format!("{PHONE_PREFIX}{:07}", Uuid::new_v4().as_u128() % 10_000_000)
+}
+
+/// An address of its own, in the range reserved for documentation.
+fn address() -> IpAddr {
+    let random = Uuid::new_v4().as_u128();
+    IpAddr::V6(Ipv6Addr::from((0x2001_0db8_u128 << 96) | (random >> 32)))
+}
+
+/// A code that is none of `codes`.
+fn other_than(codes: &[&str]) -> String {
+    (0..)
+        .map(|n| format!("{n:06}"))
+        .find(|candidate| !codes.contains(&candidate.as_str()))
+        .unwrap()
 }
 
 impl App {
@@ -103,6 +124,7 @@ impl App {
             router: http::router(state, None),
             outbox,
             owner,
+            peer: address(),
         };
         // Clear what an earlier, interrupted run may have left.
         app.remove_test_rows("created_at < now() - interval '10 minutes'")
@@ -117,7 +139,11 @@ impl App {
         body: Option<Value>,
         headers: &[(axum::http::HeaderName, &str)],
     ) -> Reply {
-        let mut request = Request::builder().method(method).uri(path);
+        let mut request = Request::builder()
+            .method(method)
+            .uri(path)
+            // What the listener would know about the connection.
+            .extension(ConnectInfo(SocketAddr::new(self.peer, 40000)));
         for (name, value) in headers {
             request = request.header(name, *value);
         }
@@ -138,6 +164,14 @@ impl App {
             status,
             headers,
             body,
+        }
+    }
+
+    /// The same service, reached from another address.
+    fn from(&self, peer: IpAddr) -> Self {
+        Self {
+            peer,
+            ..self.clone()
         }
     }
 
@@ -315,10 +349,10 @@ async fn five_wrong_guesses_kill_a_code() {
     let app = App::start().await;
     let email = email();
     let code = app.request_code(&email).await;
-    let wrong = if code == "000000" { "000001" } else { "000000" };
+    let wrong = other_than(&[&code]);
 
     for _ in 0..5 {
-        let reply = app.create_session(&email, wrong).await;
+        let reply = app.create_session(&email, &wrong).await;
         assert_eq!(
             (reply.status, reply.code()),
             (StatusCode::UNAUTHORIZED, "INVALID_CODE")
@@ -335,25 +369,239 @@ async fn five_wrong_guesses_kill_a_code() {
 }
 
 #[tokio::test]
-async fn a_new_code_replaces_the_old_one() {
+async fn a_new_code_leaves_the_earlier_ones_working_and_using_one_uses_all() {
+    let app = App::start().await;
+    let (ana, ben) = (email(), email());
+
+    // Asking again does not end the code already sent: either works, and
+    // whichever is used, the other is spent with it.
+    let first = app.request_code(&ana).await;
+    let second = app.request_code(&ana).await;
+    assert_eq!(
+        app.create_session(&ana, &first).await.status,
+        StatusCode::OK
+    );
+    if first != second {
+        let reply = app.create_session(&ana, &second).await;
+        assert_eq!(
+            (reply.status, reply.code()),
+            (StatusCode::UNAUTHORIZED, "INVALID_CODE")
+        );
+    }
+
+    let first = app.request_code(&ben).await;
+    let second = app.request_code(&ben).await;
+    assert_eq!(
+        app.create_session(&ben, &second).await.status,
+        StatusCode::OK
+    );
+    if first != second {
+        let reply = app.create_session(&ben, &first).await;
+        assert_eq!(
+            (reply.status, reply.code()),
+            (StatusCode::UNAUTHORIZED, "INVALID_CODE")
+        );
+    }
+
+    app.finish(&[&ana, &ben]).await;
+}
+
+#[tokio::test]
+async fn only_the_newest_three_codes_stay_live() {
     let app = App::start().await;
     let email = email();
 
-    let first = app.request_code(&email).await;
-    let second = app.request_code(&email).await;
-
-    if first != second {
+    let mut codes = Vec::new();
+    for _ in 0..4 {
+        codes.push(app.request_code(&email).await);
+    }
+    // The oldest of four is dead, unless by chance it is also one of the
+    // three still live.
+    if !codes[1..].contains(&codes[0]) {
+        let reply = app.create_session(&email, &codes[0]).await;
         assert_eq!(
-            app.create_session(&email, &first).await.status,
-            StatusCode::UNAUTHORIZED
+            (reply.status, reply.code()),
+            (StatusCode::UNAUTHORIZED, "INVALID_CODE")
         );
     }
     assert_eq!(
-        app.create_session(&email, &second).await.status,
+        app.create_session(&email, &codes[1]).await.status,
         StatusCode::OK
     );
 
     app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn a_wrong_guess_counts_against_every_live_code() {
+    let app = App::start().await;
+    let email = email();
+    let first = app.request_code(&email).await;
+    let second = app.request_code(&email).await;
+    let wrong = other_than(&[&first, &second]);
+
+    for _ in 0..5 {
+        let reply = app.create_session(&email, &wrong).await;
+        assert_eq!(reply.code(), "INVALID_CODE");
+    }
+    // Each code has now been guessed at five times, and both are dead.
+    for code in [&first, &second] {
+        let reply = app.create_session(&email, code).await;
+        assert_eq!(
+            (reply.status, reply.code()),
+            (StatusCode::UNAUTHORIZED, "INVALID_CODE")
+        );
+    }
+
+    app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn failed_guesses_are_capped_per_identifier_until_the_day_ends() {
+    let app = App::start().await;
+    let email = email();
+
+    // Twenty wrong guesses in all, each at a live code, from four addresses
+    // so that no address's own hourly limit is what stops them.
+    for _ in 0..4 {
+        let from = app.from(address());
+        let code = from.request_code(&email).await;
+        for _ in 0..5 {
+            let reply = from.create_session(&email, &other_than(&[&code])).await;
+            assert_eq!(reply.code(), "INVALID_CODE");
+        }
+    }
+
+    // Now even the right code is refused, from anywhere, and being refused
+    // is not a guess.
+    let elsewhere = app.from(address());
+    let code = elsewhere.request_code(&email).await;
+    for offered in [code.clone(), other_than(&[&code])] {
+        let reply = elsewhere.create_session(&email, &offered).await;
+        assert_eq!(
+            (reply.status, reply.code()),
+            (StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES")
+        );
+    }
+
+    // Another identifier is not affected.
+    let other = self::email();
+    let other_code = elsewhere.request_code(&other).await;
+    assert_eq!(
+        elsewhere.create_session(&other, &other_code).await.status,
+        StatusCode::OK
+    );
+
+    // When the day ends, the code still live works. Today's counts of failed
+    // guesses by identifier that reached the limit are moved back a day: the
+    // count is stored only as a keyed hash, and no other test comes near the
+    // limit, so this is the count for this test's identifier.
+    sqlx::query(
+        "UPDATE sign_in_limit SET window_start = window_start - interval '1 day'
+         WHERE scope = 'failed-guesses-by-identifier'
+           AND window_start = date_trunc('day', now(), 'UTC')
+           AND count >= 20",
+    )
+    .execute(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!(
+        elsewhere.create_session(&email, &code).await.status,
+        StatusCode::OK
+    );
+
+    app.finish(&[&email, &other]).await;
+}
+
+#[tokio::test]
+async fn code_requests_are_limited_per_address() {
+    let app = App::start().await;
+    let identifiers: Vec<String> = (0..11).map(|_| email()).collect();
+
+    // Ten different identifiers from one address, each within its own limit.
+    for identifier in &identifiers[..10] {
+        app.request_code(identifier).await;
+    }
+    let reply = app
+        .post("/v1/auth/codes", json!({ "identifier": identifiers[10] }))
+        .await;
+    assert_eq!(
+        (reply.status, reply.code()),
+        (StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS")
+    );
+
+    // Someone at another address is not held up.
+    app.from(address()).request_code(&identifiers[10]).await;
+
+    let all: Vec<&str> = identifiers.iter().map(String::as_str).collect();
+    app.finish(&all).await;
+}
+
+#[tokio::test]
+async fn failed_guesses_are_limited_per_address() {
+    let app = App::start().await;
+    let other = app.from(address());
+    let email = email();
+    let code = other.request_code(&email).await;
+
+    // Thirty wrong guesses from one address, at identifiers that have no
+    // code at all, so that no identifier's own limit is involved.
+    for _ in 0..30 {
+        let reply = app.create_session(&self::email(), "123456").await;
+        assert_eq!(reply.code(), "INVALID_CODE");
+    }
+    // From there even the right code for another identifier is refused,
+    // and being refused is not a guess at it.
+    let reply = app.create_session(&email, &code).await;
+    assert_eq!(
+        (reply.status, reply.code()),
+        (StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS")
+    );
+    // From another address it works.
+    assert_eq!(
+        other.create_session(&email, &code).await.status,
+        StatusCode::OK
+    );
+
+    app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn counts_from_windows_long_past_are_forgotten() {
+    let app = App::start().await;
+    let (old, current) = (*Uuid::new_v4().as_bytes(), *Uuid::new_v4().as_bytes());
+    let (old, current) = ([old, old].concat(), [current, current].concat());
+    for (subject, age) in [(&old, "3 days"), (&current, "0 days")] {
+        sqlx::query(
+            "INSERT INTO sign_in_limit (scope, subject, window_start, count)
+             VALUES ('code-requests-by-address', $1,
+                     date_trunc('hour', now()) - $2::interval, 1)",
+        )
+        .bind(subject.as_slice())
+        .bind(age)
+        .execute(&app.owner)
+        .await
+        .unwrap();
+    }
+
+    let service = connect("DATABASE_URL").await;
+    exchange_backend::auth::purge_sign_in_limits(&service)
+        .await
+        .unwrap();
+
+    let left: Vec<Vec<u8>> =
+        sqlx::query_scalar("SELECT subject FROM sign_in_limit WHERE subject = ANY($1)")
+            .bind(vec![old.clone(), current.clone()])
+            .fetch_all(&app.owner)
+            .await
+            .unwrap();
+    assert_eq!(left, vec![current.clone()]);
+
+    sqlx::query("DELETE FROM sign_in_limit WHERE subject = $1")
+        .bind(current.as_slice())
+        .execute(&app.owner)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

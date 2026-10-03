@@ -106,7 +106,12 @@ test('a code that was not accepted goes back to the step that asks for it', asyn
     retype: true,
   })
   // Anything else leaves the person where they were, to try again.
-  for (const code of ['SERVICE_UNAVAILABLE', 'TOO_MANY_REQUESTS', 'UNAUTHENTICATED'] as const) {
+  for (const code of [
+    'SERVICE_UNAVAILABLE',
+    'TOO_MANY_REQUESTS',
+    'TOO_MANY_GUESSES',
+    'UNAUTHENTICATED',
+  ] as const) {
     expect(await deleteWithCode(refusing(code), 'EMAIL', '123456')).toEqual({
       deleted: false,
       code,

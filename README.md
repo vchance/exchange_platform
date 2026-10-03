@@ -242,6 +242,10 @@ The web app and the mobile apps keep working against newer services until the se
 
 A draft that was never sent can be thrown away from the composer. It goes through the rules like everything else, as `DISCARD`, and closes the exchange as `NOT_AGREED` with the reason `DISCARDED`, so it leaves the person's list and the record says what happened.
 
+## Signing in
+
+A one-time code is sent to an email address or phone number (`POST /v1/auth/codes`) and entered to sign in (`POST /v1/auth/sessions`). Asking again does not end the codes already sent: the newest three stay live until each expires, any of them works, and using one uses them all. Wrong codes are limited per code (5), per email address or phone number per UTC day (20, after which even the right code is refused with `TOO_MANY_GUESSES` until the day ends) and per requester per hour (30); codes asked for, per email address or phone number (5) and per requester (10) per hour. The requester is the network address that `TRUSTED_PROXY_HEADER` names, or else the connection's peer. Deletion codes are counted apart, against the account (5 an hour, 20 wrong a day), so nobody without the account's session can stop its owner from deleting it. Every number is a placeholder in `AuthRules` (`backend/src/auth.rs`).
+
 ## Deleting an account
 
 A person can delete their account from the account screen of the web app and of the mobile app (`DESIGN.md` §4.1), and from the profile step of an account that was never set up. `backend/src/deletion.rs` says in full what deleting does and why; `backend/tests/deletion.rs` checks each part against a real database.

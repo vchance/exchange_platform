@@ -8,7 +8,7 @@
 //! is the answer.
 //!
 //! The address is recorded with a signature (DESIGN.md §8, §13.4) and is what
-//! a per-requester limit would count by.
+//! the sign-in limits count requesters by (`crate::auth::Requester`).
 
 use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};

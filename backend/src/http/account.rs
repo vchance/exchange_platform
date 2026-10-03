@@ -8,9 +8,9 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::AppState;
 use super::extract::{ApiJson, Session};
-use crate::auth::{self, Purpose};
+use super::{AppState, ClientAddress};
+use crate::auth::{self, Requester};
 use crate::domain::identity::Identifier;
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::languages;
@@ -158,12 +158,14 @@ pub struct AddIdentifier {
         (status = 200, description = "The updated account", body = Account),
         (status = 401, description = "Not signed in, or the code is wrong", body = ErrorBody),
         (status = 409, description = "The identifier belongs to another account", body = ErrorBody),
-        (status = 422, description = "Not an email address or phone number", body = ErrorBody)
+        (status = 422, description = "Not an email address or phone number", body = ErrorBody),
+        (status = 429, description = "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or from this address this hour (`TOO_MANY_REQUESTS`)", body = ErrorBody)
     )
 )]
 pub async fn add_identifier(
     State(state): State<AppState>,
     session: Session,
+    ClientAddress(address): ClientAddress,
     ApiJson(body): ApiJson<AddIdentifier>,
 ) -> Result<Json<Account>, ApiError> {
     let identifier = Identifier::parse(&body.identifier)?;
@@ -174,7 +176,7 @@ pub async fn add_identifier(
         &settings.auth,
         &identifier,
         &body.code,
-        Purpose::SignIn,
+        Requester::SignIn { address },
     )
     .await?;
 

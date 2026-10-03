@@ -143,7 +143,7 @@ export function useAccountDeletion(
     setResent(false)
     try {
       await api.requestDeletionCode(destination.channel)
-      // An earlier code stopped working when this one was sent.
+      // The field starts empty for the code just sent.
       setCode('')
       setCodeMissing(false)
       setStep('code')
