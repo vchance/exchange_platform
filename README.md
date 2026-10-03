@@ -140,14 +140,14 @@ Both long-running binaries stop cleanly on `Ctrl-C` and on `SIGTERM`, which is w
 
 `scripts/load-check.mjs` takes pairs of people through a whole exchange over HTTP against a running `api` and `worker`, many pairs at once. Each pair signs in with the codes the API writes to its log, gives names and confirms ages; the initiator saves a working copy and sends a revision with three contributions; the counterparty previews and claims the invitation and accepts; the initiator confirms them; each marks one contribution delivered and the other confirms it; the initiator proposes ending with the third outstanding and the counterparty agrees; and each reads the exchange, its history, its record and their list. It reports per endpoint the count, p50, p95 and p99 latency and errors, then the throughput, the API's peak resident memory, the connections and lock waits it saw in `pg_stat_activity` (sampled a few times a second, so a short wait can be missed), and how long the worker took to send the notifications the run queued.
 
-Every person is a new account and every initiator makes one exchange, so the per-account limits are never approached: one code per address against `codes_per_hour`, one exchange per initiator against `exchanges_per_day`, one invitation per exchange, and at most six changes by one party to one exchange in a minute against `changes_per_minute`.
+Every person is a new account and every initiator makes one exchange, so the per-account limits are never approached: one code per email address against `codes_per_hour`, one exchange per initiator against `exchanges_per_day`, one invitation per exchange, and at most six changes by one party to one exchange in a minute against `changes_per_minute`. Code requests are also limited per network address (`code_requests_per_address_per_hour`), and the whole run comes from one machine, so each person's requests carry an `X-Forwarded-For` header with an address of their own from the range set aside for benchmarking (198.18.0.0/15), and the API under test is started with `TRUSTED_PROXY_HEADER=X-Forwarded-For` to believe it. Without that, every code request after the tenth in an hour is refused, and the script says why.
 
 It writes agreement history, which cannot be deleted, so give it a database of its own. With `.env` pointing there and `CODE_DELIVERY=log`, `NOTIFICATION_DELIVERY=log`:
 
 ```sh
 cargo build --release --manifest-path backend/Cargo.toml --bins
 ./backend/target/release/migrate
-./backend/target/release/api > api.log 2>&1 &
+TRUSTED_PROXY_HEADER=X-Forwarded-For ./backend/target/release/api > api.log 2>&1 &
 ./backend/target/release/worker > worker.log 2>&1 &
 node scripts/load-check.mjs --pairs 200 --concurrency 25 --base-url http://127.0.0.1:8080 \
   --api-log api.log --database-url postgres://exchange:exchange@127.0.0.1:5432/exchange_load
@@ -155,19 +155,19 @@ node scripts/load-check.mjs --pairs 200 --concurrency 25 --base-url http://127.0
 
 `--database-url` is only read from, for the connection and outbox figures; give the schema owner's, which sees every connection's state, and set `PSQL` if `psql` is not on the path. `--json` prints the report as JSON. The API's process is found by its port, or given with `--api-pid`.
 
-On an Apple M4 with 10 cores and 16 GB, against a fresh database on the same machine, release builds, in October 2026. Other agents were working on the machine at the same time (load average 4 to 6), so take the figures as an order of magnitude.
+On an Apple M4 with 10 cores and 16 GB, with PostgreSQL 17 on the same machine, release builds, in October 2026, against a database that already held 6,250 exchanges from earlier runs. Other agents were working on the machine at the same time (load average 2 to 6 across the runs), so take the figures as an order of magnitude.
 
 | | 50 pairs, 10 at once | 200 pairs, 25 at once |
 |---|---|---|
-| Requests | 1,550 in 0.6 s, 2,650 a second | 6,200 in 1.5 s, 4,090 a second |
+| Requests | 1,550 in 0.4 s, 3,470 a second | 6,200 in 1.2 s, 4,970 a second |
 | Errors | none | none |
-| Slowest p95 | 40 ms, creating an exchange (the first loads the list of timezones) | 17 ms, sending a revision |
-| Every other p95 | 22 ms or less | 14 ms or less |
-| API peak resident memory | 12.5 MB | 16.7 MB |
-| Database connections, peak | 13 open, none waiting on a lock or idle in a transaction | 14 open, none waiting on a lock or idle in a transaction |
-| Notifications queued, and sent | 500, all sent 2.7 s after the run | 2,000, all sent 3.7 s after the run |
+| Slowest p95 | 33 ms, creating an exchange (the first loads the list of timezones) | 15 ms, signing in |
+| Every other p95 | 21 ms or less | 13 ms or less |
+| API peak resident memory | 12.8 MB | 16.6 MB |
+| Database connections, peak | 13 open, none waiting on a lock or idle in a transaction | 13 open, none waiting on a lock or idle in a transaction |
+| Notifications queued, and sent | 500, all sent 4.5 s after the run | 2,000, all sent 3.8 s after the run |
 
-The per-endpoint p95 at 200 pairs, in milliseconds: sending a revision 17.4, requesting a code 14.1, signing in 13.9, a command 13.5, claiming 11.8, the profile 10.6, reading an exchange 9.7, previewing 8.3, the record 8.2, creating an exchange 7.2, saving a working copy 6.4, the history 6.2, the list 5.0.
+The per-endpoint p95 at 200 pairs, in milliseconds: signing in 15.1, requesting a code 13.4, sending a revision 11.9, claiming 9.0, a command 8.6, the profile 8.0, creating an exchange 7.0, the record 6.8, reading an exchange 6.3, the list 5.0, saving a working copy 4.9, previewing 4.9, the history 4.7. The notifications are sent within a tick of five seconds, so the time to send them depends on where in the tick the run ends.
 
 What the first runs found, and what was done:
 
