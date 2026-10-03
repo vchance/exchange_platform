@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { languages } from '@yuppers/shared'
+import { languages, timeZoneCity } from '@yuppers/shared'
 import { formattedWords, pseudoWording, untranslated } from '@yuppers/shared/testing/pseudo'
 import { afterEach, describe, expect, test } from 'vitest'
 
@@ -39,6 +39,8 @@ const pseudo = pseudoWording()
 const ALLOWED = [
   ...STAND_IN_TEXT,
   ...formattedWords('en', ['America/Chicago']),
+  // The exchange's time zone by its city, beside a due date for a device elsewhere.
+  timeZoneCity('America/Chicago'),
   ...languages.flatMap((language) => [language.name, language.code]),
 ]
 

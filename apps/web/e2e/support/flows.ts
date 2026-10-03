@@ -21,6 +21,8 @@ export interface ItemSpec {
   description: string
   /** For money, in the exchange's currency, as typed. */
   amount?: string
+  /** A due date, `YYYY-MM-DD`; due on signing unless given. */
+  due?: string
 }
 
 const UUID = /\/exchanges\/([0-9a-f-]{36})$/
@@ -97,6 +99,10 @@ export async function addItems(page: Page, items: readonly ItemSpec[]): Promise<
     await fieldset.getByLabel(en.composer.descriptionLabel).fill(item.description)
     if (item.kind === 'MONEY') {
       await fieldset.getByLabel(/^Amount in /).fill(item.amount ?? '10')
+    }
+    if (item.due) {
+      await fieldset.getByLabel(en.composer.dueLabel).selectOption('DATE')
+      await fieldset.getByLabel(en.composer.dateLabel).fill(item.due)
     }
   }
 }

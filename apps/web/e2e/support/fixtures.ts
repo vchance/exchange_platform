@@ -26,6 +26,8 @@ interface PersonOptions {
   locale?: string
   /** The window's size, in CSS pixels. Playwright's desktop default unless given. */
   viewport?: { width: number; height: number }
+  /** The device's time zone. UTC unless given. */
+  timezoneId?: string
 }
 
 interface Fixtures {
@@ -46,7 +48,7 @@ export const test = base.extend<Fixtures>({
         baseURL,
         locale: options.locale ?? 'en-US',
         ...(options.viewport ? { viewport: options.viewport } : {}),
-        timezoneId: 'UTC',
+        timezoneId: options.timezoneId ?? 'UTC',
         permissions: ['clipboard-read', 'clipboard-write'],
       })
       contexts.push(context)

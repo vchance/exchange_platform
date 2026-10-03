@@ -55,11 +55,16 @@ function checker(page: Page) {
 }
 
 test('the main screens fit a 320-pixel window in Spanish', async ({ person }) => {
-  const ana = await person('Ana')
-  const carlos = await person('Carlos Domínguez', { locale: 'es-ES', viewport: NARROW })
+  // In different time zones, so each due date names Ana's beside it.
+  const ana = await person('Ana', { timezoneId: 'America/Los_Angeles' })
+  const carlos = await person('Carlos Domínguez', {
+    locale: 'es-ES',
+    viewport: NARROW,
+    timezoneId: 'America/Mexico_City',
+  })
   await signUp(ana)
   const { id, link } = await propose(ana, carlos, [
-    { from: 'me', kind: 'ITEM', description: 'Una mesa de roble' },
+    { from: 'me', kind: 'ITEM', description: 'Una mesa de roble', due: '2030-03-12' },
     { from: 'them', kind: 'MONEY', description: 'El pago por la mesa', amount: '120' },
   ])
 
@@ -70,6 +75,7 @@ test('the main screens fit a 320-pixel window in Spanish', async ({ person }) =>
   await page.goto(link.replace('/en/i#', '/es/i#'))
   await expect(page.getByRole('heading', { name: es.invitation.title, level: 1 })).toBeVisible()
   await expect(page.locator('.terms')).toBeVisible()
+  await expect(page.getByText('Vence el 12 de marzo de 2030 (hora de Los Angeles)')).toBeVisible()
   await check('the invitation')
   await page.getByRole('button', { name: es.invitation.respond }).click()
   await expect(page.getByLabel(es.signIn.identifierLabel)).toBeVisible()
