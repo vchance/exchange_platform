@@ -79,15 +79,33 @@ async fn database(name: &'static str) -> &'static (String, String) {
         let name = &format!("{name}_{}", checkout_tag());
         let owner_url = env("MIGRATION_DATABASE_URL");
         let admin = connect(&owner_url).await;
-        for statement in [
-            format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"),
-            format!("CREATE DATABASE {name}"),
-        ] {
-            sqlx::query(sqlx::AssertSqlSafe(statement))
+        // A run that has just ended may still be closing its application
+        // connections to the database. The schema owner may not end another
+        // role's connections, so `FORCE` is refused until they are gone,
+        // which takes moments: running a test many times in a row would
+        // otherwise fail now and then before the test even starts.
+        let drop = format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)");
+        for tries_left in (0..50).rev() {
+            match sqlx::query(sqlx::AssertSqlSafe(drop.clone()))
                 .execute(&admin)
                 .await
-                .expect("the schema owner can create databases (ALTER ROLE exchange CREATEDB)");
+            {
+                Ok(_) => break,
+                Err(error)
+                    if tries_left > 0
+                        && error
+                            .as_database_error()
+                            .is_some_and(|e| e.code().as_deref() == Some("42501")) =>
+                {
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+                Err(error) => panic!("the schema owner can drop its test database: {error}"),
+            }
         }
+        sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {name}")))
+            .execute(&admin)
+            .await
+            .expect("the schema owner can create databases (ALTER ROLE exchange CREATEDB)");
         admin.close().await;
 
         let owner_url = with_database(&owner_url, name);

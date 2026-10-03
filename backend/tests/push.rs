@@ -167,9 +167,16 @@ fn delivery(sender: Option<Arc<dyn PushSender>>) -> PushDelivery {
     }
 }
 
-/// A moment by which everything queued so far is due.
+/// A moment by which everything queued so far is due, in whole
+/// microseconds. The database keeps time to the microsecond, and a time is
+/// cut to it on the way in, not rounded: a retry time stored from a moment
+/// with nanoseconds can read back up to a microsecond earlier than that
+/// moment plus the wait, and a test comparing the two would fail now and
+/// then. From a whole microsecond, what is stored is exactly what was meant.
 fn soon() -> OffsetDateTime {
-    OffsetDateTime::now_utc() + Duration::seconds(5)
+    let at = OffsetDateTime::now_utc() + Duration::seconds(5);
+    at.replace_nanosecond(at.microsecond() * 1_000)
+        .expect("a whole microsecond is a valid time")
 }
 
 async fn push_due(app: &App, delivery: &PushDelivery, at: OffsetDateTime) -> PushDelivered {
