@@ -57,13 +57,23 @@ async fn main() -> anyhow::Result<()> {
                 // pass.
                 match outbox::deliver_due(&db, &delivery, OffsetDateTime::now_utc()).await {
                     Ok(delivered) if delivered.is_empty() => {}
-                    Ok(delivered) => tracing::info!(
-                        sent = delivered.sent,
-                        failed = delivered.failed,
-                        given_up = delivered.given_up,
-                        dropped = delivered.dropped,
-                        "notifications delivered"
-                    ),
+                    Ok(delivered) => {
+                        tracing::info!(
+                            sent = delivered.sent,
+                            failed = delivered.failed,
+                            given_up = delivered.given_up,
+                            dropped = delivered.dropped,
+                            "notifications delivered"
+                        );
+                        // A full batch means more are waiting. Go round again
+                        // now rather than a tick later, so a burst drains as
+                        // fast as it can be sent instead of one batch per
+                        // tick (README, "Load check"). The timers still run
+                        // first on every round.
+                        if delivered.handled() >= delivery.rules.batch {
+                            ticker.reset_immediately();
+                        }
+                    }
                     Err(error) => tracing::error!(%error, "notification delivery failed"),
                 }
             }
