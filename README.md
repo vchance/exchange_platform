@@ -136,6 +136,47 @@ What remains, as of October 2026. Every package here is already at the newest ve
 
 Both long-running binaries stop cleanly on `Ctrl-C` and on `SIGTERM`, which is what a container runtime or service manager sends.
 
+### Load check
+
+`scripts/load-check.mjs` takes pairs of people through a whole exchange over HTTP against a running `api` and `worker`, many pairs at once. Each pair signs in with the codes the API writes to its log, gives names and confirms ages; the initiator saves a working copy and sends a revision with three contributions; the counterparty previews and claims the invitation and accepts; the initiator confirms them; each marks one contribution delivered and the other confirms it; the initiator proposes ending with the third outstanding and the counterparty agrees; and each reads the exchange, its history, its record and their list. It reports per endpoint the count, p50, p95 and p99 latency and errors, then the throughput, the API's peak resident memory, the connections and lock waits it saw in `pg_stat_activity` (sampled a few times a second, so a short wait can be missed), and how long the worker took to send the notifications the run queued.
+
+Every person is a new account and every initiator makes one exchange, so the per-account limits are never approached: one code per address against `codes_per_hour`, one exchange per initiator against `exchanges_per_day`, one invitation per exchange, and at most six changes by one party to one exchange in a minute against `changes_per_minute`.
+
+It writes agreement history, which cannot be deleted, so give it a database of its own. With `.env` pointing there and `CODE_DELIVERY=log`, `NOTIFICATION_DELIVERY=log`:
+
+```sh
+cargo build --release --manifest-path backend/Cargo.toml --bins
+./backend/target/release/migrate
+./backend/target/release/api > api.log 2>&1 &
+./backend/target/release/worker > worker.log 2>&1 &
+node scripts/load-check.mjs --pairs 200 --concurrency 25 --base-url http://127.0.0.1:8080 \
+  --api-log api.log --database-url postgres://exchange:exchange@127.0.0.1:5432/exchange_load
+```
+
+`--database-url` is only read from, for the connection and outbox figures; give the schema owner's, which sees every connection's state, and set `PSQL` if `psql` is not on the path. `--json` prints the report as JSON. The API's process is found by its port, or given with `--api-pid`.
+
+On an Apple M4 with 10 cores and 16 GB, against a fresh database on the same machine, release builds, in October 2026. Other agents were working on the machine at the same time (load average 4 to 6), so take the figures as an order of magnitude.
+
+| | 50 pairs, 10 at once | 200 pairs, 25 at once |
+|---|---|---|
+| Requests | 1,550 in 0.6 s, 2,650 a second | 6,200 in 1.5 s, 4,090 a second |
+| Errors | none | none |
+| Slowest p95 | 40 ms, creating an exchange (the first loads the list of timezones) | 17 ms, sending a revision |
+| Every other p95 | 22 ms or less | 14 ms or less |
+| API peak resident memory | 12.5 MB | 16.7 MB |
+| Database connections, peak | 13 open, none waiting on a lock or idle in a transaction | 14 open, none waiting on a lock or idle in a transaction |
+| Notifications queued, and sent | 500, all sent 2.7 s after the run | 2,000, all sent 3.7 s after the run |
+
+The per-endpoint p95 at 200 pairs, in milliseconds: sending a revision 17.4, requesting a code 14.1, signing in 13.9, a command 13.5, claiming 11.8, the profile 10.6, reading an exchange 9.7, previewing 8.3, the record 8.2, creating an exchange 7.2, saving a working copy 6.4, the history 6.2, the list 5.0.
+
+What the first runs found, and what was done:
+
+- **Creating an exchange** was the slowest request by far (p95 199 ms at 25 at once). Checking the timezone read PostgreSQL's whole timezone database each time; the list is now read once per process.
+- **The outbox** drained at one batch of 100 per five-second tick: 2,000 notifications took 94 s to send, though a batch took under 50 ms. The worker now goes round again at once after a full batch.
+- **Three queries read the whole `exchange` table**: the per-account count on every creation and two of the worker's timers on every pass. Migration `0009_load_indexes` indexes them.
+- **Nothing grew with the data.** After 4,000 more pairs (4,450 exchanges, 49,000 events), a 200-pair run's p50 for the list, the history and the record was within a millisecond of the run on an empty database (3.4, 3.8 and 6.2 ms), and their p95 within 8 ms, about the spread between two runs on this machine. Their plans, and the worker's, are index scans that read only the exchange or the rows asked for. No lock waits and no connection idle in a transaction were seen in any run, and the API's pool of 10 connections served 25 at once without an error.
+- **One run stalled**: 200 pairs took 16 s, with every endpoint's p95 between 200 and 470 ms. It ran straight after the 4,000-pair fill, while autovacuum went through every table and other tests forced a checkpoint on the shared server, at a load average of 10. The six runs after it, two of them while the worker was sending a backlog of several thousand, were normal.
+
 ## Deploying
 
 Nothing in the service assumes a particular host. A deployment is a PostgreSQL database, one container image (or the three binaries) and a handful of settings; `.env.example` documents every setting with its default, and the processes refuse to start without the required ones.
