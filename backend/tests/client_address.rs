@@ -2,6 +2,9 @@
 //! §13.4): the connection's peer, unless the deployment names a proxy header
 //! to believe. Every request the test helpers make arrives from
 //! `common::PEER`.
+//!
+//! The tests take turns: one purges every address recorded in the database,
+//! which would race the others' checks of what was recorded.
 
 mod common;
 
@@ -19,6 +22,8 @@ use uuid::Uuid;
 
 const DATABASE: &str = "exchange_test_client_address";
 const SPOOFED: &str = "203.0.113.7, 10.0.0.2";
+
+static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// The addresses recorded with an exchange's signatures, oldest first.
 async fn recorded(app: &App, exchange: &str) -> Vec<Option<String>> {
@@ -65,6 +70,7 @@ async fn accept_with_header(app: &App, deal: &Deal) {
 
 #[tokio::test]
 async fn by_default_the_peer_is_recorded_and_a_forwarding_header_is_ignored() {
+    let _turn = TURN.lock().await;
     let app = App::start(DATABASE).await;
 
     // Ana signs by sending, Ben by accepting.
@@ -83,6 +89,7 @@ async fn by_default_the_peer_is_recorded_and_a_forwarding_header_is_ignored() {
 
 #[tokio::test]
 async fn behind_trusted_proxies_the_address_comes_from_the_header() {
+    let _turn = TURN.lock().await;
     let app = App::start_behind(
         DATABASE,
         Rules::default(),
@@ -106,6 +113,7 @@ async fn behind_trusted_proxies_the_address_comes_from_the_header() {
 
 #[tokio::test]
 async fn the_address_is_forgotten_after_the_retention_period_and_the_signature_kept() {
+    let _turn = TURN.lock().await;
     let app = App::start(DATABASE).await;
     let deal = app.active().await;
     let exchange = deal.exchange.parse::<Uuid>().unwrap();
