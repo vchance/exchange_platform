@@ -135,6 +135,68 @@ jobs:
         if: ${{ !cancelled() }}
         run: npm run build:web
 
+  # The mobile app's native configuration, checked before anyone builds it:
+  # Expo's own checks of the dependencies and the app config, and the iOS and
+  # Android projects generated from that config (as an EAS build would) into
+  # a directory that is thrown away. No Expo, Apple or Google account is
+  # involved and nothing is built or signed.
+  mobile-config:
+    name: Mobile app config
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Expo doctor
+        working-directory: apps/mobile
+        run: npx expo-doctor
+
+      # A copy of the app beside the installed packages, so nothing generated
+      # lands in the checkout. With a web origin on HTTPS, so the universal
+      # and app links are generated too (app.config.ts).
+      - name: Generate the native projects
+        if: ${{ !cancelled() }}
+        env:
+          CI: "1"
+          EXPO_PUBLIC_WEB_URL: https://yuppers.example
+        run: |
+          out="$RUNNER_TEMP/prebuild"
+          mkdir -p "$out"
+          rsync -a --exclude node_modules apps/mobile/ "$out/"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$out/node_modules"
+          cd "$out"
+          npx expo prebuild --no-install --platform ios
+          npx expo prebuild --no-install --platform android
+          manifest=android/app/src/main/AndroidManifest.xml
+          # What the config says, as the native projects have it.
+          grep --quiet 'applinks:yuppers.example' ios/*/*.entitlements
+          grep --quiet 'NSPrivacyAccessedAPICategoryFileTimestamp' ios/*/PrivacyInfo.xcprivacy
+          grep --quiet 'android:autoVerify="true"' "$manifest"
+          grep --quiet 'android:host="yuppers.example"' "$manifest"
+          for permission in READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE SYSTEM_ALERT_WINDOW VIBRATE; do
+            grep --quiet "android.permission.$permission\" tools:node=\"remove\"" "$manifest" \
+              || { echo "::error::$permission is not removed"; exit 1; }
+          done
+          # The development client's local network string is the only one, and
+          # release builds strip it; anything else is a permission to explain.
+          extra="$(grep --only-matching --no-filename 'NS[A-Za-z]*UsageDescription' ios/*/Info.plist | grep --invert-match '^NSLocalNetworkUsageDescription$' || true)"
+          if [ -n "$extra" ]; then
+            echo "::error::new iOS permission strings: $extra. Explain them in docs/mobile-release.md and update this check."
+            exit 1
+          fi
+
+      - name: Discard the native projects
+        if: ${{ always() }}
+        run: rm -rf "$RUNNER_TEMP/prebuild"
+
   # Builds the image the Dockerfile describes and runs the whole stack from
   # docker-compose.yml, as a deployment would: the database, the migrations,
   # the API serving the web app, and the worker. Its own job, beside the two
@@ -187,6 +249,9 @@ jobs:
           check '200 application/json' '%{http_code} %{content_type}' http://127.0.0.1:8080/v1/meta
           check '200 text/html' '%{http_code} %{content_type}' http://127.0.0.1:8080/exchanges/some-id
           check '404' '%{http_code}' http://127.0.0.1:8080/v1/nothing
+          # No app named, so no app link files, and never the app's page in their place.
+          check '404 application/json' '%{http_code} %{content_type}' http://127.0.0.1:8080/.well-known/apple-app-site-association
+          check '404 application/json' '%{http_code} %{content_type}' http://127.0.0.1:8080/.well-known/assetlinks.json
           curl --silent --fail http://127.0.0.1:8080/es/i | grep --quiet 'lang="es"'
           curl --silent --fail http://127.0.0.1:8080/en/i | grep --quiet 'lang="en"'
           curl --silent --fail --head http://127.0.0.1:8080/ | grep --ignore-case --quiet '^x-frame-options: DENY'
