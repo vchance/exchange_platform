@@ -34,6 +34,7 @@ All three come from the same image: the `api` is its default command, the other 
    - `WEB_ORIGIN`: the public HTTPS origin, such as `https://app.example.com`, without a trailing slash. Cookie sessions are honored only from it, emails link into it, and because it is HTTPS every response carries HSTS.
    - `CODE_DELIVERY=smtp`, `NOTIFICATION_DELIVERY=smtp`, and `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS` (`tls` for port 465, `starttls` for 587), `SMTP_FROM`. The sending domain needs the provider's SPF and DKIM records, or codes land in spam.
    - `TRUSTED_PROXY_HEADER`: the header the proxy in front of the API sets to the client's address, and `TRUSTED_PROXIES` if more than one proxy appends to `X-Forwarded-For`. Without it every signature records the proxy's address (`DESIGN.md` §8) and the per-address sign-in limits count every person as one. Name a header only if the proxy always sets it and clients cannot reach the API around the proxy; otherwise a client can choose its own address.
+   - The `SIGN_IN_*` limits only if the placeholders in `.env.example` do not suit (README, "Deploying").
    - `LOG_FORMAT=json` if a log collector reads the output; `RUST_LOG` stays `info`.
    - `METRICS_ADDR=0.0.0.0:9100` on the api and the worker, if something will scrape them (below).
 

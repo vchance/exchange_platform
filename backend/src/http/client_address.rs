@@ -12,6 +12,8 @@
 
 use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::extract::{ConnectInfo, FromRequestParts};
 use axum::http::request::Parts;
@@ -28,6 +30,11 @@ pub struct TrustedProxies {
 }
 
 impl TrustedProxies {
+    /// Whether a proxy header is trusted at all.
+    pub fn trusts_a_header(&self) -> bool {
+        self.header.is_some()
+    }
+
     /// No proxy: the peer of the connection is the client.
     pub fn none() -> Self {
         Self {
@@ -55,7 +62,9 @@ impl TrustedProxies {
     /// header itself is further left and never reached. A header shorter
     /// than that was written entirely by trusted proxies, so its first entry
     /// is taken. A header that is missing or unreadable, which a trusted
-    /// proxy never sends, falls back to the peer.
+    /// proxy never sends, falls back to the peer, which is the proxy: every
+    /// such request is then counted as one requester, so it is logged as a
+    /// warning, at most about once a minute.
     pub fn client_address(&self, peer: Option<IpAddr>, headers: &HeaderMap) -> Option<IpAddr> {
         let Some(header) = &self.header else {
             return peer;
@@ -69,11 +78,43 @@ impl TrustedProxies {
             .filter(|entry| !entry.is_empty())
             .collect();
         let index = entries.len().saturating_sub(self.count);
-        entries
-            .get(index)
-            .and_then(|entry| parse_address(entry))
-            .or(peer)
+        let found = entries.get(index).and_then(|entry| parse_address(entry));
+        if found.is_none() && time_to_warn(&LAST_WARNING, now_seconds()) {
+            tracing::warn!(
+                header = header.as_str(),
+                present = !entries.is_empty(),
+                "the trusted proxy header is missing or unreadable, so the proxy's own address \
+                 is taken as the requester's; requests like this share one sign-in limit \
+                 (check TRUSTED_PROXY_HEADER and TRUSTED_PROXIES)"
+            );
+        }
+        found.or(peer)
     }
+}
+
+/// When the last warning about an unusable proxy header was logged, in
+/// seconds since the epoch.
+static LAST_WARNING: AtomicU64 = AtomicU64::new(0);
+
+/// How often that warning may be logged: once is enough to be noticed, and
+/// one per request would bury everything else.
+const WARNING_INTERVAL_SECONDS: u64 = 60;
+
+fn now_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs())
+}
+
+/// Whether to warn now, given when the last warning was. Claims the moment,
+/// so of requests arriving together only one warns.
+fn time_to_warn(last: &AtomicU64, now: u64) -> bool {
+    let before = last.load(Ordering::Relaxed);
+    if before != 0 && now.saturating_sub(before) < WARNING_INTERVAL_SECONDS {
+        return false;
+    }
+    last.compare_exchange(before, now.max(1), Ordering::Relaxed, Ordering::Relaxed)
+        .is_ok()
 }
 
 /// Reads an address as proxies write them: `203.0.113.7`, `2001:db8::7`,
@@ -118,6 +159,16 @@ mod tests {
     use super::*;
 
     const PEER: IpAddr = IpAddr::V4(std::net::Ipv4Addr::new(10, 0, 0, 1));
+
+    #[test]
+    fn the_warning_about_an_unusable_header_comes_at_most_once_a_minute() {
+        let last = AtomicU64::new(0);
+        assert!(time_to_warn(&last, 1_000));
+        assert!(!time_to_warn(&last, 1_000));
+        assert!(!time_to_warn(&last, 1_059));
+        assert!(time_to_warn(&last, 1_060));
+        assert!(!time_to_warn(&last, 1_061));
+    }
     const CLIENT: IpAddr = IpAddr::V4(std::net::Ipv4Addr::new(203, 0, 113, 7));
 
     fn headers(pairs: &[(&'static str, &str)]) -> HeaderMap {

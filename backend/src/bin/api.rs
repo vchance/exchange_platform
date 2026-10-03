@@ -2,7 +2,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
-use exchange_backend::auth::AuthRules;
 use exchange_backend::config::ApiConfig;
 use exchange_backend::domain::Rules;
 use exchange_backend::http::{self, AppState, Settings, WebApp};
@@ -14,13 +13,20 @@ use exchange_backend::{db, shutdown, telemetry};
 async fn main() -> anyhow::Result<()> {
     telemetry::init()?;
     let config = ApiConfig::from_env()?;
+    if !config.proxies.trusts_a_header() {
+        tracing::warn!(
+            "TRUSTED_PROXY_HEADER is not set, so each connection's peer is taken as the \
+             requester; behind a reverse proxy or CDN every user then shares the proxy's \
+             address and its sign-in limits. Name the proxy's header if there is one."
+        );
+    }
 
     let state = AppState {
         db: db::pool(&config.database_url)?,
         settings: Arc::new(Settings {
             app_secret: config.app_secret,
             web_origin: config.web_origin,
-            auth: AuthRules::default(),
+            auth: config.auth,
             rules: Rules::default(),
             // A stand-in until counsel-approved consent wording exists
             // (DESIGN.md §14.1); the real version replaces it then.

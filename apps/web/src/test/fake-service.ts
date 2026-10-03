@@ -14,6 +14,9 @@ export const OFFER = '7e2f3a4b-5c6d-4e7f-8a9b-0c1d2e3f4a5b'
 export const REPAIR = '11111111-1111-4111-8111-111111111111'
 export const PAYMENT = '22222222-2222-4222-8222-222222222222'
 export const INVITATION = 'a3'.repeat(32)
+/** A second invitation, to another proposal, whose preview carries its own reference. */
+export const OTHER_INVITATION = 'b4'.repeat(32)
+export const OTHER_INVITATION_CODE = 'OTHR-5K8P'
 /** The one code the stand-in accepts. */
 export const GOOD_CODE = '123456'
 
@@ -326,11 +329,12 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
   }
   if (call === 'POST /v1/invitations/preview') {
     const offer = offerExchange()
+    const { token } = body as { token?: string }
     return [
       200,
       {
         bound: false,
-        display_code: offer.display_code,
+        display_code: token === OTHER_INVITATION ? OTHER_INVITATION_CODE : offer.display_code,
         expires_at: revision.expires_at,
         currency: offer.currency,
         timezone: offer.timezone,

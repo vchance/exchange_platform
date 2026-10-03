@@ -33,6 +33,16 @@ export const webDir = resolve(process.env.E2E_WEB_DIR ?? resolve(webRoot, 'dist'
 export const apiLog = resolve(process.env.E2E_API_LOG ?? resolve(webRoot, 'e2e/.output/api.log'))
 mkdirSync(dirname(apiLog), { recursive: true })
 
+/**
+ * Sign-in limits per network address, high enough that a whole run, and the
+ * runs before it within the hour, never reach them from the one address
+ * they all share. CI starts its API with the same values.
+ */
+export const signInLimits = {
+  SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR: '1000000',
+  SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR: '1000000',
+}
+
 /** The settings every API process the tests start runs with, beside the database from `.env`. */
 export function apiEnvironment(listenPort: number): Record<string, string> {
   return {
@@ -43,10 +53,10 @@ export function apiEnvironment(listenPort: number): Record<string, string> {
     NOTIFICATION_DELIVERY: 'log',
     RUST_LOG: 'info',
     // Every browser here connects from 127.0.0.1, and sign-in is limited per
-    // requester's address. As behind a proxy, the service takes the address
-    // from this header instead, and each person sends one of their own
-    // (support/fixtures.ts).
-    TRUSTED_PROXY_HEADER: 'X-Forwarded-For',
+    // requester's address, so those limits are raised out of the way. The
+    // per-identifier limits stay as they are: every person has an address
+    // of their own.
+    ...signInLimits,
     // Plain lines, so the codes can be read back.
     NO_COLOR: '1',
   }

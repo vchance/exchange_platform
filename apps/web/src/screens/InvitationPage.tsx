@@ -4,7 +4,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { isComplete, useI18n, useSession } from '../app/context'
 import { Link } from '../app/Link'
 import { navigate } from '../app/router'
-import { paths } from '../app/routes'
+import { invitationToken, paths } from '../app/routes'
 import { TermsView } from '../components/TermsView'
 import { ErrorNote, Failure, PageHeading, Written } from '../components/ui'
 import { useAnnouncement } from '../lib/announce'
@@ -19,14 +19,33 @@ const AccountSetup = lazy(() => import('./AccountSetup'))
  * in or installing anything; responding to it means signing in and claiming
  * the invitation, which takes the invited party's place in the exchange
  * (DESIGN.md §8). Reading claims nothing.
+ *
+ * A second link pasted into a tab already showing this page changes only
+ * the fragment, so the browser does not load the page again. The token is
+ * taken again then, and a different one shows its own proposal from the
+ * start, with nothing kept from the one before.
  */
 export function InvitationPage() {
+  // Taking the token also removes it from the address bar.
+  const [token, setToken] = useState(takeInvitationToken)
+  useEffect(() => {
+    const taken = () => {
+      // A fragment that is not a token, or no fragment at all, leaves the
+      // page as it is: taking the token is what emptied it.
+      if (!invitationToken(window.location.hash)) return
+      setToken(takeInvitationToken())
+    }
+    window.addEventListener('hashchange', taken)
+    return () => window.removeEventListener('hashchange', taken)
+  }, [])
+  return <Invitation key={token ?? ''} token={token} />
+}
+
+function Invitation({ token }: { token: string | null }) {
   const { wording, fmt, moment } = useI18n()
   const { account, ready, setAccount } = useSession()
   const w = wording.invitation
 
-  // Read once: taking the token also removes it from the address bar.
-  const [token] = useState(takeInvitationToken)
   const [preview, setPreview] = useState<InvitationPreview | null>(null)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [spent, setSpent] = useState(false)
@@ -63,18 +82,18 @@ export function InvitationPage() {
   useEffect(() => {
     if (!spent || !ready || !token) return
     if (!able) {
-      forgetInvitationToken()
+      forgetInvitationToken(token)
       return
     }
     if (claiming.current) return
     claiming.current = true
     api.claimInvitation(token).then(
       (exchange) => {
-        forgetInvitationToken()
+        forgetInvitationToken(token)
         navigate(paths.exchange(exchange.id), { replace: true })
       },
       (error: unknown) => {
-        forgetInvitationToken()
+        forgetInvitationToken(token)
         claiming.current = false
         setFailure(failureCode(error))
       },
@@ -87,12 +106,12 @@ export function InvitationPage() {
     claiming.current = true
     api.claimInvitation(token).then(
       (exchange) => {
-        forgetInvitationToken()
+        forgetInvitationToken(token)
         navigate(paths.exchange(exchange.id), { replace: true })
       },
       (error: unknown) => {
         const code = failureCode(error)
-        if (code === 'INVITATION_UNAVAILABLE') forgetInvitationToken()
+        if (code === 'INVITATION_UNAVAILABLE') forgetInvitationToken(token)
         claiming.current = false
         setResponding(false)
         setFailure(code)

@@ -37,9 +37,13 @@ export function takeInvitationToken(): string | null {
   return fromLink
 }
 
-export function forgetInvitationToken(): void {
+/**
+ * Forgets `token`, unless another link has taken its place in this tab since:
+ * an answer about the old one can arrive after the new one was opened.
+ */
+export function forgetInvitationToken(token: string): void {
   try {
-    window.sessionStorage.removeItem(KEY)
+    if (window.sessionStorage.getItem(KEY) === token) window.sessionStorage.removeItem(KEY)
   } catch {
     // Nothing was stored.
   }
