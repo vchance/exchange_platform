@@ -48,7 +48,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Sends a one-time code to an email address or phone number. Answers the\nsame way whether or not an account exists for it.",
+        "summary": "Sends a one-time code to an email address or phone number. Answers the\nsame way whether or not an account exists for it. Codes sent earlier keep\nworking until they expire, up to the newest few.",
         "operationId": "request_code",
         "requestBody": {
           "content": {
@@ -75,7 +75,7 @@
             }
           },
           "429": {
-            "description": "Too many codes requested",
+            "description": "Too many codes requested for this identifier, or from this address",
             "content": {
               "application/json": {
                 "schema": {
@@ -161,6 +161,16 @@
           },
           "422": {
             "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or from this address this hour (`TOO_MANY_REQUESTS`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1424,6 +1434,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Too many wrong deletion codes from this account today",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -1433,7 +1453,7 @@
         "tags": [
           "deletion"
         ],
-        "summary": "Sends a one-time code for deleting the account to its own email address\nor phone number. The code is good for that and nothing else.",
+        "summary": "Sends a one-time code for deleting the account to its own email address\nor phone number. The code is good for that and nothing else. Requests are\ncounted against the account, apart from sign-in codes, so nobody asking\nfor sign-in codes for the same address can use them up.",
         "operationId": "request_deletion_code",
         "requestBody": {
           "content": {
@@ -1470,7 +1490,7 @@
             }
           },
           "429": {
-            "description": "Too many codes requested",
+            "description": "Too many deletion codes requested by this account",
             "content": {
               "application/json": {
                 "schema": {
@@ -1532,6 +1552,16 @@
           },
           "422": {
             "description": "Not an email address or phone number",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many wrong codes for this identifier today (`TOO_MANY_GUESSES`), or from this address this hour (`TOO_MANY_REQUESTS`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2296,6 +2326,7 @@
           "INVALID_IDENTIFIER",
           "INVALID_CODE",
           "TOO_MANY_REQUESTS",
+          "TOO_MANY_GUESSES",
           "UNAUTHENTICATED",
           "ACCOUNT_SUSPENDED",
           "IDENTIFIER_IN_USE",

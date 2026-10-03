@@ -195,6 +195,7 @@ function StatementPanel(props: StatementPanelProps) {
       <TextField
         label={props.label}
         hint={wording.exchange.noteRecord}
+        required={props.required}
         error={missing ? wording.exchange.noteRequired : null}
         multiline
         maxLength={NOTE_MAX_CHARS}

@@ -33,6 +33,6 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['src/**/*.test.ts', 'build/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'build/**/*.test.ts'],
   },
 })

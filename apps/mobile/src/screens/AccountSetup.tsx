@@ -152,6 +152,7 @@ function SignIn() {
         <TextField
           label={w.identifierLabel}
           hint={w.identifierHint}
+          required
           inputMode="email"
           autoCapitalize="none"
           autoCorrect={false}
@@ -189,6 +190,7 @@ function SignIn() {
         input={codeInput}
         label={w.codeLabel}
         hint={w.codeHint}
+        required
         inputMode="numeric"
         autoComplete="one-time-code"
         textContentType="oneTimeCode"
@@ -272,6 +274,7 @@ export function ProfileForm({ account, first }: { account: Account; first: boole
       <TextField
         label={w.nameLabel}
         hint={w.nameHint}
+        required
         error={checked && nameMissing ? w.nameRequired : null}
         autoComplete="name"
         textContentType="name"

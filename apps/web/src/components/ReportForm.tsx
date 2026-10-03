@@ -9,7 +9,7 @@ import {
 import { useId, useState, type FormEvent } from 'react'
 
 import { useI18n } from '../app/context'
-import { Failure, Field } from './ui'
+import { ErrorNote, Failure, Field } from './ui'
 
 interface Props {
   /** Said before anything is asked: that reports are reviewed, and who is not told. */
@@ -44,17 +44,27 @@ export function ReportForm({ intro, busy, failure, onSend, onCancel }: Props) {
     event.preventDefault()
     setChecked(true)
     if (check.ok) onSend(check.reason, check.details)
+    // The keyboard goes to the first thing to fix, once it has been marked.
+    else if (check.reasonMissing) document.getElementById(`${id}-reason-first`)?.focus()
+    else document.getElementById(`${id}-details`)?.focus()
   }
 
   return (
     <form noValidate onSubmit={submit}>
       <p>{intro}</p>
-      <fieldset aria-describedby={reasonMissing ? `${id}-reason-error` : undefined}>
+      <fieldset
+        role="radiogroup"
+        aria-required
+        aria-invalid={reasonMissing ? true : undefined}
+        aria-describedby={reasonMissing ? `${id}-reason-error` : undefined}
+      >
         <legend>{w.reasonLegend}</legend>
-        {REPORT_REASONS.map((option) => (
+        {REPORT_REASONS.map((option, index) => (
           <label className="check" key={option}>
             <input
               type="radio"
+              id={index === 0 ? `${id}-reason-first` : undefined}
+              aria-describedby={reasonMissing ? `${id}-reason-error` : undefined}
               name={`${id}-reason`}
               value={option}
               checked={reason === option}
@@ -72,6 +82,8 @@ export function ReportForm({ intro, busy, failure, onSend, onCancel }: Props) {
       <Field
         label={explain ? w.detailsRequiredLabel : w.detailsLabel}
         hint={w.detailsHint}
+        id={`${id}-details`}
+        required={explain}
         error={detailsMissing ? w.detailsRequired : null}
       >
         {(control) => (
@@ -86,9 +98,7 @@ export function ReportForm({ intro, busy, failure, onSend, onCancel }: Props) {
       </Field>
       {/* Here the limit is on reports in a day, not on requests in a minute. */}
       {failure === 'TOO_MANY_REQUESTS' ? (
-        <p className="notice notice-error" role="alert">
-          {w.tooManyReports}
-        </p>
+        <ErrorNote>{w.tooManyReports}</ErrorNote>
       ) : (
         <Failure code={failure} />
       )}

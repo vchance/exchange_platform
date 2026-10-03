@@ -685,4 +685,19 @@ export interface Wording {
   }
   /** One entry per error code the API can return. */
   errors: Record<ErrorCode, string>
+  /**
+   * Said only to assistive technology: hints a screen reader reads after a
+   * control's label, and announcements of changes that are otherwise only
+   * seen. Never shown as text on a screen.
+   */
+  a11y: {
+    /** Hint on an exchange in the list, which opens it. */
+    openExchange: string
+    /** Hint on a field that has to be filled in, where the platform has no "required" state. */
+    required: string
+    /** Why the signing button cannot be pressed yet. */
+    signNeedsAgreement: string
+    /** Announced when earlier history has been read in. */
+    earlierAdded: string
+  }
 }

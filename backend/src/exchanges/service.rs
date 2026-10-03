@@ -1,6 +1,8 @@
 //! What the exchange endpoints do: check who is asking, run the domain rules,
 //! and store the result, all in one transaction per request.
 
+use std::collections::HashSet;
+
 use serde_json::Value;
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
@@ -372,6 +374,25 @@ fn display_code() -> String {
     code
 }
 
+/// The timezone names the database knows, read once per process.
+/// `pg_timezone_names` reads the server's whole timezone database each time
+/// it is queried, tens of milliseconds of database time, which made creating
+/// an exchange the slowest request by far (README, "Load check"). The list
+/// changes only when the server's timezone data does.
+static TIMEZONES: tokio::sync::OnceCell<HashSet<String>> = tokio::sync::OnceCell::const_new();
+
+async fn known_timezone(conn: &mut PgConnection, name: &str) -> Result<bool, sqlx::Error> {
+    let names = TIMEZONES
+        .get_or_try_init(|| async {
+            let names: Vec<String> = sqlx::query_scalar("SELECT name FROM pg_timezone_names")
+                .fetch_all(conn)
+                .await?;
+            Ok::<_, sqlx::Error>(names.into_iter().collect())
+        })
+        .await?;
+    Ok(names.contains(name))
+}
+
 pub async fn create(
     db: &PgPool,
     rules: &Rules,
@@ -399,12 +420,7 @@ pub async fn create(
         return Err(ErrorCode::TooManyRequests.into());
     }
 
-    let known_timezone: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = $1)")
-            .bind(&body.timezone)
-            .fetch_one(&mut *tx)
-            .await?;
-    if !known_timezone {
+    if !known_timezone(&mut tx, &body.timezone).await? {
         return Err(ErrorCode::InvalidRequest.into());
     }
 

@@ -168,6 +168,11 @@ impl Delivered {
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
     }
+
+    /// Messages the pass took: sent, failed or closed unsent.
+    pub fn handled(&self) -> usize {
+        self.sent + self.failed + self.dropped
+    }
 }
 
 enum Attempt {

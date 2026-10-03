@@ -799,6 +799,7 @@
     "INVALID_IDENTIFIER": "Escribe un correo electrónico válido o un número de teléfono con su código de país.",
     "INVALID_CODE": "Ese código no funcionó. Revísalo o pide uno nuevo.",
     "TOO_MANY_REQUESTS": "Demasiadas solicitudes en poco tiempo. Espera un momento e inténtalo de nuevo.",
+    "TOO_MANY_GUESSES": "Se han introducido demasiados códigos incorrectos hoy. Por seguridad, no se podrán usar códigos hasta mañana.",
     "UNAUTHENTICATED": "Inicia sesión para continuar.",
     "ACCOUNT_SUSPENDED": "Esta cuenta ha sido suspendida.",
     "IDENTIFIER_IN_USE": "Ese correo electrónico o número de teléfono pertenece a otra cuenta.",
@@ -812,5 +813,11 @@
     "NOT_FOUND": "No pudimos encontrar eso.",
     "SERVICE_UNAVAILABLE": "El servicio no está disponible temporalmente. Inténtalo de nuevo en unos momentos.",
     "INTERNAL": "Algo salió mal de nuestro lado. Inténtalo de nuevo."
+  },
+  "a11y": {
+    "openExchange": "Abre este intercambio.",
+    "required": "Obligatorio.",
+    "signNeedsAgreement": "Disponible cuando confirmes, arriba, que leíste estos términos y los firmas.",
+    "earlierAdded": "{count, plural, one {# entrada anterior agregada al historial.} other {# entradas anteriores agregadas al historial.}}"
   }
 }

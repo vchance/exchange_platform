@@ -156,10 +156,13 @@ function Cards({ exchanges }: { exchanges: readonly ExchangeSummary[] }) {
     const reference = fmt(w.reference, { code: exchange.display_code });
     const updated = fmt(w.updated, { date: moment(exchange.updated_at) });
     return (
-      // One button per exchange; a screen reader reads what is written on it.
+      // One button per exchange, read as one: who it is with, where it
+      // stands, its reference and when it changed, then that it opens.
       <Pressable
         key={exchange.id}
         accessibilityRole="button"
+        accessibilityLabel={[title, state, reference, updated].join('. ')}
+        accessibilityHint={wording.a11y.openExchange}
         onPress={() => router.push(`/exchanges/${exchange.id}`)}
         style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
         <Card>

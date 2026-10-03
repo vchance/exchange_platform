@@ -65,7 +65,7 @@ function Controls({ exchange, otherName, actions, reload }: Props) {
 
       {blocked && outcome !== 'blocked' && <p>{fmt(w.blocked, name)}</p>}
       {outcome && (
-        <p className="notice" role="status" tabIndex={-1} ref={announced}>
+        <p className="notice" tabIndex={-1} ref={announced}>
           {outcome === 'reported' && w.reportSent}
           {outcome === 'blocked' && fmt(w.blocked, name)}
           {outcome === 'unblocked' && fmt(w.unblocked, name)}

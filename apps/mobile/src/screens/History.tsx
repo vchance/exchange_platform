@@ -1,9 +1,11 @@
 import type { ExchangeView as Exchange } from '@exchange/api-client';
 import type { HistoryReading } from '@exchange/shared';
 import { useRouter } from 'expo-router';
+import { useEffect, useRef } from 'react';
 
 import { EventList } from '../components/EventList';
 import { Actions, Button, Failure, Heading, Hint, P } from '../components/ui';
+import { announce } from '../lib/accessibility';
 import { useI18n } from '../lib/context';
 
 interface Props {
@@ -23,10 +25,21 @@ interface Props {
  * agreement, and leads to the full record.
  */
 export function History({ exchange, reading, money }: Props) {
-  const { wording, moment } = useI18n();
+  const { wording, moment, fmt } = useI18n();
   const router = useRouter();
   const w = wording.record;
   const { page, failure, readEarlier, readingEarlier } = reading;
+
+  // Earlier entries arrive above the ones already shown, out of sight of
+  // whoever asked for them, so how many came is said.
+  const before = useRef<number | null>(null);
+  const count = page?.events.length ?? 0;
+  useEffect(() => {
+    if (readingEarlier || before.current === null) return;
+    const added = count - before.current;
+    before.current = null;
+    if (added > 0) announce(fmt(wording.a11y.earlierAdded, { count: added }));
+  }, [readingEarlier, count, fmt, wording.a11y.earlierAdded]);
 
   return (
     <>
@@ -39,7 +52,10 @@ export function History({ exchange, reading, money }: Props) {
           <Button
             label={readingEarlier ? wording.common.loading : w.historyEarlier}
             disabled={readingEarlier}
-            onPress={() => void readEarlier()}
+            onPress={() => {
+              before.current = count;
+              void readEarlier();
+            }}
           />
         </Actions>
       )}

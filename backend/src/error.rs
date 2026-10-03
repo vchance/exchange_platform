@@ -38,8 +38,13 @@ pub enum ErrorCode {
     /// The one-time code is wrong, expired or used up. Deliberately one code
     /// for all three, so a guesser learns nothing.
     InvalidCode,
-    /// Too many one-time codes requested for this identifier.
+    /// Too many requests in a short time: one-time codes asked for, wrong
+    /// codes offered from one network address, or other rate limits.
     TooManyRequests,
+    /// Too many wrong one-time codes for this email address or phone number
+    /// today (or, for deleting an account, by this account). Its codes are
+    /// refused, right or wrong, until the day ends (UTC).
+    TooManyGuesses,
     /// No valid session.
     Unauthenticated,
     AccountSuspended,
@@ -91,7 +96,7 @@ impl From<ErrorCode> for ApiError {
             InvalidCode | Unauthenticated => StatusCode::UNAUTHORIZED,
             WrongActor | AccountSuspended | InvitationNotForYou => StatusCode::FORBIDDEN,
             NotFound | InvitationUnavailable => StatusCode::NOT_FOUND,
-            TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
+            TooManyRequests | TooManyGuesses => StatusCode::TOO_MANY_REQUESTS,
             StaleRevision
             | ActionNotAllowed
             | ContributionLocked

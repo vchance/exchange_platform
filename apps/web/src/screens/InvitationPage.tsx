@@ -6,7 +6,8 @@ import { Link } from '../app/Link'
 import { navigate } from '../app/router'
 import { paths } from '../app/routes'
 import { TermsView } from '../components/TermsView'
-import { Failure, PageHeading, Written } from '../components/ui'
+import { ErrorNote, Failure, PageHeading, Written } from '../components/ui'
+import { useAnnouncement } from '../lib/announce'
 import { api, failureCode, type InvitationPreview } from '../lib/api'
 import { forgetInvitationToken, takeInvitationToken } from '../lib/invitation-token'
 import { InvitationReport } from './InvitationReport'
@@ -52,6 +53,7 @@ export function InvitationPage() {
   }, [token])
 
   const able = account !== null && isComplete(account)
+  useAnnouncement(responding && able ? w.opening : null)
 
   // A link that no longer shows its proposal has usually been used, and
   // people come back to the message it arrived in. Claiming again with the
@@ -118,9 +120,7 @@ export function InvitationPage() {
     <>
       {/* The only refusal a claim gives for this reason is opening one's own link. */}
       {refused === 'ACTION_NOT_ALLOWED' ? (
-        <p className="notice notice-error" role="alert">
-          {w.ownInvitation}
-        </p>
+        <ErrorNote>{w.ownInvitation}</ErrorNote>
       ) : (
         <Failure code={refused} />
       )}
@@ -170,9 +170,7 @@ export function InvitationPage() {
           ) : (
             <p>
               {fmt(
-                able
-                  ? wording.claimant.invitationIntroSignedIn
-                  : wording.claimant.invitationIntro,
+                able ? wording.claimant.invitationIntroSignedIn : wording.claimant.invitationIntro,
                 { name: sender },
               )}
             </p>
@@ -195,6 +193,7 @@ export function InvitationPage() {
               currency={preview.currency}
               timezone={preview.timezone}
               you={null}
+              level={2}
             />
             <p className="hint">{fmt(w.expires, { date: moment(preview.revision.expires_at) })}</p>
           </section>
@@ -202,7 +201,7 @@ export function InvitationPage() {
           {preview.bound && <p>{w.bound}</p>}
           {refusal}
 
-          {responding && able && <p role="status">{w.opening}</p>}
+          {responding && able && <p>{w.opening}</p>}
           {responding && !able && (
             <Suspense fallback={<p>{wording.common.loading}</p>}>
               <AccountSetup headingLevel="h2" />
