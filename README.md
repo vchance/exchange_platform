@@ -121,6 +121,7 @@ None of this replaces trying the apps with VoiceOver, TalkBack, NVDA and a keybo
 | `cargo test` (in `backend/`) | Backend tests: the rules as pure functions, and the database, sign-in and exchange API against a running PostgreSQL. |
 | `cargo run --bin worker` (in `backend/`) | Background worker. |
 | `npm run e2e` | End-to-end tests of the web app in Chromium, against the real API and database (below). |
+| `npm run e2e:mobile` | End-to-end tests of the mobile app's screens in Chromium the size of a phone, through the browser harness, against the real API and database (below). |
 
 ### End-to-end tests
 
@@ -136,14 +137,36 @@ npm run e2e                                                  # builds the API an
 
 Nothing that takes days is tested: a proposal or an invitation expiring, a close request lapsing into a close as unresolved, an exchange closed for inactivity. Those are the worker's timers, and the backend's tests cover them.
 
+### Mobile end-to-end tests
+
+`apps/mobile/e2e` runs the mobile app's screens in Chromium the size of a phone (Playwright's iPhone 15), through the browser harness above, against the real API and a real PostgreSQL database. It is not a device run and does not replace one. As in the web suite, each test signs up its own people with `example.test` addresses and reads their codes from the API's log. The person under test uses the app; the other party acts through the API, as their own app would. The tests cover signing in and the profile, opening an invitation link, reading the terms with the notice that money is paid outside, signing up through it and accepting, marking delivery and confirming it, the list with closed exchanges folded away, the history with its earlier entries, the record and its copy, report and block, deleting an account, and Spanish.
+
+```sh
+npx playwright install chromium                              # once
+cargo run --manifest-path backend/Cargo.toml --bin migrate   # the database the API will use
+npm run e2e:mobile                                           # builds the API, exports the app for the web, runs the tests
+```
+
+`npm run e2e:mobile` exports the app with `npx expo export --platform web` into `apps/mobile/e2e/.output/web`, with the harness proxy's address built in. The tests then start three processes, unless one already answers: the API on `http://127.0.0.1:8103`, the harness proxy on `8203`, and a static server for the export on `5203`; `E2E_MOBILE_API_PORT`, `E2E_MOBILE_PROXY_PORT` and `E2E_MOBILE_WEB_PORT` change them, for the export too. The API's log is `apps/mobile/e2e/.output/api.log` (`E2E_MOBILE_API_LOG`), and the report of the last run is in `apps/mobile/playwright-report`. Every request comes from 127.0.0.1, so, as in the web suite, the API runs with its per-address sign-in limits raised out of the way.
+
+What the harness cannot show, because it only exists on a device:
+
+- **Secure storage.** In the browser the session token is kept in the tab's session storage (`token-store.web.ts`); keeping it in the keychain or keystore is not exercised.
+- **The share sheet.** A record's copy becomes a browser download (`record-sharer.web.ts`). The tests check what the file holds, not the sheet, the copy in the app's cache, or its removal.
+- **Links handed over by the system.** `+native-intent.ts`, which takes an invitation's token out of a link before the router sees it, runs only on a device; in the browser the tests open the link's own address, `/{language}/i#…`, which the app handles too.
+- **The native date picker, the platform's switches and back gesture, screen reader announcements, larger text and less motion, and the narrower `Intl` of Hermes.** The browser has its own of each.
+- **A build too old for the service.** The harness names no client version, so `CLIENT_TOO_OLD` is never reached.
+- **Composing and sending terms in the app.** Not covered yet: in these tests the person who starts an exchange does it through the API.
+
 ## CI
 
-GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Five jobs run side by side:
+GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Six jobs run side by side:
 
 - **Backend and API client**, against a PostgreSQL 17 container with the same two roles as local development: `cargo fmt --check`, `cargo clippy --all-targets` with warnings as errors, `cargo test`, and then `npm run gen:api`, which fails the job if it changes anything under `packages/api-client`. A stale client means the contract has drifted; regenerate it and commit the result.
 - **TypeScript**: `npm ci`, `npm run typecheck` (which includes the wording check), `npm run lint -w @exchange/web` (warnings fail it), `npm run lint -w @exchange/mobile`, `npm test` and `npm run build:web`.
 - **Container image**: builds the `Dockerfile`, starts the whole stack from `docker-compose.yml` and checks it from outside: `/healthz` and `/readyz` answer, the web app's entry pages are served in each language with the right cache and security headers, API paths keep precedence, a request ID comes back, metrics answer on their own port and not on the public one, and the worker starts, reports its passes and exits cleanly when stopped. Docker is not needed on a development machine for anything else, so this job is where the image is verified.
 - **End to end**: against a PostgreSQL 17 container, builds the API and the web app, applies the migrations, starts the API in the background and runs `apps/web/e2e` in Chromium. When it fails, the Playwright report, with a trace of each failed test, and the API's log are kept as the run's `playwright-report` artifact.
+- **Mobile end to end**: the same, for `apps/mobile/e2e`: it exports the mobile app for the web instead of building the web app, and the tests start the harness proxy and a server for the export. Its report and the API's log are kept as `mobile-playwright-report` when it fails.
 - **Backup and restore**: fills a database through the API with the load check, backs it up with `scripts/backup.sh`, restores it into a new database with `scripts/restore.sh` (which first has to refuse the non-empty source), and proves the copy is the same: `scripts/check-restore.sh` compares grants, triggers and every table's rows, `backend/tests/schema.rs` runs against the copy, and `scripts/check-restored-record.sh` reads a signed agreement back through the API with its hash intact. [docs/operations.md](docs/operations.md), "The restore drill", is the same by hand.
 
 The workflow names the Rust and Node versions it uses; raise them there when the project moves to newer ones.

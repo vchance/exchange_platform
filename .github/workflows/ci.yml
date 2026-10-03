@@ -325,6 +325,112 @@ jobs:
             apps/web/e2e/.output
           retention-days: 14
 
+  # The mobile app's screens in Chromium the size of a phone, through the
+  # browser harness: the app exported for Expo's web target, calling the real
+  # API through the harness proxy, against a real database (apps/mobile/e2e).
+  # It shows the screens and the flows; it is not a device run.
+  e2e-mobile:
+    name: Mobile end to end
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      DATABASE_URL: postgres://exchange_app:exchange_app@127.0.0.1:5432/exchange
+      MIGRATION_DATABASE_URL: postgres://exchange:exchange@127.0.0.1:5432/exchange
+      APP_SECRET: ci-only-secret-for-the-end-to-end-tests-0123456789
+      # Where the API started below writes its log; the tests read codes from it.
+      E2E_MOBILE_API_LOG: ${{ github.workspace }}/apps/mobile/e2e/.output/api.log
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: exchange
+          POSTGRES_PASSWORD: exchange
+          POSTGRES_DB: exchange
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U exchange -d exchange"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update
+          rustup default "$RUST_TOOLCHAIN"
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: backend
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Create the application role
+        run: docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U exchange -d exchange < docker/postgres-init.sql
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/mobile
+
+      - name: Build the backend
+        working-directory: backend
+        run: cargo build --locked --bin api --bin migrate
+
+      # With the harness proxy's address baked in (apps/mobile/e2e/support/export-web.mjs).
+      - name: Export the app for the web
+        run: npm run e2e:export -w @exchange/mobile
+
+      - name: Apply the migrations
+        run: backend/target/debug/migrate
+
+      # The address and settings the tests expect (apps/mobile/e2e/support/env.ts).
+      # The tests start the harness proxy and the server for the export themselves.
+      - name: Start the API
+        env:
+          BIND_ADDR: 127.0.0.1:8103
+          WEB_ORIGIN: http://127.0.0.1:5203
+          CODE_DELIVERY: log
+          NOTIFICATION_DELIVERY: log
+          NO_COLOR: "1"
+          # Every request comes from 127.0.0.1; raise the per-address
+          # sign-in limits out of the way.
+          SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR: "1000000"
+          SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR: "1000000"
+        run: |
+          mkdir -p "$(dirname "$E2E_MOBILE_API_LOG")"
+          nohup backend/target/debug/api > "$E2E_MOBILE_API_LOG" 2>&1 &
+          for _ in $(seq 1 30); do
+            if curl --silent --fail --output /dev/null http://127.0.0.1:8103/readyz; then exit 0; fi
+            sleep 1
+          done
+          cat "$E2E_MOBILE_API_LOG"
+          echo "::error::the API did not become ready"
+          exit 1
+
+      - name: Run the tests
+        run: npm run e2e -w @exchange/mobile
+
+      - name: Upload the Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-playwright-report
+          path: |
+            apps/mobile/playwright-report
+            apps/mobile/test-results
+            apps/mobile/e2e/.output/api.log
+          retention-days: 14
+
   # An authoritative record that cannot be restored is not authoritative
   # (DESIGN.md §13.2). Fills a database through the API, backs it up with
   # scripts/backup.sh, restores it into a new database with
