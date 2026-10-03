@@ -557,9 +557,9 @@ async fn code_requests_are_limited_per_address() {
 async fn code_requests_from_one_ipv6_network_are_counted_together() {
     let app = App::start().await;
     let identifiers: Vec<String> = (0..11).map(|_| email()).collect();
-    // A /64 of its own, and eleven addresses in it.
-    let network = Uuid::new_v4().as_u128() >> 64 << 64;
-    let host = |n: u128| IpAddr::V6(Ipv6Addr::from((0x2001_0db8_u128 << 96) | network | n));
+    // A /64 of its own under 2001:db8::/32, and eleven addresses in it.
+    let network = (0x2001_0db8_u128 << 96) | (Uuid::new_v4().as_u128() >> 96 << 64);
+    let host = |n: u128| IpAddr::V6(Ipv6Addr::from(network | n));
 
     for (n, identifier) in identifiers[..10].iter().enumerate() {
         app.from(host(n as u128 + 1)).request_code(identifier).await;
@@ -573,9 +573,8 @@ async fn code_requests_from_one_ipv6_network_are_counted_together() {
         (StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS")
     );
     // The next /64 is someone else.
-    app.from(host(1u128 << 64))
-        .request_code(&identifiers[10])
-        .await;
+    let next = IpAddr::V6(Ipv6Addr::from((network ^ (1u128 << 64)) | 1));
+    app.from(next).request_code(&identifiers[10]).await;
 
     let all: Vec<&str> = identifiers.iter().map(String::as_str).collect();
     app.finish(&all).await;
