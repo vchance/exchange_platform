@@ -48,9 +48,14 @@ export interface Started {
 
 /**
  * Opens the app at `address`, as `account` or signed out, with a fresh copy
- * of every module so nothing one test did is still there in the next.
+ * of every module so nothing one test did is still there in the next. The
+ * wording is English unless `wording` is given (the pseudo-language test).
  */
-export async function start(address: string, account: Account | null): Promise<Started> {
+export async function start(
+  address: string,
+  account: Account | null,
+  given?: Wording,
+): Promise<Started> {
   await stop()
   vi.resetModules()
   service = fakeService(account)
@@ -62,7 +67,7 @@ export async function start(address: string, account: Account | null): Promise<S
 
   const { App } = await import('../app/App')
   const { loadWording } = await import('../app/wording')
-  const wording = await loadWording('en')
+  const wording = given ?? (await loadWording('en'))
   await act(async () => {
     root = createRoot(document.getElementById('root')!)
     root.render(<App initialLanguage="en" initialWording={wording} />)

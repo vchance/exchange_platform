@@ -7,6 +7,7 @@
 
 use crate::auth::SendFuture;
 
+mod html;
 pub mod outbox;
 pub mod smtp;
 pub mod wording;
@@ -18,6 +19,9 @@ pub struct Email {
     pub subject: String,
     /// Plain text.
     pub body: String,
+    /// The same message as HTML, sent beside the text as
+    /// `multipart/alternative`. Without it the message is the text alone.
+    pub html: Option<String>,
     /// The queued message this is. Delivery is at least once: a worker that
     /// dies after sending and before recording it will send again, so a
     /// provider that can drop repeats should be handed this to do it with.
@@ -37,10 +41,14 @@ pub struct LogEmailSender;
 impl EmailSender for LogEmailSender {
     fn send<'a>(&'a self, email: &'a Email) -> SendFuture<'a> {
         Box::pin(async move {
+            // The text is what you read here. The HTML says the same, and a
+            // whole document would bury it, so only its size is noted; the
+            // preview example writes it out to open in a browser (README).
             tracing::info!(
                 to = email.to,
                 subject = email.subject,
                 body = email.body,
+                html_bytes = email.html.as_ref().map_or(0, String::len),
                 reference = email.reference,
                 "notification email (development delivery)"
             );
