@@ -37,9 +37,9 @@ jobs:
       # `exchange` is a superuser here, so it may create the throwaway
       # databases the API tests use.
       postgres:
-        # Pinned by digest, the same in every job and in the backup job's tools
-        # below, and updated by hand: Dependabot does not read workflow files'
-        # service images (README, "Dependencies").
+        # Pinned by digest, the same in every job and in the backup job's
+        # PostgreSQL tools, and updated by hand: Dependabot does not read the
+        # workflows' images (README, "Dependencies").
         image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
         env:
           POSTGRES_USER: exchange
@@ -320,9 +320,9 @@ jobs:
       E2E_API_LOG: ${{ github.workspace }}/apps/web/e2e/.output/api.log
     services:
       postgres:
-        # Pinned by digest, the same in every job and in the backup job's tools
-        # below, and updated by hand: Dependabot does not read workflow files'
-        # service images (README, "Dependencies").
+        # Pinned by digest, the same in every job and in the backup job's
+        # PostgreSQL tools, and updated by hand: Dependabot does not read the
+        # workflows' images (README, "Dependencies").
         image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
         env:
           POSTGRES_USER: exchange
@@ -427,9 +427,9 @@ jobs:
       E2E_MOBILE_API_LOG: ${{ github.workspace }}/apps/mobile/e2e/.output/api.log
     services:
       postgres:
-        # Pinned by digest, the same in every job and in the backup job's tools
-        # below, and updated by hand: Dependabot does not read workflow files'
-        # service images (README, "Dependencies").
+        # Pinned by digest, the same in every job and in the backup job's
+        # PostgreSQL tools, and updated by hand: Dependabot does not read the
+        # workflows' images (README, "Dependencies").
         image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
         env:
           POSTGRES_USER: exchange
@@ -538,9 +538,9 @@ jobs:
       APP_SECRET: ci-only-secret-for-the-backup-check-0123456789
     services:
       postgres:
-        # Pinned by digest, the same in every job and in the backup job's tools
-        # below, and updated by hand: Dependabot does not read workflow files'
-        # service images (README, "Dependencies").
+        # Pinned by digest, the same in every job and in the backup job's
+        # PostgreSQL tools, and updated by hand: Dependabot does not read the
+        # workflows' images (README, "Dependencies").
         image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
         env:
           POSTGRES_USER: exchange
