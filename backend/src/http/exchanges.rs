@@ -11,8 +11,9 @@ use super::extract::{ApiJson, DigestedJson, MaybeSession, Session};
 use super::{AppState, ClientAddress};
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::exchanges::dto::{
-    CreateExchange, ExchangeSummary, ExchangeView, InvitationIssued, InvitationOptions,
-    InvitationPreview, InvitationToken, RevisionSent, RunCommand, SaveDraft, SendRevision,
+    ClaimInvitation, CreateExchange, ExchangeSummary, ExchangeView, InvitationIssued,
+    InvitationOptions, InvitationPreview, InvitationToken, RevisionSent, RunCommand, SaveDraft,
+    SendRevision,
 };
 use crate::exchanges::service::{self, Idempotency, RequestOrigin};
 
@@ -304,11 +305,12 @@ pub async fn preview_invitation(
     ))
 }
 
-/// Takes the invited party's place in the exchange.
+/// Takes the invited party's place in the exchange. With `only_if_yours`,
+/// only opens it for the account that already took that place.
 #[utoipa::path(
     post,
     path = "/v1/invitations/claim",
-    request_body = InvitationToken,
+    request_body = ClaimInvitation,
     responses(
         (status = 200, description = "Claimed; the exchange as the new party sees it", body = ExchangeView),
         (status = 401, description = "Not signed in", body = ErrorBody),
@@ -319,9 +321,20 @@ pub async fn preview_invitation(
 pub async fn claim_invitation(
     State(state): State<AppState>,
     session: Session,
-    ApiJson(body): ApiJson<InvitationToken>,
+    ApiJson(body): ApiJson<ClaimInvitation>,
 ) -> Result<Json<ExchangeView>, ApiError> {
-    let view =
-        service::claim_invitation(&state.db, &state.settings.rules, &session, &body.token).await?;
+    let claim = if body.only_if_yours {
+        service::Claim::OnlyIfYours
+    } else {
+        service::Claim::Take
+    };
+    let view = service::claim_invitation(
+        &state.db,
+        &state.settings.rules,
+        &session,
+        &body.token,
+        claim,
+    )
+    .await?;
     Ok(Json(view))
 }

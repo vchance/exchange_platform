@@ -1,5 +1,5 @@
 import { expect, test } from './support/fixtures'
-import { propose, setUpProfile, signIn, signUp, stateTag } from './support/flows'
+import { join, propose, setUpProfile, signIn, signUp, stateTag } from './support/flows'
 import { en, fill } from './support/wording'
 
 test('a replaced invitation link stops working, and the new one opens the proposal', async ({
@@ -84,4 +84,38 @@ test('a second invitation link pasted into a tab showing one opens its own propo
   await signIn(bruno)
   await setUpProfile(bruno)
   await page.waitForURL(`**/exchanges/${secondId}`)
+})
+
+test('a used link takes the person who used it back to the exchange, and claims nothing for anyone else', async ({
+  person,
+}) => {
+  const ana = await person('Ana')
+  const bruno = await person('Bruno')
+  const carla = await person('Carla')
+  await signUp(ana)
+  const { id, link } = await propose(ana, bruno, [
+    { from: 'me', kind: 'ITEM', description: 'A set of garden chairs' },
+  ])
+  await join(bruno, link)
+
+  // Bruno comes back to the message and opens the link again: it takes him
+  // to the exchange he joined.
+  await bruno.page.goto('about:blank')
+  await bruno.page.goto(link)
+  await bruno.page.waitForURL(`**/exchanges/${id}`)
+
+  // Carla, signed in, opens the same link: it is spent for her, nothing on
+  // the page takes it, and Bruno is still the one Ana is dealing with.
+  await signUp(carla)
+  await carla.page.goto(link)
+  await expect(carla.page.getByText(en.errors.INVITATION_UNAVAILABLE)).toBeVisible()
+  await expect(carla.page.getByText('A set of garden chairs')).toHaveCount(0)
+  await expect(carla.page.getByRole('button', { name: en.invitation.respond })).toHaveCount(0)
+  await expect(
+    carla.page.getByRole('button', { name: fill(en.invitation.respondAs, { name: carla.name }) }),
+  ).toHaveCount(0)
+  await expect(carla.page).toHaveURL(/\/en\/i$/)
+  await carla.page.goto('/')
+  await expect(carla.page.getByRole('heading', { name: en.home.title, level: 1 })).toBeVisible()
+  await expect(carla.page.getByText(en.home.empty)).toBeVisible()
 })

@@ -347,7 +347,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Takes the invited party's place in the exchange. */
+        /**
+         * Takes the invited party's place in the exchange. With `only_if_yours`,
+         *     only opens it for the account that already took that place.
+         */
         post: operations["claim_invitation"];
         delete?: never;
         options?: never;
@@ -557,6 +560,17 @@ export interface components {
             left?: boolean | null;
             /** @description Their name as written in that exchange. */
             name: string;
+        };
+        ClaimInvitation: {
+            /**
+             * @description Only open the exchange if the signed-in account already holds the
+             *     place this link gave, and never take it: anything else, a live link
+             *     included, is answered `INVITATION_UNAVAILABLE`. For a client that
+             *     finds a link spent and wants to take the person who used it back to
+             *     their exchange without claiming anything they did not tap for.
+             */
+            only_if_yours?: boolean;
+            token: string;
         };
         /** @description Who claimed the invitation, shown to the initiator so they can confirm. */
         Claimant: {
@@ -2234,7 +2248,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["InvitationToken"];
+                "application/json": components["schemas"]["ClaimInvitation"];
             };
         };
         responses: {

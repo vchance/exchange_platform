@@ -130,6 +130,11 @@ export interface FakeService {
   otherPartyName: string;
   /** Makes the next command fail as if the other party had acted first. */
   conflictNext: boolean;
+  /**
+   * The invitation link `INVITATION`: still open, used by someone else, or
+   * used by the signed-in account.
+   */
+  invitation: 'live' | 'spent' | 'yours';
   fetch: typeof fetch;
 }
 
@@ -140,6 +145,7 @@ export function fakeService(): FakeService {
     exchange: activeExchange(),
     otherPartyName: 'Ben Ortiz',
     conflictNext: false,
+    invitation: 'live',
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const text = await request.text();
@@ -188,6 +194,8 @@ function respond(
     return [200, { account: service.account, token: TOKEN }];
   }
   if (call === 'POST /v1/invitations/preview') {
+    // Every way a link can be dead looks the same, used by this account or not.
+    if (service.invitation !== 'live') return [404, { code: 'INVITATION_UNAVAILABLE' }];
     return [
       200,
       {
@@ -211,6 +219,15 @@ function respond(
     return [401, { code: 'UNAUTHENTICATED' }];
   }
   if (call === 'GET /v1/me') return [200, service.account];
+  if (call === 'POST /v1/invitations/claim') {
+    const { only_if_yours } = body as { token: string; only_if_yours?: boolean };
+    if (service.invitation === 'yours') return [200, service.exchange];
+    if (service.invitation === 'live' && !only_if_yours) {
+      service.invitation = 'yours';
+      return [200, service.exchange];
+    }
+    return [404, { code: 'INVITATION_UNAVAILABLE' }];
+  }
   if (call === 'PATCH /v1/me') {
     const update = body as { display_name?: string; adult_confirmed?: boolean; language?: string };
     service.account = {

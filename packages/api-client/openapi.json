@@ -1124,13 +1124,13 @@
         "tags": [
           "exchanges"
         ],
-        "summary": "Takes the invited party's place in the exchange.",
+        "summary": "Takes the invited party's place in the exchange. With `only_if_yours`,\nonly opens it for the account that already took that place.",
         "operationId": "claim_invitation",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InvitationToken"
+                "$ref": "#/components/schemas/ClaimInvitation"
               }
             }
           },
@@ -1729,6 +1729,21 @@
           "name": {
             "type": "string",
             "description": "Their name as written in that exchange."
+          }
+        }
+      },
+      "ClaimInvitation": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "only_if_yours": {
+            "type": "boolean",
+            "description": "Only open the exchange if the signed-in account already holds the\nplace this link gave, and never take it: anything else, a live link\nincluded, is answered `INVITATION_UNAVAILABLE`. For a client that\nfinds a link spent and wants to take the person who used it back to\ntheir exchange without claiming anything they did not tap for."
+          },
+          "token": {
+            "type": "string"
           }
         }
       },

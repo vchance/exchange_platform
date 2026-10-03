@@ -499,6 +499,52 @@ async fn a_refused_revision_leaves_nothing_behind() {
     assert_eq!(stored, 0);
 }
 
+/// What a client asks when a link turns out spent: is this place already
+/// mine? It opens the exchange for the account that took the place, and
+/// takes nothing for anyone, even at a link that is still live.
+#[tokio::test]
+async fn asking_only_for_a_place_already_yours_never_takes_one() {
+    let app = app().await;
+    let deal = app.negotiating().await;
+    let carla = app.user("Carla").await;
+    let only_if_yours = json!({ "token": deal.invitation, "only_if_yours": true });
+    let place_b = || async {
+        sqlx::query_scalar::<_, Option<Uuid>>(
+            "SELECT account_id FROM participant WHERE exchange_id = $1 AND slot = 'B'",
+        )
+        .bind(deal.exchange.parse::<Uuid>().unwrap())
+        .fetch_one(&app.owner)
+        .await
+        .unwrap()
+    };
+
+    // The link is live, but asking only for a place already held takes none.
+    app.post(&deal.ben, "/v1/invitations/claim", only_if_yours.clone())
+        .await
+        .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    assert_eq!(place_b().await, None);
+    // The link still works for whoever then chooses to take it.
+    app.post(
+        &deal.ben,
+        "/v1/invitations/claim",
+        json!({ "token": deal.invitation, "only_if_yours": false }),
+    )
+    .await
+    .ok();
+    assert_eq!(place_b().await, Some(deal.ben.id));
+
+    // Now it opens the exchange for Ben, and for nobody else.
+    let view = app
+        .post(&deal.ben, "/v1/invitations/claim", only_if_yours.clone())
+        .await
+        .ok();
+    assert_eq!(view["id"], deal.exchange.as_str());
+    app.post(&carla, "/v1/invitations/claim", only_if_yours)
+        .await
+        .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    assert_eq!(place_b().await, Some(deal.ben.id));
+}
+
 #[tokio::test]
 async fn an_invitation_naming_someone_is_only_theirs_to_claim() {
     let app = app().await;

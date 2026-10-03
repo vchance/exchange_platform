@@ -291,6 +291,57 @@ test('a second invitation link arriving while one is open shows the new proposal
   for (const request of service.sent) expect(request.path).not.toContain(other);
 });
 
+/** The claims the app sent, plain or only asking whether the place is already this account's. */
+const claims = () =>
+  service.sent
+    .filter((request) => request.path === '/v1/invitations/claim')
+    .map((request) => request.body);
+
+test('a used link takes the person who used it back to the exchange, and claims nothing', async () => {
+  mockKeychain.clear();
+  mockKeychain.set('yuppers.session', TOKEN);
+  service = fakeService();
+  service.account = ana;
+  service.invitation = 'yours';
+  const app = renderRouter('src/app', { initialUrl: `/en/i#${INVITATION}` });
+  await app;
+
+  await waitFor(() => expect(app.getPathnameWithParams()).toBe(`/exchanges/${EXCHANGE}`));
+  // Only asked whether the place was already Ana's; nothing that could take one.
+  expect(claims()).toEqual([{ token: INVITATION, only_if_yours: true }]);
+  expect(heldInvitation()).toBeNull();
+});
+
+test('a link someone else used is refused, and opening it never claims', async () => {
+  mockKeychain.clear();
+  mockKeychain.set('yuppers.session', TOKEN);
+  service = fakeService();
+  service.account = ana;
+  service.invitation = 'spent';
+  const app = renderRouter('src/app', { initialUrl: `/en/i#${INVITATION}` });
+  await app;
+
+  await screen.findByText(w.errors.INVITATION_UNAVAILABLE);
+  expect(app.getPathnameWithParams()).toBe('/invitation');
+  expect(claims()).toEqual([{ token: INVITATION, only_if_yours: true }]);
+  // Nothing on the screen claims it either: there is no way to respond.
+  expect(screen.queryByText(w.invitation.respond)).toBeNull();
+  expect(screen.queryByText(w.invitation.notBinding)).toBeNull();
+  expect(heldInvitation()).toBeNull();
+});
+
+test('a live link is claimed only when the person taps to respond', async () => {
+  const { app } = await open(`/en/i#${INVITATION}`, { signedIn: true });
+  await screen.findByText(w.invitation.notBinding);
+  expect(claims()).toEqual([]);
+
+  await fireEvent.press(
+    screen.getByRole('button', { name: w.invitation.respondAs.replace('{name}', ana.display_name) }),
+  );
+  await waitFor(() => expect(app.getPathnameWithParams()).toBe(`/exchanges/${EXCHANGE}`));
+  expect(claims()).toEqual([{ token: INVITATION }]);
+});
+
 /** A notification email's link, as the system hands it to the app as a universal or app link. */
 const emailed = (path = '') =>
   redirectSystemPath({ path: `https://yuppers.example/exchanges/${EXCHANGE}${path}`, initial: true });

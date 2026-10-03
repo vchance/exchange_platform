@@ -144,10 +144,11 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
   const able = account !== null && isComplete(account);
 
   // A link that no longer shows its proposal has usually been used, and
-  // people come back to the message it arrived in. Claiming again with the
-  // account that already claimed it changes nothing and answers with the
-  // exchange, so the person who used the link is taken to it; anyone else
-  // gets the same refusal as before.
+  // people come back to the message it arrived in. The service is asked
+  // whether the place it gave is already this account's, which takes
+  // nothing whatever the answer: the person who used the link is taken to
+  // the exchange, and anyone else gets the same refusal as before. Only the
+  // button below ever claims.
   useEffect(() => {
     if (!spent || !ready) return;
     if (!able) {
@@ -156,7 +157,7 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
     }
     if (claiming.current) return;
     claiming.current = true;
-    api.claimInvitation(token).then(
+    api.invitationAlreadyYours(token).then(
       (exchange) => {
         forgetInvitation();
         router.replace(`/exchanges/${exchange.id}`);

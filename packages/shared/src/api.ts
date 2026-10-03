@@ -338,9 +338,24 @@ export function createExchangeApi({ client, session, newKey, identity }: Exchang
       )
     },
 
+    /** Takes the invited party's place. Only ever on the person's own say-so. */
     claimInvitation(invitation: string): Promise<ExchangeView> {
       return send(() =>
         client.POST('/v1/invitations/claim', { headers: headers(), body: { token: invitation } }),
+      )
+    },
+
+    /**
+     * The exchange behind a link whose place this account already took, for
+     * taking the person back to it. Never takes a place: for anyone else,
+     * and at a link still live, it is refused with `INVITATION_UNAVAILABLE`.
+     */
+    invitationAlreadyYours(invitation: string): Promise<ExchangeView> {
+      return send(() =>
+        client.POST('/v1/invitations/claim', {
+          headers: headers(),
+          body: { token: invitation, only_if_yours: true },
+        }),
       )
     },
 

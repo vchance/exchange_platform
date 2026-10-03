@@ -1073,12 +1073,27 @@ async fn blocked_between(
     .await
 }
 
-/// The signed-in account takes the invited party's place in the exchange.
+/// What a claim may do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Claim {
+    /// Take the invited party's place, as the person asked to.
+    Take,
+    /// Only open the exchange if the account already holds the place this
+    /// link gave. Never takes it: anything else, a live link included, is
+    /// `INVITATION_UNAVAILABLE`. A client asks this when a link turns out
+    /// spent, to take the person who used it back to their exchange, without
+    /// the risk of claiming something nobody tapped for.
+    OnlyIfYours,
+}
+
+/// The signed-in account takes the invited party's place in the exchange,
+/// or with [`Claim::OnlyIfYours`] only finds the place it already took.
 pub async fn claim_invitation(
     db: &PgPool,
     rules: &Rules,
     session: &Session,
     token: &str,
+    claim: Claim,
 ) -> Result<ExchangeView, ApiError> {
     let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
     let account = session.account_id;
@@ -1104,6 +1119,9 @@ pub async fn claim_invitation(
     // spent like any other, and says so the same way.
     if found.claimed_by == Some(account) && aggregate.accounts[1] == Some(account) {
         return view(&mut tx, rules, exchange, account).await;
+    }
+    if claim == Claim::OnlyIfYours {
+        return Err(unavailable());
     }
 
     let initiator = aggregate.accounts[0];

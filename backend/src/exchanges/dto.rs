@@ -291,6 +291,18 @@ pub struct InvitationToken {
     pub token: String,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ClaimInvitation {
+    pub token: String,
+    /// Only open the exchange if the signed-in account already holds the
+    /// place this link gave, and never take it: anything else, a live link
+    /// included, is answered `INVITATION_UNAVAILABLE`. For a client that
+    /// finds a link spent and wants to take the person who used it back to
+    /// their exchange without claiming anything they did not tap for.
+    #[serde(default)]
+    pub only_if_yours: bool,
+}
+
 // ---- Responses --------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]

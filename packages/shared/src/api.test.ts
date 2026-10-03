@@ -187,11 +187,16 @@ test('an invitation token travels in the body, never in the address', async () =
   const api = createExchangeApi({ client, session: cookie })
   await api.previewInvitation(token)
   await api.claimInvitation(token)
+  await api.invitationAlreadyYours(token)
   for (const made of calls) {
     expect(made.path).not.toContain(token)
     expect(JSON.stringify(made.init.params ?? {})).not.toContain(token)
-    expect(made.init.body).toEqual({ token })
   }
+  expect(calls.map((made) => made.init.body)).toEqual([
+    { token },
+    { token },
+    { token, only_if_yours: true },
+  ])
 })
 
 test('reporting and blocking go out like every other call', async () => {
