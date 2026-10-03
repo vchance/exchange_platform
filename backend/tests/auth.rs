@@ -48,6 +48,8 @@ struct Reply {
     status: StatusCode,
     headers: HeaderMap,
     body: Value,
+    /// The body exactly as sent.
+    bytes: Vec<u8>,
 }
 
 impl Reply {
@@ -166,6 +168,7 @@ impl App {
             status,
             headers,
             body,
+            bytes: bytes.to_vec(),
         }
     }
 
@@ -463,8 +466,8 @@ async fn failed_guesses_are_capped_per_identifier_until_the_day_ends() {
     let app = App::start().await;
     let email = email();
 
-    // Nineteen wrong guesses, each at a live code, from four addresses so
-    // that no address's own hourly limit is what stops them.
+    // Nineteen wrong guesses, each at a live code, from four addresses: the
+    // cap is the identifier's, wherever the guesses come from.
     for batch in 0..4 {
         let from = app.from(address());
         let code = from.request_code(&email).await;
@@ -618,8 +621,7 @@ async fn made_up_identifiers_do_not_use_up_an_address_that_others_share() {
 
     // Thirty wrong guesses and more from one address, at identifiers that
     // have no code at all: as many people behind one office or carrier
-    // address mistyping theirs. Nothing was there to guess at, so nothing
-    // is counted.
+    // address mistyping theirs.
     for _ in 0..35 {
         let reply = app.create_session(&self::email(), "123456").await;
         assert_eq!(reply.code(), "INVALID_CODE");
@@ -634,42 +636,68 @@ async fn made_up_identifiers_do_not_use_up_an_address_that_others_share() {
 }
 
 #[tokio::test]
-async fn wrong_guesses_at_live_codes_are_limited_per_address_but_a_right_code_works() {
+async fn many_wrong_guesses_from_one_address_never_say_who_is_signing_in() {
     let app = App::start().await;
     let elsewhere = app.from(address());
-    // Seven identifiers with a live code each, asked for elsewhere: five
-    // wrong guesses kill a code, so thirty need six of them and one more.
-    let targets: Vec<(String, String)> = (0..7)
-        .map(|_| email())
-        .map(|identifier| (identifier, String::new()))
-        .collect();
-    let mut targets = targets;
-    for (identifier, code) in &mut targets {
-        *code = elsewhere.request_code(identifier).await;
+    // Nine identifiers with a live code each, asked for elsewhere: five wrong
+    // guesses kill a code, so forty need eight of them, and the ninth is
+    // still live afterwards.
+    let mut targets: Vec<(String, String)> = Vec::new();
+    for _ in 0..9 {
+        let identifier = email();
+        let code = elsewhere.request_code(&identifier).await;
+        targets.push((identifier, code));
     }
     let email = email();
     let code = elsewhere.request_code(&email).await;
 
-    let mut guesses = 0;
-    'guessing: for (identifier, live) in &targets {
+    // Forty wrong guesses at live codes from one address, more than the
+    // thirty an hour that an address was once allowed. Each is the same
+    // refusal as any other wrong code.
+    for (identifier, live) in &targets[..8] {
         for _ in 0..5 {
             let reply = app.create_session(identifier, &other_than(&[live])).await;
-            if guesses < 30 {
-                assert_eq!(reply.code(), "INVALID_CODE", "guess {guesses}");
-            } else {
-                // Past the address's limit a wrong code is refused as such.
-                assert_eq!(
-                    (reply.status, reply.code()),
-                    (StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS")
-                );
-                break 'guessing;
-            }
-            guesses += 1;
+            assert_eq!(
+                (reply.status, reply.code()),
+                (StatusCode::UNAUTHORIZED, "INVALID_CODE")
+            );
         }
     }
-    assert_eq!(guesses, 30);
 
-    // From that address the right code for another identifier still works.
+    // Now a wrong code where a code is live, and one where nothing was ever
+    // asked for, get exactly the same answer: nothing tells the guesser that
+    // someone asked for a code a moment ago.
+    let (target, live) = &targets[8];
+    let at_live = app.create_session(target, &other_than(&[live])).await;
+    let at_nothing = app.create_session(&self::email(), "123456").await;
+    assert_eq!(at_live.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(at_live.status, at_nothing.status);
+    assert_eq!(at_live.bytes, at_nothing.bytes);
+    assert_eq!(
+        at_live.headers.get(CONTENT_TYPE),
+        at_nothing.headers.get(CONTENT_TYPE)
+    );
+
+    // The guess at the live code was still charged to it.
+    let charged: i16 =
+        sqlx::query_scalar("SELECT failed_attempts FROM one_time_code WHERE identifier = $1")
+            .bind(target)
+            .fetch_one(&app.owner)
+            .await
+            .unwrap();
+    assert_eq!(charged, 1);
+    // ... so four more kill it, and then even its right code is refused.
+    for _ in 0..4 {
+        let reply = app.create_session(target, &other_than(&[live])).await;
+        assert_eq!(reply.code(), "INVALID_CODE");
+    }
+    assert_eq!(
+        app.create_session(target, live).await.code(),
+        "INVALID_CODE"
+    );
+
+    // From that address the right code for another identifier still works,
+    // so people sharing an address cannot lock each other out.
     assert_eq!(
         app.create_session(&email, &code).await.status,
         StatusCode::OK

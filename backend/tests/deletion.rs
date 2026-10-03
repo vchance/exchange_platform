@@ -609,6 +609,43 @@ async fn deletion_codes_are_counted_against_the_account_and_kept_live_like_sign_
     done(&test.delete_with(&ana, "EMAIL", &codes[2]).await);
 }
 
+/// Like a sign-in code for an identifier over its daily cap, a deletion code
+/// for an account over its own is not sent: it could not work until the day
+/// ends.
+#[tokio::test]
+async fn no_deletion_code_is_sent_while_the_account_is_over_its_daily_guesses() {
+    let test = start().await;
+    let app = &test.app;
+    let (ana, ben) = (app.user("Ana").await, app.user("Ben").await);
+
+    // Twenty wrong guesses: four codes asked for, within the five an hour,
+    // and five wrong guesses after each, which kill every code live.
+    for _ in 0..4 {
+        test.deletion_code(&ana, "EMAIL", &ana.email).await;
+        for _ in 0..5 {
+            test.delete_with(&ana, "EMAIL", &test.never_sent(&ana.email))
+                .await
+                .refused(StatusCode::UNAUTHORIZED, "INVALID_CODE");
+        }
+    }
+
+    // A fifth code would still be within the hour's allowance, but none is
+    // sent, and the refusal is the one signing in gives.
+    let sent = test.codes.0.lock().unwrap().len();
+    app.post(&ana, "/v1/me/deletion/codes", json!({ "channel": "EMAIL" }))
+        .await
+        .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES");
+    assert_eq!(test.codes.0.lock().unwrap().len(), sent);
+
+    // Another account is not affected, and nor is Ana's signing in.
+    test.deletion_code(&ben, "EMAIL", &ben.email).await;
+    done(
+        &app.post(&ana, "/v1/auth/codes", json!({ "identifier": ana.email }))
+            .await,
+    );
+    assert_eq!(test.codes.last(&ana.email).1, Purpose::SignIn);
+}
+
 // ---- The account and its working data ---------------------------------------
 
 #[tokio::test]

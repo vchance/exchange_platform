@@ -224,21 +224,27 @@ fn limit(get: Lookup<'_>, name: &str, default: i64) -> anyhow::Result<i64> {
 
 /// The rules for one-time codes, with the limits on sign-in that a
 /// deployment may set (`SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR`,
-/// `SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR`,
 /// `SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY`). Each defaults to the
 /// placeholder in [`AuthRules::default`].
+///
+/// `SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR` was once a setting here.
+/// Wrong guesses are no longer limited by address (`crate::auth::verify_code`
+/// says why), so a deployment still setting it is refused at start rather
+/// than left believing it bounds something.
 fn auth_rules(get: Lookup<'_>) -> anyhow::Result<AuthRules> {
+    const RETIRED: &str = "SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR";
+    if optional(get, RETIRED).is_some() {
+        anyhow::bail!(
+            "{RETIRED} is no longer a setting: wrong codes are not limited by address. \
+             Remove it; see \"Signing in\" in README.md for what bounds guessing"
+        );
+    }
     let defaults = AuthRules::default();
     Ok(AuthRules {
         code_requests_per_address_per_hour: limit(
             get,
             "SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR",
             defaults.code_requests_per_address_per_hour,
-        )?,
-        failed_guesses_per_address_per_hour: limit(
-            get,
-            "SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR",
-            defaults.failed_guesses_per_address_per_hour,
         )?,
         failed_guesses_per_identifier_per_day: limit(
             get,
@@ -589,12 +595,10 @@ mod tests {
             assert_eq!(
                 (
                     rules.code_requests_per_address_per_hour,
-                    rules.failed_guesses_per_address_per_hour,
                     rules.failed_guesses_per_identifier_per_day,
                 ),
                 (
                     defaults.code_requests_per_address_per_hour,
-                    defaults.failed_guesses_per_address_per_hour,
                     defaults.failed_guesses_per_identifier_per_day,
                 ),
             );
@@ -602,13 +606,11 @@ mod tests {
 
         let set = table(&[
             ("SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR", "10000"),
-            ("SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR", " 3 "),
-            ("SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY", "1"),
+            ("SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY", " 3 "),
         ]);
         let rules = auth_rules(&lookup(&set)).unwrap();
         assert_eq!(rules.code_requests_per_address_per_hour, 10_000);
-        assert_eq!(rules.failed_guesses_per_address_per_hour, 3);
-        assert_eq!(rules.failed_guesses_per_identifier_per_day, 1);
+        assert_eq!(rules.failed_guesses_per_identifier_per_day, 3);
         // Nothing else is a setting.
         assert_eq!(rules.codes_per_hour, defaults.codes_per_hour);
         assert_eq!(
@@ -625,7 +627,6 @@ mod tests {
     fn a_sign_in_limit_is_a_count_of_one_or_more_and_zero_is_not_no_limit() {
         for name in [
             "SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR",
-            "SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR",
             "SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY",
         ] {
             for wrong in ["0", "-1", "ten", "1.5", "2147483648", "unlimited"] {
@@ -634,6 +635,19 @@ mod tests {
             }
             let most = table(&[(name, "2147483647")]);
             assert!(auth_rules(&lookup(&most)).is_ok(), "{name}");
+        }
+    }
+
+    #[test]
+    fn the_retired_limit_on_wrong_codes_by_address_is_refused_if_set() {
+        let name = "SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR";
+        // Empty is the same as unset, as for every optional setting.
+        assert!(auth_rules(&lookup(&table(&[(name, " ")]))).is_ok());
+        for value in ["30", "1000000"] {
+            let error = auth_rules(&lookup(&table(&[(name, value)])))
+                .err()
+                .unwrap_or_else(|| panic!("{name}={value} was accepted"));
+            assert!(error.to_string().contains(name), "{error}");
         }
     }
 

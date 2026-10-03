@@ -60,9 +60,8 @@ export function apiEnvironment(): Record<string, string> {
     NOTIFICATION_DELIVERY: 'log',
     RUST_LOG: 'info',
     // Every browser and API call here comes from 127.0.0.1, so the per-address
-    // sign-in limits are raised out of the way (README, "Signing in").
+    // sign-in limit is raised out of the way (README, "Signing in").
     SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR: '1000000',
-    SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR: '1000000',
     // Plain lines, so the codes can be read back.
     NO_COLOR: '1',
   }

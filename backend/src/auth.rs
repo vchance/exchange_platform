@@ -71,10 +71,6 @@ pub struct AuthRules {
     /// whatever the identifiers. A placeholder; a deployment may set it
     /// (`SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR`).
     pub code_requests_per_address_per_hour: i64,
-    /// Failed sign-in guesses one requester's network address may make per
-    /// hour, whatever the identifiers. A placeholder; a deployment may set
-    /// it (`SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR`).
-    pub failed_guesses_per_address_per_hour: i64,
     /// Deletion codes one account may ask for per hour. A placeholder.
     pub deletion_codes_per_hour: i64,
     /// How long a session lasts. A placeholder.
@@ -91,7 +87,6 @@ impl Default for AuthRules {
             failed_guesses_per_identifier_per_day: 20,
             failed_deletion_guesses_per_day: 20,
             code_requests_per_address_per_hour: 10,
-            failed_guesses_per_address_per_hour: 30,
             deletion_codes_per_hour: 5,
             session_ttl: Duration::days(30),
         }
@@ -273,7 +268,6 @@ pub fn token_hash(token: &str) -> [u8; 32] {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Counted {
     CodeRequestsByAddress,
-    FailedGuessesByAddress,
     FailedGuessesByIdentifier,
     CodeRequestsByAccount,
     FailedGuessesByAccount,
@@ -283,7 +277,6 @@ impl Counted {
     fn scope(self) -> &'static str {
         match self {
             Counted::CodeRequestsByAddress => "code-requests-by-address",
-            Counted::FailedGuessesByAddress => "failed-guesses-by-address",
             Counted::FailedGuessesByIdentifier => "failed-guesses-by-identifier",
             Counted::CodeRequestsByAccount => "code-requests-by-account",
             Counted::FailedGuessesByAccount => "failed-guesses-by-account",
@@ -410,7 +403,8 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
 /// for too many sign-in codes this hour, when the identifier has been sent
 /// too many, or, for deletion, when the account has asked for too many; and
 /// with `TOO_MANY_GUESSES` while the identifier has used up its wrong
-/// sign-in guesses for the day, since no code sent then could work.
+/// sign-in guesses for the day, or, for deletion, the account its wrong
+/// deletion guesses, since no code sent then could work.
 pub async fn request_code(
     db: &PgPool,
     secret: &[u8],
@@ -442,23 +436,37 @@ pub async fn request_code(
 
     lock_codes(&mut tx, identifier, purpose).await?;
 
+    // Whoever has used up their wrong guesses for the day would be refused
+    // any code sent now, right or wrong, so none is sent: for signing in the
+    // identifier, for deleting the account.
+    let (guessed, guess_limit) = match requester {
+        Requester::SignIn { .. } => (
+            Counter::new(
+                secret,
+                Counted::FailedGuessesByIdentifier,
+                identifier.as_str(),
+            ),
+            rules.failed_guesses_per_identifier_per_day,
+        ),
+        Requester::DeleteAccount { account } => (
+            Counter::new(
+                secret,
+                Counted::FailedGuessesByAccount,
+                &account.to_string(),
+            ),
+            rules.failed_deletion_guesses_per_day,
+        ),
+    };
+    if guessed.hold(&mut tx).await? >= guess_limit {
+        tx.commit().await?;
+        return Err(ErrorCode::TooManyGuesses.into());
+    }
+
     // A deletion code goes only to the account's own identifier, at the
     // account's own request, so the account's count above is what limits it.
     // Counting it against the identifier as well would let anyone asking
     // for sign-in codes use up the owner's way to delete.
     if purpose == Purpose::SignIn {
-        // An identifier that has used up its wrong guesses for the day would
-        // refuse any code sent now, right or wrong, so none is sent.
-        let guessed = Counter::new(
-            secret,
-            Counted::FailedGuessesByIdentifier,
-            identifier.as_str(),
-        );
-        if guessed.hold(&mut tx).await? >= rules.failed_guesses_per_identifier_per_day {
-            tx.commit().await?;
-            return Err(ErrorCode::TooManyGuesses.into());
-        }
-
         let recent: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM one_time_code
              WHERE identifier = $1 AND purpose = $2 AND created_at > now() - interval '1 hour'",
@@ -520,18 +528,24 @@ pub async fn request_code(
 
 /// Checks a code against every live code for the identifier and purpose,
 /// and if it matches one, uses them all up. A wrong guess is counted against
-/// each live code, and against the identifier's day and the requester's
-/// hour (for deletion, the account's day), before the refusal is returned,
-/// so guessing cannot be retried for free. A code asked for one purpose and
-/// offered for another is a wrong guess.
+/// each live code and against the identifier's day (for deletion, the
+/// account's day) before the refusal is returned, so guessing cannot be
+/// retried for free. A code asked for one purpose and offered for another
+/// is a wrong guess.
 ///
 /// Refused with `TOO_MANY_GUESSES`, right or wrong, once the identifier (for
-/// deletion, the account) has used up its failed guesses for the day. A
-/// wrong code is refused with `TOO_MANY_REQUESTS` instead of `INVALID_CODE`
-/// once the requester's address has used up its wrong guesses for the hour;
-/// a right code from that address still works. Only a wrong guess at an
-/// identifier that has live codes counts against the address, so made-up
-/// identifiers cannot use up an address that others share.
+/// deletion, the account) has used up its failed guesses for the day.
+/// Otherwise a wrong code is refused with `INVALID_CODE`, the same answer
+/// whether or not the identifier had a live code, so the answer never says
+/// whether someone is signing in.
+///
+/// Wrong guesses are not limited by the requester's address. A limit there
+/// could only refuse a wrong code differently from a code at an identifier
+/// with nothing live, which would say that a code had just been sent, or
+/// refuse right codes too, which would let one requester lock out everyone
+/// sharing its address. What bounds guessing is the attempts per code, the
+/// identifier's daily cap, and the limit on code requests by address, since
+/// every code guessed at must first be asked for.
 pub async fn verify_code(
     db: &PgPool,
     secret: &[u8],
@@ -597,16 +611,11 @@ impl OfferedCode<'_> {
         } = *self;
         let purpose = requester.purpose();
 
-        // The requester's address first, then the identifier, as when asking.
-        // A deletion is guessed at only through the account's own session, so
-        // it is counted against the account and against no address.
-        let (by_address, by_owner, owner_limit) = match requester {
-            Requester::SignIn { address } => (
-                Some(Counter::address(
-                    secret,
-                    Counted::FailedGuessesByAddress,
-                    address,
-                )),
+        // A sign-in guess is counted against the identifier; a deletion is
+        // guessed at only through the account's own session, so it is counted
+        // against the account.
+        let (by_owner, owner_limit) = match requester {
+            Requester::SignIn { .. } => (
                 Counter::new(
                     secret,
                     Counted::FailedGuessesByIdentifier,
@@ -615,7 +624,6 @@ impl OfferedCode<'_> {
                 rules.failed_guesses_per_identifier_per_day,
             ),
             Requester::DeleteAccount { account } => (
-                None,
                 Counter::new(
                     secret,
                     Counted::FailedGuessesByAccount,
@@ -624,14 +632,6 @@ impl OfferedCode<'_> {
                 rules.failed_deletion_guesses_per_day,
             ),
         };
-        // The address's count is read first, keeping the order in which
-        // locks are taken, but it decides nothing yet: a right code is never
-        // refused because of what others sharing the address got wrong.
-        let address_guesses = match &by_address {
-            Some(by_address) => by_address.hold(conn).await?,
-            None => 0,
-        };
-
         lock_codes(conn, identifier, purpose).await?;
         if by_owner.hold(conn).await? >= owner_limit {
             return Ok(CodeCheck::Refused(ErrorCode::TooManyGuesses.into()));
@@ -674,13 +674,11 @@ impl OfferedCode<'_> {
         }
 
         // With no live code there was nothing to guess at, so nothing is
-        // charged: otherwise anyone could use up an identifier's day, or an
-        // address shared with others, without a code ever being sent.
+        // charged: otherwise anyone could use up an identifier's day without
+        // a code ever being sent. The answer is the same either way.
         if live.is_empty() {
             return Ok(CodeCheck::Refused(ErrorCode::InvalidCode.into()));
         }
-        // A wrong guess costs the codes and the identifier's day whatever the
-        // address has done, so those limits hold for every requester.
         let ids: Vec<Uuid> = live.iter().map(|(id, _)| *id).collect();
         sqlx::query(
             "UPDATE one_time_code SET failed_attempts = failed_attempts + 1 WHERE id = ANY($1)",
@@ -689,12 +687,6 @@ impl OfferedCode<'_> {
         .execute(&mut *conn)
         .await?;
         by_owner.add(conn, 1).await?;
-        if let Some(by_address) = &by_address {
-            if address_guesses >= rules.failed_guesses_per_address_per_hour {
-                return Ok(CodeCheck::Refused(ErrorCode::TooManyRequests.into()));
-            }
-            by_address.add(conn, 1).await?;
-        }
         Ok(CodeCheck::Refused(ErrorCode::InvalidCode.into()))
     }
 }

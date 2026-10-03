@@ -34,13 +34,12 @@ export const apiLog = resolve(process.env.E2E_API_LOG ?? resolve(webRoot, 'e2e/.
 mkdirSync(dirname(apiLog), { recursive: true })
 
 /**
- * Sign-in limits per network address, high enough that a whole run, and the
- * runs before it within the hour, never reach them from the one address
- * they all share. CI starts its API with the same values.
+ * The sign-in limit per network address, high enough that a whole run, and
+ * the runs before it within the hour, never reach it from the one address
+ * they all share. CI starts its API with the same value.
  */
 export const signInLimits = {
   SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR: '1000000',
-  SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR: '1000000',
 }
 
 /** The settings every API process the tests start runs with, beside the database from `.env`. */
