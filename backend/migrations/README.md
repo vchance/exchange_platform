@@ -133,6 +133,12 @@ The application role may read, add, change and remove rows in both new tables: t
 
 Harder-to-starve limits on text messages (README, "Signing in"). `sign_in_limit` may also hold `sms-sent-by-prefix`, the codes sent by text message per number prefix (the country code and the three digits after it, the area code for `+1`) under `SMS_MAX_PER_PREFIX_PER_HOUR`, its subject a keyed hash of the prefix; and, for the metrics, `sms-refused-prefix` and `sms-refused-country`, the codes refused under that cap and those refused because the number's country is not in `SMS_ALLOWED_COUNTRY_CODES`, each for the whole service. Since this change `sms-sent` counts only messages the provider took: a place is taken before a message is handed over and given back if the provider refuses it. No table or grant changes.
 
+## 0015_deletion_log
+
+The deletion log ([docs/operations.md](../../docs/operations.md), "Replaying deletions"). **`deletion_log`** holds one row per deleted account, its ID and when it was deleted, and nothing else; the row is written in the transaction that deletes the account. `scripts/backup.sh` exports it beside every backup, and `scripts/replay-deletions.sh` applies it to a restored copy, so that a restore does not bring back accounts deleted since its backup. Accounts deleted before this migration are added with the time it ran.
+
+The application role may read the log and add to it, never change or remove a row. `backend/tests/schema.rs` checks the grants and that an account appears once; `backend/tests/deletion.rs` the writing and the replay.
+
 ## Outside the database
 
 **What the service still owns:** computing content hashes, validating timezones, generating display codes, rejecting dependency cycles, checking invitation expiry, and every state transition.

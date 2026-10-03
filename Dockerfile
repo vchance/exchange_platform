@@ -3,7 +3,8 @@
 # One image for the whole service: the `api`, `worker` and `migrate` binaries
 # and the built web app, which the API serves from the same origin
 # (DESIGN.md §13.5). The default command is the API; `worker` and `migrate`
-# are run by naming them (see docker-compose.yml).
+# are run by naming them (see docker-compose.yml), as is `replay-deletions`
+# after a restore (docs/operations.md, "Replaying deletions").
 #
 # Nothing secret is built in. Every setting, the database connection and
 # APP_SECRET first of all, comes from the environment at run time
@@ -37,15 +38,15 @@ COPY packages/shared/wording packages/shared/wording
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/backend/target \
     cd backend \
-    && cargo build --release --locked --bin api --bin worker --bin migrate \
+    && cargo build --release --locked --bin api --bin worker --bin migrate --bin replay-deletions \
     && mkdir -p /out \
-    && cp target/release/api target/release/worker target/release/migrate /out/
+    && cp target/release/api target/release/worker target/release/migrate target/release/replay-deletions /out/
 
 # ---- The image --------------------------------------------------------------
 # A libc and CA certificates, no shell and no package manager. The binaries
 # bring their own TLS (rustls), so nothing else is needed.
 FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
-COPY --from=backend /out/api /out/worker /out/migrate /usr/local/bin/
+COPY --from=backend /out/api /out/worker /out/migrate /out/replay-deletions /usr/local/bin/
 COPY --from=web /src/apps/web/dist /srv/web
 # Listen on every interface, since the container's own address is what the
 # host maps; serve the web app built above.

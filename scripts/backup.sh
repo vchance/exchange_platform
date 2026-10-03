@@ -15,6 +15,15 @@
 # worker. pg_dump must be the server's major version or newer; set PG_BIN to
 # the directory that holds it if the one on the PATH is older.
 #
+# Beside FILE it writes FILE.deletions, the deletion log (account IDs and
+# deletion times) exported just after the dump by scripts/export-deletions.sh,
+# under the same rules: never replacing a file without --force, readable by
+# this user alone. Taken after the dump, it holds every deletion the dump
+# holds and possibly a few more, which is the safe way round: replaying
+# those against a restore of this dump is exactly what they need. Keep the
+# two together; the newest backup's .deletions file is what a restore of any
+# older backup replays (docs/operations.md, "Restoring").
+#
 # The file holds everything the service stores: names, email addresses,
 # phone numbers and every agreement. Keep it encrypted, somewhere with access
 # as narrow as the database's own.
@@ -62,11 +71,18 @@ if [ -d "$file" ]; then
     echo "$0: $file is a directory; give the name of the file to write" >&2
     exit 1
 fi
-if { [ -e "$file" ] || [ -L "$file" ]; } && [ "$force" != "yes" ]; then
-    echo "$0: $file already exists; refusing to overwrite it. Give another name, or" >&2
-    echo "pass --force to replace it." >&2
-    exit 1
-fi
+deletions="$file.deletions"
+for target in "$file" "$deletions"; do
+    if [ -d "$target" ]; then
+        echo "$0: $target is a directory; give the name of the file to write" >&2
+        exit 1
+    fi
+    if { [ -e "$target" ] || [ -L "$target" ]; } && [ "$force" != "yes" ]; then
+        echo "$0: $target already exists; refusing to overwrite it. Give another name, or" >&2
+        echo "pass --force to replace it." >&2
+        exit 1
+    fi
+done
 
 # Written beside the final name, under a name nobody could have prepared:
 # mktemp creates a new file, readable by this user alone, and never follows
@@ -78,13 +94,20 @@ trap 'rm -f "$partial"' EXIT
 trap 'exit 130' INT TERM
 "${bin}pg_dump" --format=custom --compress=6 --file="$partial" --dbname="$url"
 "${bin}pg_restore" --list "$partial" >/dev/null
+# The deletion log, after the dump and before it is put in place, so that a
+# backup is never there without its log.
+force_flag=
+if [ "$force" = "yes" ]; then force_flag=--force; fi
+# shellcheck disable=SC2086 # $force_flag is one word or none.
+"$(dirname -- "$0")/export-deletions.sh" $force_flag -d "$url" "$deletions" >/dev/null
 if [ "$force" = "yes" ]; then
     mv -f -- "$partial" "$file"
 else
     # A hard link fails if the name was taken meanwhile, where mv would
     # replace it.
     if ! ln -- "$partial" "$file"; then
-        echo "$0: could not put the backup in place as $file; anything there is left as it was" >&2
+        echo "$0: could not put the backup in place as $file; anything there is left as it was," >&2
+        echo "and $deletions is the log exported for it" >&2
         exit 1
     fi
     rm -f -- "$partial"
@@ -92,3 +115,4 @@ fi
 trap - EXIT INT TERM
 
 echo "$file"
+echo "$deletions"

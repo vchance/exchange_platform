@@ -10,13 +10,13 @@ The design guide is kept in a separate, private repository. Comments and documen
 
 | Path | What it is |
 |---|---|
-| `backend/` | Rust service: Axum, sqlx, PostgreSQL. One crate, four binaries. |
+| `backend/` | Rust service: Axum, sqlx, PostgreSQL. One crate, five binaries. |
 | `apps/web/` | React web app built with Vite. Also the no-install path for invited counterparties. |
 | `apps/mobile/` | iOS and Android app: React Native with Expo, routed with Expo Router. The web app's flows for agreeing an exchange and seeing it through, on its own screens. |
 | `docs/operations.md` | Running the service: deployment, health, logs, metrics, backups and restore. |
 | `docs/wallet.md` | Apple Wallet and Google Wallet passes: what a pass shows and why, how it is signed and kept up to date, the settings, and the owner's steps once the accounts exist. |
 | `docs/mobile-release.md` | Building and releasing the mobile app: build profiles and version numbers, permissions, the iOS privacy manifest, what the app collects for the store forms, universal and app links, the owner's steps once the store accounts exist, and store listing drafts. |
-| `scripts/` | The load check, and backing up, restoring and checking a restored database. |
+| `scripts/` | The load check, and backing up, restoring and checking a restored database, and exporting and replaying the deletion log. |
 | `packages/api-client/` | TypeScript API client, generated from the service's own API description. |
 | `packages/shared/` | Shared by web, mobile and the service: the wording, one file per language, and the list of supported languages. Also everything the two apps do that is not a screen: the calls to the API with their idempotency keys, the action runner, filling in wording messages, formatting dates, numbers and money, saving a working copy of terms and turning it into a revision, reading an invitation link. |
 
@@ -193,7 +193,7 @@ GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on ev
 - **Container image**: builds the `Dockerfile`, starts the whole stack from `docker-compose.yml` and checks it from outside: `/healthz` and `/readyz` answer, the web app's entry pages are served in each language with the right cache and security headers, API paths keep precedence, a request ID comes back, metrics answer on their own port and not on the public one, and the worker starts, reports its passes and exits cleanly when stopped. Docker is not needed on a development machine for anything else, so this job is where the image is verified.
 - **End to end**: against a PostgreSQL 17 container, builds the API and the web app, applies the migrations, starts the API in the background and runs `apps/web/e2e` in Chromium. When it fails, the Playwright report, with a trace of each failed test, and the API's log are kept as the run's `playwright-report` artifact.
 - **Mobile end to end**: the same, for `apps/mobile/e2e`: it exports the mobile app for the web instead of building the web app, and the tests start the harness proxy and a server for the export. Its report and the API's log are kept as `mobile-playwright-report` when it fails.
-- **Backup and restore**: fills a database through the API with the load check, backs it up with `scripts/backup.sh`, restores it into a new database with `scripts/restore.sh` (which first has to refuse the non-empty source), and proves the copy is the same: `scripts/check-restore.sh` compares grants, triggers and every table's rows, `backend/tests/schema.rs` runs against the copy, and `scripts/check-restored-record.sh` reads a signed agreement back through the API with its hash intact. [docs/operations.md](docs/operations.md), "The restore drill", is the same by hand.
+- **Backup and restore**: fills a database through the API with the load check, backs it up with `scripts/backup.sh`, restores it into a new database with `scripts/restore.sh` (which first has to refuse the non-empty source), and proves the copy is the same: `scripts/check-restore.sh` compares grants, triggers and every table's rows, `backend/tests/schema.rs` runs against the copy, and `scripts/check-restored-record.sh` reads a signed agreement back through the API with its hash intact. Then it deletes an account through the API, restores the earlier backup again, sees the account come back, replays a newer backup's deletion log with `scripts/replay-deletions.sh`, and checks the account is deleted again with its address free and its sessions gone. [docs/operations.md](docs/operations.md), "The restore drill", is the same by hand.
 
 The workflow names the Rust and Node versions it uses; raise them there when the project moves to newer ones.
 
@@ -219,6 +219,7 @@ What remains, as of October 2026. Every package here is already at the newest ve
 - `worker` — background jobs: expiries and closures on their timers, and reminders that something is due soon or overdue, and delivering notifications from the outbox.
 - `migrate` — applies migrations as the schema owner. The API and worker never run them.
 - `openapi` — prints the API description that the TypeScript client is generated from.
+- `replay-deletions` — after a restore, deletes again the accounts a deletion log names, through the service's own deletion ([docs/operations.md](docs/operations.md), "Replaying deletions").
 
 Both long-running binaries stop cleanly on `Ctrl-C` and on `SIGTERM`, which is what a container runtime or service manager sends.
 
@@ -377,6 +378,7 @@ A person can delete their account from the account screen of the web app and of 
 - **Proof.** A session is not enough. `POST /v1/me/deletion/codes` sends a one-time code to the account's own email address or phone number, and `POST /v1/me/deletion` takes it. A code sent for deleting cannot sign in, and a sign-in code cannot delete. The code is used up only together with the deletion: if the account is busy and the deletion gives up (`SERVICE_UNAVAILABLE`), the same code works for another try, while a wrong code is counted against the account at once as always. `GET /v1/me/deletion` says beforehand what would happen to the exchanges the account is in.
 - **The account.** Every session ends, on every device. The row stays, marked deleted, without its email address, phone number, name or language, so the same address can sign up again as a new account that sees nothing of the old one. Its working data goes with it: codes, the devices registered for its push notifications, unsent working copies, idempotency keys, queued notifications, the blocks it made, and invitation links nobody took.
 - **Its exchanges.** Whatever happens to one happens through the rules, as commands in the departing party's name. A proposal still waiting to be signed is withdrawn or declined, which ends a negotiation with nothing agreed. Someone who had only opened an invitation and not yet been confirmed leaves the exchange instead, and the proposal stays open (above). An agreement in force gets a request to close, and the worker closes it as unresolved when the time to respond runs out; nothing is waived or accepted for the person leaving. Closed exchanges are not touched. While an exchange is still open, the other party's view of it says that the other party has left (`other_party_left`).
+- **The deletion log.** The same transaction records the account's ID and the time, and nothing else, in `deletion_log`. A backup restored later would bring the account back; replaying the log deletes it again, through the same code (docs/operations.md, "Replaying deletions").
 - **What it leaves alone.** Revisions, signatures and events. The other party keeps the exchange and its record, with the names as the agreement wrote them. What becomes of a departed person's words in that history is not decided by this code.
 
 ## Not built yet

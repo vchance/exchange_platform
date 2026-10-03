@@ -1243,8 +1243,11 @@ async fn by_default_a_face_says_in_force_whatever_presses() {
     let _worker = WORKER.lock().await;
     let settings = settings_table_default();
     let config = WalletConfig::from_lookup(&|name| settings.get(name).cloned()).unwrap();
-    let app = App::start_with_wallet(DB, Arc::new(Wallet::new(&config, "https://app.test").unwrap()))
-        .await;
+    let app = App::start_with_wallet(
+        DB,
+        Arc::new(Wallet::new(&config, "https://app.test").unwrap()),
+    )
+    .await;
     let due = OffsetDateTime::now_utc().date() + time::Duration::days(1);
     let deal = due_on(&app, "UTC", due).await;
     let face = |json: &Value| {

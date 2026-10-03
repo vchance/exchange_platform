@@ -1440,3 +1440,41 @@ async fn a_wallet_pass_and_its_devices_hold_only_what_the_service_needs() {
         sqlx::query("UPDATE wallet_pass SET update_status = 'SENT'")
     );
 }
+
+#[tokio::test]
+async fn the_deletion_log_holds_an_account_once_and_the_service_only_adds_to_it() {
+    let mut tx = app().await;
+    let account = account(&mut tx).await;
+    let log = |account: Uuid| {
+        sqlx::query("INSERT INTO deletion_log (account_id) VALUES ($1)").bind(account)
+    };
+
+    log(account).execute(&mut *tx).await.unwrap();
+    // An account is deleted once, and only an account that exists.
+    refused!(tx, UNIQUE, log(account));
+    refused!(tx, FOREIGN_KEY, log(Uuid::new_v4()));
+    // Adding it again where it is already is how a replay or a retry writes.
+    sqlx::query(
+        "INSERT INTO deletion_log (account_id) VALUES ($1) ON CONFLICT (account_id) DO NOTHING",
+    )
+    .bind(account)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    let logged: i64 = sqlx::query_scalar("SELECT count(*) FROM deletion_log WHERE account_id = $1")
+        .bind(account)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert_eq!(logged, 1);
+
+    // The service never changes or removes a line: the log is what a
+    // restore replays.
+    for statement in [
+        "UPDATE deletion_log SET deleted_at = now()",
+        "DELETE FROM deletion_log",
+        "TRUNCATE deletion_log",
+    ] {
+        refused!(tx, INSUFFICIENT_PRIVILEGE, sqlx::query(statement));
+    }
+}
