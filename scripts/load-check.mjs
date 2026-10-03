@@ -25,11 +25,8 @@
 // at most six changes by one party to one exchange (changes_per_minute).
 //
 // Code requests are also limited per network address, and every request here
-// comes from one machine. So each person's requests carry an X-Forwarded-For
-// header with a network address of their own, from the range set aside for
-// benchmarking (198.18.0.0/15), and the API under test is started with
-// TRUSTED_PROXY_HEADER=X-Forwarded-For so that it believes it. A deployment
-// names that header only when a proxy in front of it sets it.
+// comes from one machine. So the API under test is started with that limit
+// raised out of the way: SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR=1000000.
 
 import { spawn } from "node:child_process";
 import { open } from "node:fs/promises";
@@ -156,20 +153,8 @@ function record(endpoint, ms, error) {
 
 class RequestFailed extends Error {}
 
-// Each person's own network address, by session token once they have one. A
-// different stretch of the benchmarking range on each run, so that runs close
-// together do not share addresses.
-const addresses = new Map();
-const addressBase = Math.floor(Math.random() * 131072);
-function addressFor(person) {
-  const n = (addressBase + person) % 131072;
-  return `198.${18 + (n >> 16)}.${(n >> 8) & 255}.${n & 255}`;
-}
-
-async function call(endpoint, method, path, { token, body, idempotent, from } = {}) {
+async function call(endpoint, method, path, { token, body, idempotent } = {}) {
   const headers = { "x-client-version": "web/0.0.0" };
-  const address = from ?? addresses.get(token);
-  if (address) headers["x-forwarded-for"] = address;
   if (token) headers.authorization = `Bearer ${token}`;
   if (body !== undefined) headers["content-type"] = "application/json";
   if (idempotent) headers["idempotency-key"] = randomUUID();
@@ -194,7 +179,7 @@ async function call(endpoint, method, path, { token, body, idempotent, from } = 
     record(endpoint, ms, label);
     const hint =
       response.status === 429 && endpoint === "POST /v1/auth/codes"
-        ? " (is the API running with TRUSTED_PROXY_HEADER=X-Forwarded-For?)"
+        ? " (is the API running with SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR raised?)"
         : "";
     throw new RequestFailed(`${endpoint}: ${label}${hint}`);
   }
@@ -204,16 +189,14 @@ async function call(endpoint, method, path, { token, body, idempotent, from } = 
 
 // ---- One pair -------------------------------------------------------------------
 
-async function signIn(codes, label, from) {
+async function signIn(codes, label) {
   const identifier = `load-${run}-${label}@example.test`;
-  await call("POST /v1/auth/codes", "POST", "/v1/auth/codes", { body: { identifier }, from });
+  await call("POST /v1/auth/codes", "POST", "/v1/auth/codes", { body: { identifier } });
   const code = await codes.code(identifier);
   const session = await call("POST /v1/auth/sessions", "POST", "/v1/auth/sessions", {
     body: { identifier, code, delivery: "TOKEN", language: "en" },
-    from,
   });
   const token = session.token;
-  addresses.set(token, from);
   await call("PATCH /v1/me", "PATCH", "/v1/me", {
     token,
     body: { display_name: `Load ${label}`, adult_confirmed: true },
@@ -283,8 +266,8 @@ function terms(ids, n) {
 
 async function pair(codes, n) {
   const [a, b] = await Promise.all([
-    signIn(codes, `${n}a`, addressFor(2 * n)),
-    signIn(codes, `${n}b`, addressFor(2 * n + 1)),
+    signIn(codes, `${n}a`),
+    signIn(codes, `${n}b`),
   ]);
 
   // The initiator composes: a draft, a saved working copy, then the revision.
@@ -315,7 +298,6 @@ async function pair(codes, n) {
   // The counterparty opens the link, claims it and signs.
   await call("POST /v1/invitations/preview", "POST", "/v1/invitations/preview", {
     body: invitation,
-    from: addresses.get(b),
   });
   const claimed = await call("POST /v1/invitations/claim", "POST", "/v1/invitations/claim", {
     token: b,

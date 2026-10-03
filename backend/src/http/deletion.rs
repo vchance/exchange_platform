@@ -16,7 +16,7 @@ use utoipa::ToSchema;
 use super::AppState;
 use super::auth::expired_cookie;
 use super::extract::{ApiJson, Session};
-use crate::auth::{self, Requester};
+use crate::auth::{self, OfferedCode, Requester};
 use crate::deletion::{self, CodeChannel, DeletionPreview};
 use crate::error::{ApiError, ErrorBody};
 
@@ -103,7 +103,8 @@ pub struct DeleteAccount {
         (status = 204, description = "The account is deleted"),
         (status = 401, description = "Not signed in, or the code is wrong, expired, used up or was sent for something else", body = ErrorBody),
         (status = 422, description = "The account has no such identifier", body = ErrorBody),
-        (status = 429, description = "Too many wrong deletion codes from this account today", body = ErrorBody)
+        (status = 429, description = "Too many wrong deletion codes from this account today", body = ErrorBody),
+        (status = 503, description = "The account was busy and nothing was done; the code still works", body = ErrorBody)
     )
 )]
 pub async fn delete_account(
@@ -113,19 +114,19 @@ pub async fn delete_account(
 ) -> Result<Response, ApiError> {
     let settings = &state.settings;
     let identifier = deletion::identifier(&state.db, session.account_id, body.channel).await?;
-    auth::verify_code(
-        &state.db,
-        &settings.app_secret,
-        &settings.auth,
-        &identifier,
-        &body.code,
-        Requester::DeleteAccount {
+    // Checked and used up with the deletion itself: if the account is busy
+    // and the deletion gives up, the code still works for another try.
+    let code = OfferedCode {
+        secret: &settings.app_secret,
+        rules: &settings.auth,
+        identifier: &identifier,
+        code: &body.code,
+        requester: Requester::DeleteAccount {
             account: session.account_id,
         },
-    )
-    .await?;
-
-    deletion::delete_account(&state.db, &settings.rules, session.account_id).await?;
+    };
+    deletion::delete_account_with_code(&state.db, &settings.rules, session.account_id, &code)
+        .await?;
 
     // A browser holds the session in a cookie only the service can remove.
     Ok((

@@ -9,10 +9,17 @@
 //! stay live until each expires, a code offered is checked against all of
 //! them, and using one uses them all. So someone who knows an address can no
 //! longer keep its owner out by asking for codes; the newest code the owner
-//! received works. Guessing is bounded per code, per identifier per day and
-//! per requester's address per hour, and asking per identifier and per
-//! address per hour. Deletion codes are counted apart, against the account
-//! (see [`Requester`]). The numbers are in [`AuthRules`].
+//! received works. Guessing is bounded per code and per identifier per day,
+//! and asking per identifier and per address per hour. Wrong guesses are
+//! also counted per requester's address per hour, but only at identifiers
+//! that have live codes, and past that count a wrong code is answered
+//! `TOO_MANY_REQUESTS` while a right one still works: many people can share
+//! one address (an office, a mobile carrier), and what some of them get
+//! wrong must not lock out the rest. An IPv6 requester is counted by its
+//! /64. Deletion codes are counted apart, against the account
+//! (see [`Requester`]). The numbers are in [`AuthRules`]; the limits per
+//! address and the identifier's daily cap on failed guesses can be set by a
+//! deployment (`crate::config`).
 //!
 //! The counts live in `sign_in_limit`, one row per thing counted and window,
 //! rather than behind advisory locks alone: an advisory lock can make
@@ -37,7 +44,8 @@ use crate::error::{ApiError, ErrorCode};
 use crate::languages;
 
 /// The numbers behind code and session handling. Placeholders, every one:
-/// none is a recorded design decision yet (DESIGN.md §8, §18 item 4).
+/// none is a recorded design decision yet (DESIGN.md §8, §18 item 4). Every
+/// limit is a count of 1 or more; there is no setting for "no limit".
 #[derive(Clone, Debug)]
 pub struct AuthRules {
     /// How long a code works. A placeholder.
@@ -51,15 +59,21 @@ pub struct AuthRules {
     /// How many of the most recent codes for one identifier and purpose stay
     /// live, each until it expires. A placeholder.
     pub live_codes: i64,
-    /// Failed sign-in guesses one identifier may take per UTC day, and failed
-    /// guesses one account may make at its deletion codes. Past that, codes
-    /// are refused, right or wrong, until the day ends. A placeholder.
-    pub failed_guesses_per_day: i64,
+    /// Failed sign-in guesses one identifier may take per UTC day. Past
+    /// that, codes are refused, right or wrong, until the day ends. A
+    /// placeholder; a deployment may set it
+    /// (`SIGN_IN_FAILED_GUESSES_PER_IDENTIFIER_PER_DAY`, `crate::config`).
+    pub failed_guesses_per_identifier_per_day: i64,
+    /// Failed guesses one account may make at its deletion codes per UTC
+    /// day, refused in the same way past that. A placeholder.
+    pub failed_deletion_guesses_per_day: i64,
     /// Sign-in codes one requester's network address may ask for per hour,
-    /// whatever the identifiers. A placeholder.
+    /// whatever the identifiers. A placeholder; a deployment may set it
+    /// (`SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR`).
     pub code_requests_per_address_per_hour: i64,
     /// Failed sign-in guesses one requester's network address may make per
-    /// hour, whatever the identifiers. A placeholder.
+    /// hour, whatever the identifiers. A placeholder; a deployment may set
+    /// it (`SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR`).
     pub failed_guesses_per_address_per_hour: i64,
     /// Deletion codes one account may ask for per hour. A placeholder.
     pub deletion_codes_per_hour: i64,
@@ -74,7 +88,8 @@ impl Default for AuthRules {
             code_max_failed_attempts: 5,
             codes_per_hour: 5,
             live_codes: 3,
-            failed_guesses_per_day: 20,
+            failed_guesses_per_identifier_per_day: 20,
+            failed_deletion_guesses_per_day: 20,
             code_requests_per_address_per_hour: 10,
             failed_guesses_per_address_per_hour: 30,
             deletion_codes_per_hour: 5,
@@ -306,7 +321,7 @@ impl Counter {
 
     fn address(secret: &[u8], counted: Counted, address: Option<IpAddr>) -> Self {
         // Not an address, so it cannot be mistaken for one.
-        let subject = address.map_or_else(|| "unknown".to_owned(), |address| address.to_string());
+        let subject = address.map_or_else(|| "unknown".to_owned(), requester_network);
         Self::new(secret, counted, &subject)
     }
 
@@ -332,6 +347,25 @@ impl Counter {
         .fetch_one(conn)
         .await?;
         Ok(i64::from(count))
+    }
+}
+
+/// The network a requester's address is counted as. An IPv4 address is
+/// itself, and so is one written as IPv6 (`::ffff:192.0.2.50`), or a
+/// requester could double its allowance by switching notation. An IPv6
+/// address is counted by its /64: that is what one subscriber is usually
+/// given, and any address within it is theirs to use, so counting single
+/// addresses would let one requester take a fresh allowance per request.
+fn requester_network(address: IpAddr) -> String {
+    match address {
+        IpAddr::V4(v4) => v4.to_string(),
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => v4.to_string(),
+            None => {
+                let [a, b, c, d, ..] = v6.segments();
+                format!("{a:x}:{b:x}:{c:x}:{d:x}::/64")
+            }
+        },
     }
 }
 
@@ -374,7 +408,9 @@ pub async fn purge_sign_in_limits(db: &PgPool) -> Result<u64, sqlx::Error> {
 ///
 /// Refused with `TOO_MANY_REQUESTS` when the requester's address has asked
 /// for too many sign-in codes this hour, when the identifier has been sent
-/// too many, or, for deletion, when the account has asked for too many.
+/// too many, or, for deletion, when the account has asked for too many; and
+/// with `TOO_MANY_GUESSES` while the identifier has used up its wrong
+/// sign-in guesses for the day, since no code sent then could work.
 pub async fn request_code(
     db: &PgPool,
     secret: &[u8],
@@ -411,6 +447,18 @@ pub async fn request_code(
     // Counting it against the identifier as well would let anyone asking
     // for sign-in codes use up the owner's way to delete.
     if purpose == Purpose::SignIn {
+        // An identifier that has used up its wrong guesses for the day would
+        // refuse any code sent now, right or wrong, so none is sent.
+        let guessed = Counter::new(
+            secret,
+            Counted::FailedGuessesByIdentifier,
+            identifier.as_str(),
+        );
+        if guessed.hold(&mut tx).await? >= rules.failed_guesses_per_identifier_per_day {
+            tx.commit().await?;
+            return Err(ErrorCode::TooManyGuesses.into());
+        }
+
         let recent: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM one_time_code
              WHERE identifier = $1 AND purpose = $2 AND created_at > now() - interval '1 hour'",
@@ -478,8 +526,12 @@ pub async fn request_code(
 /// offered for another is a wrong guess.
 ///
 /// Refused with `TOO_MANY_GUESSES`, right or wrong, once the identifier (for
-/// deletion, the account) has used up its failed guesses for the day, and
-/// with `TOO_MANY_REQUESTS` once the requester's address has for the hour.
+/// deletion, the account) has used up its failed guesses for the day. A
+/// wrong code is refused with `TOO_MANY_REQUESTS` instead of `INVALID_CODE`
+/// once the requester's address has used up its wrong guesses for the hour;
+/// a right code from that address still works. Only a wrong guess at an
+/// identifier that has live codes counts against the address, so made-up
+/// identifiers cannot use up an address that others share.
 pub async fn verify_code(
     db: &PgPool,
     secret: &[u8],
@@ -488,105 +540,197 @@ pub async fn verify_code(
     code: &str,
     requester: Requester,
 ) -> Result<(), ApiError> {
-    let purpose = requester.purpose();
-    let mut tx = db.begin().await?;
-
-    // The requester's address first, then the identifier, as when asking.
-    // A deletion is guessed at only through the account's own session, so
-    // it is counted against the account and against no address.
-    let (by_address, by_owner) = match requester {
-        Requester::SignIn { address } => (
-            Some(Counter::address(
-                secret,
-                Counted::FailedGuessesByAddress,
-                address,
-            )),
-            Counter::new(
-                secret,
-                Counted::FailedGuessesByIdentifier,
-                identifier.as_str(),
-            ),
-        ),
-        Requester::DeleteAccount { account } => (
-            None,
-            Counter::new(
-                secret,
-                Counted::FailedGuessesByAccount,
-                &account.to_string(),
-            ),
-        ),
+    let offered = OfferedCode {
+        secret,
+        rules,
+        identifier,
+        code,
+        requester,
     };
-    if let Some(by_address) = &by_address
-        && by_address.hold(&mut tx).await? >= rules.failed_guesses_per_address_per_hour
-    {
-        return Err(ErrorCode::TooManyRequests.into());
+    let mut tx = db.begin().await?;
+    let checked = offered.check(&mut tx).await?;
+    tx.commit().await?;
+    match checked {
+        CodeCheck::Matched => Ok(()),
+        CodeCheck::Refused(error) => Err(error),
     }
+}
 
-    lock_codes(&mut tx, identifier, purpose).await?;
-    if by_owner.hold(&mut tx).await? >= rules.failed_guesses_per_day {
-        return Err(ErrorCode::TooManyGuesses.into());
-    }
+/// A code someone offered back, with what is needed to check it. For a
+/// caller that must use the code up in the same transaction as what it
+/// confirms, so that if that cannot be done the code is not spent either
+/// (`crate::deletion`). [`verify_code`] is the same check on its own.
+#[derive(Clone, Copy)]
+pub struct OfferedCode<'a> {
+    pub secret: &'a [u8],
+    pub rules: &'a AuthRules,
+    pub identifier: &'a Identifier,
+    pub code: &'a str,
+    pub requester: Requester,
+}
 
-    let live: Vec<(Uuid, Vec<u8>)> = sqlx::query_as(
-        "SELECT id, code_hash FROM one_time_code
-         WHERE identifier = $1 AND purpose = $2
-           AND consumed_at IS NULL AND expires_at > now() AND failed_attempts < $3
-         FOR UPDATE",
-    )
-    .bind(identifier.as_str())
-    .bind(purpose.as_str())
-    .bind(rules.code_max_failed_attempts)
-    .fetch_all(&mut *tx)
-    .await?;
+/// What [`OfferedCode::check`] found. Either way the transaction holds what
+/// it wrote, and only committing it makes that stand.
+#[must_use]
+pub enum CodeCheck {
+    /// The code matched, and every live code for the identifier and purpose
+    /// is marked used. Rolling back leaves them live, as they were.
+    Matched,
+    /// The code was refused. A wrong guess is counted in the transaction,
+    /// which must be committed before the refusal is returned, or the guess
+    /// would cost nothing.
+    Refused(ApiError),
+}
 
-    // Constant-time comparison against each, and no stopping at the first
-    // match, so the time taken says nothing about which one it was.
-    let offered = code.trim();
-    let matches = live
-        .iter()
-        .map(|(_, expected)| {
-            code_mac(secret, purpose, identifier, offered)
-                .verify_slice(expected)
-                .is_ok()
-        })
-        .fold(false, |any, this| any | this);
+impl OfferedCode<'_> {
+    /// Checks the code within `conn`'s transaction, as [`verify_code`]
+    /// describes. The limit rows and the codes it reads stay locked until
+    /// the transaction ends, so nobody else checks a code for the same
+    /// identifier and purpose meanwhile.
+    pub async fn check(&self, conn: &mut PgConnection) -> Result<CodeCheck, ApiError> {
+        let Self {
+            secret,
+            rules,
+            identifier,
+            code,
+            requester,
+        } = *self;
+        let purpose = requester.purpose();
 
-    if matches {
-        sqlx::query(
-            "UPDATE one_time_code SET consumed_at = now()
-             WHERE identifier = $1 AND purpose = $2 AND consumed_at IS NULL",
+        // The requester's address first, then the identifier, as when asking.
+        // A deletion is guessed at only through the account's own session, so
+        // it is counted against the account and against no address.
+        let (by_address, by_owner, owner_limit) = match requester {
+            Requester::SignIn { address } => (
+                Some(Counter::address(
+                    secret,
+                    Counted::FailedGuessesByAddress,
+                    address,
+                )),
+                Counter::new(
+                    secret,
+                    Counted::FailedGuessesByIdentifier,
+                    identifier.as_str(),
+                ),
+                rules.failed_guesses_per_identifier_per_day,
+            ),
+            Requester::DeleteAccount { account } => (
+                None,
+                Counter::new(
+                    secret,
+                    Counted::FailedGuessesByAccount,
+                    &account.to_string(),
+                ),
+                rules.failed_deletion_guesses_per_day,
+            ),
+        };
+        // The address's count is read first, keeping the order in which
+        // locks are taken, but it decides nothing yet: a right code is never
+        // refused because of what others sharing the address got wrong.
+        let address_guesses = match &by_address {
+            Some(by_address) => by_address.hold(conn).await?,
+            None => 0,
+        };
+
+        lock_codes(conn, identifier, purpose).await?;
+        if by_owner.hold(conn).await? >= owner_limit {
+            return Ok(CodeCheck::Refused(ErrorCode::TooManyGuesses.into()));
+        }
+
+        let live: Vec<(Uuid, Vec<u8>)> = sqlx::query_as(
+            "SELECT id, code_hash FROM one_time_code
+             WHERE identifier = $1 AND purpose = $2
+               AND consumed_at IS NULL AND expires_at > now() AND failed_attempts < $3
+             FOR UPDATE",
         )
         .bind(identifier.as_str())
         .bind(purpose.as_str())
-        .execute(&mut *tx)
+        .bind(rules.code_max_failed_attempts)
+        .fetch_all(&mut *conn)
         .await?;
-        tx.commit().await?;
-        return Ok(());
-    }
 
-    let ids: Vec<Uuid> = live.iter().map(|(id, _)| *id).collect();
-    sqlx::query(
-        "UPDATE one_time_code SET failed_attempts = failed_attempts + 1 WHERE id = ANY($1)",
-    )
-    .bind(&ids)
-    .execute(&mut *tx)
-    .await?;
-    // With no live code there was nothing to guess at, so the identifier's
-    // day is not charged: otherwise anyone could use it up without a code
-    // ever being sent. The requester's hour is.
-    if !live.is_empty() {
-        by_owner.add(&mut tx, 1).await?;
+        // Constant-time comparison against each, and no stopping at the first
+        // match, so the time taken says nothing about which one it was.
+        let offered = code.trim();
+        let matches = live
+            .iter()
+            .map(|(_, expected)| {
+                code_mac(secret, purpose, identifier, offered)
+                    .verify_slice(expected)
+                    .is_ok()
+            })
+            .fold(false, |any, this| any | this);
+
+        if matches {
+            sqlx::query(
+                "UPDATE one_time_code SET consumed_at = now()
+                 WHERE identifier = $1 AND purpose = $2 AND consumed_at IS NULL",
+            )
+            .bind(identifier.as_str())
+            .bind(purpose.as_str())
+            .execute(&mut *conn)
+            .await?;
+            return Ok(CodeCheck::Matched);
+        }
+
+        // With no live code there was nothing to guess at, so nothing is
+        // charged: otherwise anyone could use up an identifier's day, or an
+        // address shared with others, without a code ever being sent.
+        if live.is_empty() {
+            return Ok(CodeCheck::Refused(ErrorCode::InvalidCode.into()));
+        }
+        // A wrong guess costs the codes and the identifier's day whatever the
+        // address has done, so those limits hold for every requester.
+        let ids: Vec<Uuid> = live.iter().map(|(id, _)| *id).collect();
+        sqlx::query(
+            "UPDATE one_time_code SET failed_attempts = failed_attempts + 1 WHERE id = ANY($1)",
+        )
+        .bind(&ids)
+        .execute(&mut *conn)
+        .await?;
+        by_owner.add(conn, 1).await?;
+        if let Some(by_address) = &by_address {
+            if address_guesses >= rules.failed_guesses_per_address_per_hour {
+                return Ok(CodeCheck::Refused(ErrorCode::TooManyRequests.into()));
+            }
+            by_address.add(conn, 1).await?;
+        }
+        Ok(CodeCheck::Refused(ErrorCode::InvalidCode.into()))
     }
-    if let Some(by_address) = &by_address {
-        by_address.add(&mut tx, 1).await?;
-    }
-    tx.commit().await?;
-    Err(ErrorCode::InvalidCode.into())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn requesters_are_counted_by_ipv4_address_and_by_ipv6_slash_64() {
+        let network = |text: &str| requester_network(text.parse().unwrap());
+        assert_eq!(network("192.0.2.50"), "192.0.2.50");
+        // The same IPv4 address written as IPv6 is the same requester.
+        assert_eq!(network("::ffff:192.0.2.50"), "192.0.2.50");
+        // Every address in one /64 is one requester; the next /64 is another.
+        assert_eq!(network("2001:db8:2::1"), "2001:db8:2:0::/64");
+        assert_eq!(network("2001:db8:2::12"), network("2001:db8:2::1"));
+        assert_eq!(
+            network("2001:db8:2:0:ffff:ffff:ffff:ffff"),
+            network("2001:db8:2::1")
+        );
+        assert_ne!(network("2001:db8:2:1::1"), network("2001:db8:2::1"));
+
+        let secret = b"secret";
+        let counter = |text: &str| {
+            Counter::address(
+                secret,
+                Counted::CodeRequestsByAddress,
+                Some(text.parse().unwrap()),
+            )
+            .subject
+        };
+        assert_eq!(counter("2001:db8:2::1"), counter("2001:db8:2::12"));
+        assert_eq!(counter("::ffff:192.0.2.50"), counter("192.0.2.50"));
+        assert_ne!(counter("192.0.2.50"), counter("192.0.2.51"));
+    }
 
     #[test]
     fn codes_are_six_digits() {

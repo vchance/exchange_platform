@@ -7,7 +7,7 @@
 //! addresses of its own, so that the limits per address count its requests
 //! and nobody else's; those counts are kept only as keyed hashes and expire.
 
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
@@ -461,21 +461,26 @@ async fn failed_guesses_are_capped_per_identifier_until_the_day_ends() {
     let app = App::start().await;
     let email = email();
 
-    // Twenty wrong guesses in all, each at a live code, from four addresses
-    // so that no address's own hourly limit is what stops them.
-    for _ in 0..4 {
+    // Nineteen wrong guesses, each at a live code, from four addresses so
+    // that no address's own hourly limit is what stops them.
+    for batch in 0..4 {
         let from = app.from(address());
         let code = from.request_code(&email).await;
-        for _ in 0..5 {
+        for _ in 0..(if batch == 3 { 4 } else { 5 }) {
             let reply = from.create_session(&email, &other_than(&[&code])).await;
             assert_eq!(reply.code(), "INVALID_CODE");
         }
     }
+    // A code is still sent, and the twentieth wrong guess is made at it.
+    let elsewhere = app.from(address());
+    let code = elsewhere.request_code(&email).await;
+    let reply = elsewhere
+        .create_session(&email, &other_than(&[&code]))
+        .await;
+    assert_eq!(reply.code(), "INVALID_CODE");
 
     // Now even the right code is refused, from anywhere, and being refused
     // is not a guess.
-    let elsewhere = app.from(address());
-    let code = elsewhere.request_code(&email).await;
     for offered in [code.clone(), other_than(&[&code])] {
         let reply = elsewhere.create_session(&email, &offered).await;
         assert_eq!(
@@ -483,6 +488,17 @@ async fn failed_guesses_are_capped_per_identifier_until_the_day_ends() {
             (StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES")
         );
     }
+    // And no code is sent that could not work.
+    let sent = app.outbox.0.lock().unwrap().len();
+    let reply = app
+        .from(address())
+        .post("/v1/auth/codes", json!({ "identifier": email }))
+        .await;
+    assert_eq!(
+        (reply.status, reply.code()),
+        (StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_GUESSES")
+    );
+    assert_eq!(app.outbox.0.lock().unwrap().len(), sent);
 
     // Another identifier is not affected.
     let other = self::email();
@@ -538,32 +554,132 @@ async fn code_requests_are_limited_per_address() {
 }
 
 #[tokio::test]
-async fn failed_guesses_are_limited_per_address() {
+async fn code_requests_from_one_ipv6_network_are_counted_together() {
     let app = App::start().await;
-    let other = app.from(address());
-    let email = email();
-    let code = other.request_code(&email).await;
+    let identifiers: Vec<String> = (0..11).map(|_| email()).collect();
+    // A /64 of its own, and eleven addresses in it.
+    let network = Uuid::new_v4().as_u128() >> 64 << 64;
+    let host = |n: u128| IpAddr::V6(Ipv6Addr::from((0x2001_0db8_u128 << 96) | network | n));
 
-    // Thirty wrong guesses from one address, at identifiers that have no
-    // code at all, so that no identifier's own limit is involved.
-    for _ in 0..30 {
-        let reply = app.create_session(&self::email(), "123456").await;
-        assert_eq!(reply.code(), "INVALID_CODE");
+    for (n, identifier) in identifiers[..10].iter().enumerate() {
+        app.from(host(n as u128 + 1)).request_code(identifier).await;
     }
-    // From there even the right code for another identifier is refused,
-    // and being refused is not a guess at it.
-    let reply = app.create_session(&email, &code).await;
+    let reply = app
+        .from(host(0x12))
+        .post("/v1/auth/codes", json!({ "identifier": identifiers[10] }))
+        .await;
     assert_eq!(
         (reply.status, reply.code()),
         (StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS")
     );
-    // From another address it works.
+    // The next /64 is someone else.
+    app.from(host(1u128 << 64))
+        .request_code(&identifiers[10])
+        .await;
+
+    let all: Vec<&str> = identifiers.iter().map(String::as_str).collect();
+    app.finish(&all).await;
+}
+
+#[tokio::test]
+async fn an_ipv4_address_written_as_ipv6_is_the_same_requester() {
+    let app = App::start().await;
+    let identifiers: Vec<String> = (0..11).map(|_| email()).collect();
+    // An address of its own in 240.0.0.0/4, which is reserved.
+    let v4 = Ipv4Addr::from(0xf000_0000 | (Uuid::new_v4().as_u128() as u32 >> 4));
+    let plain = IpAddr::V4(v4);
+    let mapped = IpAddr::V6(v4.to_ipv6_mapped());
+
+    for (n, identifier) in identifiers[..10].iter().enumerate() {
+        let from = if n % 2 == 0 { plain } else { mapped };
+        app.from(from).request_code(identifier).await;
+    }
+    for from in [plain, mapped] {
+        let reply = app
+            .from(from)
+            .post("/v1/auth/codes", json!({ "identifier": identifiers[10] }))
+            .await;
+        assert_eq!(
+            (reply.status, reply.code()),
+            (StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS")
+        );
+    }
+
+    let all: Vec<&str> = identifiers.iter().map(String::as_str).collect();
+    app.finish(&all).await;
+}
+
+#[tokio::test]
+async fn made_up_identifiers_do_not_use_up_an_address_that_others_share() {
+    let app = App::start().await;
+    let email = email();
+    let code = app.from(address()).request_code(&email).await;
+
+    // Thirty wrong guesses and more from one address, at identifiers that
+    // have no code at all: as many people behind one office or carrier
+    // address mistyping theirs. Nothing was there to guess at, so nothing
+    // is counted.
+    for _ in 0..35 {
+        let reply = app.create_session(&self::email(), "123456").await;
+        assert_eq!(reply.code(), "INVALID_CODE");
+    }
+    // Someone else at that address signs in with their right code.
     assert_eq!(
-        other.create_session(&email, &code).await.status,
+        app.create_session(&email, &code).await.status,
         StatusCode::OK
     );
 
     app.finish(&[&email]).await;
+}
+
+#[tokio::test]
+async fn wrong_guesses_at_live_codes_are_limited_per_address_but_a_right_code_works() {
+    let app = App::start().await;
+    let elsewhere = app.from(address());
+    // Seven identifiers with a live code each, asked for elsewhere: five
+    // wrong guesses kill a code, so thirty need six of them and one more.
+    let targets: Vec<(String, String)> = (0..7)
+        .map(|_| email())
+        .map(|identifier| (identifier, String::new()))
+        .collect();
+    let mut targets = targets;
+    for (identifier, code) in &mut targets {
+        *code = elsewhere.request_code(identifier).await;
+    }
+    let email = email();
+    let code = elsewhere.request_code(&email).await;
+
+    let mut guesses = 0;
+    'guessing: for (identifier, live) in &targets {
+        for _ in 0..5 {
+            let reply = app.create_session(identifier, &other_than(&[live])).await;
+            if guesses < 30 {
+                assert_eq!(reply.code(), "INVALID_CODE", "guess {guesses}");
+            } else {
+                // Past the address's limit a wrong code is refused as such.
+                assert_eq!(
+                    (reply.status, reply.code()),
+                    (StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS")
+                );
+                break 'guessing;
+            }
+            guesses += 1;
+        }
+    }
+    assert_eq!(guesses, 30);
+
+    // From that address the right code for another identifier still works.
+    assert_eq!(
+        app.create_session(&email, &code).await.status,
+        StatusCode::OK
+    );
+
+    let mut all: Vec<&str> = targets
+        .iter()
+        .map(|(identifier, _)| identifier.as_str())
+        .collect();
+    all.push(&email);
+    app.finish(&all).await;
 }
 
 #[tokio::test]
