@@ -7,7 +7,7 @@ use axum::http::header::USER_AGENT;
 use axum::http::{HeaderMap, StatusCode};
 use uuid::Uuid;
 
-use super::extract::{ApiJson, DigestedJson, MaybeSession, Session};
+use super::extract::{ApiJson, DigestedJson, Session};
 use super::{AppState, ClientAddress};
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::exchanges::dto::{
@@ -283,25 +283,30 @@ pub async fn reissue_invitation(
     Ok(Json(issued))
 }
 
-/// Shows the proposal behind an invitation link. No sign-in needed. The token
-/// travels in the body so it never appears in a URL the service logs.
+/// Shows the proposal behind an invitation link, to someone signed in. The
+/// token travels in the body so it never appears in a URL the service logs.
+///
+/// Without a session the answer is `UNAUTHENTICATED` whatever the token, so
+/// nobody signed out learns anything about any link (DESIGN.md §9): the only
+/// answers about a link come from an account, and an account that is blocked
+/// gets the dead-link answer.
 #[utoipa::path(
     post,
     path = "/v1/invitations/preview",
     request_body = InvitationToken,
     responses(
         (status = 200, description = "The proposal", body = InvitationPreview),
+        (status = 401, description = "Not signed in, whatever the token", body = ErrorBody),
         (status = 404, description = "The link is not valid, or no longer", body = ErrorBody)
     )
 )]
 pub async fn preview_invitation(
     State(state): State<AppState>,
-    MaybeSession(session): MaybeSession,
+    session: Session,
     ApiJson(body): ApiJson<InvitationToken>,
 ) -> Result<Json<InvitationPreview>, ApiError> {
-    let viewer = session.map(|session| session.account_id);
     Ok(Json(
-        service::preview_invitation(&state.db, viewer, &body.token).await?,
+        service::preview_invitation(&state.db, session.account_id, &body.token).await?,
     ))
 }
 

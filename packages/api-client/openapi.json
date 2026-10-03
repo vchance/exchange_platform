@@ -1401,7 +1401,8 @@
         "tags": [
           "exchanges"
         ],
-        "summary": "Shows the proposal behind an invitation link. No sign-in needed. The token\ntravels in the body so it never appears in a URL the service logs.",
+        "summary": "Shows the proposal behind an invitation link, to someone signed in. The\ntoken travels in the body so it never appears in a URL the service logs.",
+        "description": "Without a session the answer is `UNAUTHENTICATED` whatever the token, so\nnobody signed out learns anything about any link (DESIGN.md §9): the only\nanswers about a link come from an account, and an account that is blocked\ngets the dead-link answer.",
         "operationId": "preview_invitation",
         "requestBody": {
           "content": {
@@ -1424,6 +1425,16 @@
               }
             }
           },
+          "401": {
+            "description": "Not signed in, whatever the token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "404": {
             "description": "The link is not valid, or no longer",
             "content": {
@@ -1442,7 +1453,7 @@
         "tags": [
           "safety"
         ],
-        "summary": "Reports the proposal behind an invitation link, and with it the person\nwho sent it. No sign-in needed: the token is the proof of having received\nit, as for the preview, and travels in the body for the same reason. A\nlink that shows no preview takes no report.",
+        "summary": "Reports the proposal behind an invitation link, and with it the person\nwho sent it. Like reading the proposal, it needs a session: signed out,\nthe answer is `UNAUTHENTICATED` whatever the token, so a report cannot be\nused to test a link either (DESIGN.md §9). The token is the proof of\nhaving received the proposal and travels in the body, as for the preview.\nA link that shows this account no preview takes no report from it.",
         "operationId": "report_invitation",
         "requestBody": {
           "content": {
@@ -1457,6 +1468,16 @@
         "responses": {
           "204": {
             "description": "Received"
+          },
+          "401": {
+            "description": "Not signed in, whatever the token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "404": {
             "description": "The link is not valid, or no longer",

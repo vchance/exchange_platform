@@ -322,12 +322,10 @@ async fn a_stranger_with_a_forwarded_link_can_read_and_sign_and_is_removed() {
         let reply = claim(&app, user, &deal.invitation).await;
         assert_eq!((reply.status, &reply.body), (dead.status, &dead.body));
     }
-    app.call(
-        None,
-        Method::POST,
+    app.post(
+        &nobody,
         "/v1/invitations/preview",
-        Some(json!({ "token": deal.invitation })),
-        &[],
+        json!({ "token": deal.invitation }),
     )
     .await
     .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");

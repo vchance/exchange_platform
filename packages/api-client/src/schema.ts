@@ -429,8 +429,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Shows the proposal behind an invitation link. No sign-in needed. The token
-         *     travels in the body so it never appears in a URL the service logs.
+         * Shows the proposal behind an invitation link, to someone signed in. The
+         *     token travels in the body so it never appears in a URL the service logs.
+         * @description Without a session the answer is `UNAUTHENTICATED` whatever the token, so
+         *     nobody signed out learns anything about any link (DESIGN.md §9): the only
+         *     answers about a link come from an account, and an account that is blocked
+         *     gets the dead-link answer.
          */
         post: operations["preview_invitation"];
         delete?: never;
@@ -450,9 +454,11 @@ export interface paths {
         put?: never;
         /**
          * Reports the proposal behind an invitation link, and with it the person
-         *     who sent it. No sign-in needed: the token is the proof of having received
-         *     it, as for the preview, and travels in the body for the same reason. A
-         *     link that shows no preview takes no report.
+         *     who sent it. Like reading the proposal, it needs a session: signed out,
+         *     the answer is `UNAUTHENTICATED` whatever the token, so a report cannot be
+         *     used to test a link either (DESIGN.md §9). The token is the proof of
+         *     having received the proposal and travels in the body, as for the preview.
+         *     A link that shows this account no preview takes no report from it.
          */
         post: operations["report_invitation"];
         delete?: never;
@@ -2653,6 +2659,15 @@ export interface operations {
                     "application/json": components["schemas"]["InvitationPreview"];
                 };
             };
+            /** @description Not signed in, whatever the token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             /** @description The link is not valid, or no longer */
             404: {
                 headers: {
@@ -2683,6 +2698,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Not signed in, whatever the token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             /** @description The link is not valid, or no longer */
             404: {

@@ -4,14 +4,12 @@
 mod common;
 
 use axum::http::{Method, StatusCode};
-use common::{App, Deal, Reply, User, accept, fence_job};
+use common::{App, Deal, Reply, User, accept, consent, fence_job};
 use serde_json::{Value, json};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 use yuppers_backend::exchanges::service::run_timers;
-use yuppers_backend::safety::{
-    REPORT_DETAILS_MAX_CHARS, REPORTS_PER_ACCOUNT_PER_DAY, REPORTS_PER_LINK_PER_DAY,
-};
+use yuppers_backend::safety::{REPORT_DETAILS_MAX_CHARS, REPORTS_PER_ACCOUNT_PER_DAY};
 
 const DATABASE: &str = "yuppers_test_safety";
 
@@ -453,24 +451,25 @@ async fn someone_who_is_not_a_party_is_answered_as_if_there_were_no_exchange() {
 }
 
 #[tokio::test]
-async fn the_holder_of_a_live_link_reports_the_proposal_without_signing_in() {
+async fn the_holder_of_a_live_link_reports_the_proposal_once_signed_in() {
     let app = app().await;
     let deal = app.negotiating().await;
     let token = &deal.invitation;
+    let body =
+        json!({ "token": token, "reason": "UNWANTED", "details": "I don't know this person." });
 
-    done(
-        report_link(
-            &app,
-            None,
-            json!({ "token": token, "reason": "UNWANTED", "details": "I don't know this person." }),
-        )
-        .await,
-    );
-    // Nobody as the reporter; about the person who sent the proposal.
+    // Signed out, a report is refused before the link is looked at.
+    report_link(&app, None, body.clone())
+        .await
+        .refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
+    assert!(reports(&app, &deal.exchange).await.is_empty());
+
+    // Signed in, Ben reports it: he is the reporter, Ana the person reported.
+    done(report_link(&app, Some(&deal.ben), body.clone()).await);
     assert_eq!(
         reports(&app, &deal.exchange).await,
         [(
-            None,
+            Some(deal.ben.id),
             Some(deal.ana.id),
             "UNWANTED".to_owned(),
             Some("I don't know this person.".to_owned()),
@@ -478,24 +477,23 @@ async fn the_holder_of_a_live_link_reports_the_proposal_without_signing_in() {
         )]
     );
 
-    // The same report again stores nothing.
+    // The same report again stores nothing, and another is still his one.
+    done(report_link(&app, Some(&deal.ben), body).await);
     done(
         report_link(
             &app,
-            None,
-            json!({ "token": token, "reason": "UNWANTED", "details": "I don't know this person." }),
+            Some(&deal.ben),
+            json!({ "token": token, "reason": "SCAM", "details": "Something more." }),
         )
         .await,
     );
     assert_eq!(reports(&app, &deal.exchange).await.len(), 1);
 
-    // The proposal is still there to read, and Ana sees nothing of this.
-    app.call(
-        None,
-        Method::POST,
+    // The proposal is still there for him to read, and Ana sees nothing of this.
+    app.post(
+        &deal.ben,
         "/v1/invitations/preview",
-        Some(json!({ "token": token })),
-        &[],
+        json!({ "token": token }),
     )
     .await
     .ok();
@@ -503,39 +501,21 @@ async fn the_holder_of_a_live_link_reports_the_proposal_without_signing_in() {
     assert_eq!(app.view(&deal.ana, &deal.exchange).await["version"], 1);
 
     // The same bounds as for a party.
-    report_link(&app, None, json!({ "token": token, "reason": "OTHER" }))
-        .await
-        .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
+    let carla = app.user("Carla").await;
     report_link(
         &app,
-        None,
+        Some(&carla),
+        json!({ "token": token, "reason": "OTHER" }),
+    )
+    .await
+    .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
+    report_link(
+        &app,
+        Some(&carla),
         json!({ "token": token, "reason": "SCAM", "details": "x".repeat(REPORT_DETAILS_MAX_CHARS + 1) }),
     )
     .await
     .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
-
-    // Someone signed in is recorded as the reporter, and then one report is
-    // theirs to make, like a party's.
-    for details in ["Not what we discussed.", "Something more."] {
-        done(
-            report_link(
-                &app,
-                Some(&deal.ben),
-                json!({ "token": token, "reason": "SCAM", "details": details }),
-            )
-            .await,
-        );
-    }
-    let stored = reports(&app, &deal.exchange).await;
-    assert_eq!(stored.len(), 2, "{stored:?}");
-    assert_eq!(
-        (stored[1].0, stored[1].1, stored[1].3.as_deref()),
-        (
-            Some(deal.ben.id),
-            Some(deal.ana.id),
-            Some("Not what we discussed.")
-        )
-    );
 
     // Ana opening her own link has nobody to report.
     report_link(
@@ -545,63 +525,38 @@ async fn the_holder_of_a_live_link_reports_the_proposal_without_signing_in() {
     )
     .await
     .refused(StatusCode::CONFLICT, "ACTION_NOT_ALLOWED");
-    assert_eq!(reports(&app, &deal.exchange).await.len(), 2);
+    assert_eq!(reports(&app, &deal.exchange).await.len(), 1);
 }
 
 #[tokio::test]
-async fn one_link_can_file_only_so_many_reports_in_a_day() {
+async fn reports_from_links_count_against_the_accounts_daily_limit() {
     let app = app().await;
     let deal = app.negotiating().await;
-    let anonymous = |n: i64| json!({ "token": deal.invitation, "reason": "SCAM", "details": format!("Report {n}") });
+    let other = app.negotiating().await;
+    let carla = app.user("Carla").await;
 
-    for n in 0..REPORTS_PER_LINK_PER_DAY {
-        done(report_link(&app, None, anonymous(n)).await);
+    // Carla has already filed all but one of the day's reports.
+    for _ in 1..REPORTS_PER_ACCOUNT_PER_DAY {
+        sqlx::query(
+            "INSERT INTO report (reporter_account_id, subject_account_id, reason, created_at)
+             VALUES ($1, $2, 'SCAM', now() - interval '1 hour')",
+        )
+        .bind(carla.id)
+        .bind(deal.ana.id)
+        .execute(&app.db)
+        .await
+        .unwrap();
     }
-    report_link(&app, None, anonymous(REPORTS_PER_LINK_PER_DAY))
+
+    let scam = |token: &str| json!({ "token": token, "reason": "SCAM" });
+    done(report_link(&app, Some(&carla), scam(&deal.invitation)).await);
+    report_link(&app, Some(&carla), scam(&other.invitation))
         .await
         .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
-    assert_eq!(
-        reports(&app, &deal.exchange).await.len(),
-        REPORTS_PER_LINK_PER_DAY as usize
-    );
+    assert!(reports(&app, &other.exchange).await.is_empty());
 
-    // A new link to the same exchange does not start the count again.
-    let reissued = app
-        .post(
-            &deal.ana,
-            &format!("/v1/exchanges/{}/invitation", deal.exchange),
-            json!({}),
-        )
-        .await
-        .ok();
-    report_link(
-        &app,
-        None,
-        json!({ "token": reissued["invitation_token"], "reason": "SCAM", "details": "Another" }),
-    )
-    .await
-    .refused(StatusCode::TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS");
-
-    // Someone signed in is limited as an account, not with the anonymous.
-    done(
-        report_link(
-            &app,
-            Some(&deal.ben),
-            json!({ "token": reissued["invitation_token"], "reason": "SCAM" }),
-        )
-        .await,
-    );
-
-    // Another exchange's link has its own count.
-    let other = app.negotiating().await;
-    done(
-        report_link(
-            &app,
-            None,
-            json!({ "token": other.invitation, "reason": "SCAM" }),
-        )
-        .await,
-    );
+    // The limit is Carla's alone.
+    done(report_link(&app, Some(&other.ben), scam(&other.invitation)).await);
 }
 
 #[tokio::test]
@@ -643,18 +598,21 @@ async fn a_dead_link_takes_no_report_and_says_nothing_about_why() {
     .await
     .ok();
 
+    // Still live, as a reference for what signing out does.
+    let live = app.negotiating().await;
+
+    let carla = app.user("Carla").await;
     let unknown = app
-        .call(
-            None,
-            Method::POST,
+        .post(
+            &carla,
             "/v1/invitations/preview",
-            Some(json!({ "token": "made-up" })),
-            &[],
+            json!({ "token": "made-up" }),
         )
         .await;
     unknown.refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    let signed_out = report_link(&app, None, dead("made-up")).await;
+    signed_out.refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
 
-    let carla = app.user("Carla").await;
     for (token, exchange) in [
         ("made-up", None),
         ("", None),
@@ -663,12 +621,16 @@ async fn a_dead_link_takes_no_report_and_says_nothing_about_why() {
         (expired.invitation.as_str(), Some(&expired.exchange)),
         (withdrawn.invitation.as_str(), Some(&withdrawn.exchange)),
     ] {
-        // Signed in or not, and even when the report itself is not valid:
-        // exactly what the preview says about a link it cannot show.
+        // Signed in, and even when the report itself is not valid: exactly
+        // what the preview says about a link it cannot show.
         for reply in [
-            report_link(&app, None, dead(token)).await,
             report_link(&app, Some(&carla), dead(token)).await,
-            report_link(&app, None, json!({ "token": token, "reason": "OTHER" })).await,
+            report_link(
+                &app,
+                Some(&carla),
+                json!({ "token": token, "reason": "OTHER" }),
+            )
+            .await,
         ] {
             assert_eq!(
                 (reply.status, &reply.body),
@@ -680,6 +642,25 @@ async fn a_dead_link_takes_no_report_and_says_nothing_about_why() {
             assert!(reports(&app, exchange).await.is_empty(), "{token}");
         }
     }
+
+    // Signed out, dead or live, valid or not, it is the same refusal.
+    for token in [
+        "made-up",
+        "",
+        revoked.invitation.as_str(),
+        claimed.invitation.as_str(),
+        live.invitation.as_str(),
+    ] {
+        for body in [dead(token), json!({ "token": token, "reason": "OTHER" })] {
+            let reply = report_link(&app, None, body).await;
+            assert_eq!(
+                (reply.status, &reply.body),
+                (signed_out.status, &signed_out.body),
+                "{token}"
+            );
+        }
+    }
+    assert!(reports(&app, &live.exchange).await.is_empty());
 
     // The person who used the link is a party now, and reports as one.
     done(
@@ -1221,4 +1202,133 @@ async fn nothing_tells_a_person_they_were_blocked() {
         let own = text.matches("\"blocked\":false").count();
         assert_eq!(mentions, own, "{text}");
     }
+}
+
+/// `from` proposes the fence job to the one person `to` names, an email
+/// address. Returns the invitation token.
+async fn bound_proposal(app: &App, from: &User, to: &str) -> String {
+    let exchange = app.draft(from).await;
+    let sent = app
+        .post(
+            from,
+            &format!("/v1/exchanges/{exchange}/revisions"),
+            json!({
+                "expected_version": 0,
+                "terms": fence_job(Uuid::new_v4(), Uuid::new_v4()),
+                "consent": consent(),
+                "invitation": { "bound_to": to },
+            }),
+        )
+        .await
+        .ok();
+    sent["invitation_token"].as_str().unwrap().to_owned()
+}
+
+/// What each endpoint that takes an invitation token answers `user`, or
+/// someone signed out, about `token`: the status, the content type and the
+/// body, by the call that gave it.
+async fn answers_about(
+    app: &App,
+    user: Option<&User>,
+    token: &str,
+) -> Vec<(&'static str, StatusCode, Option<String>, Value)> {
+    let calls: [(&'static str, &str, Value); 5] = [
+        (
+            "preview",
+            "/v1/invitations/preview",
+            json!({ "token": token }),
+        ),
+        (
+            "report",
+            "/v1/invitations/report",
+            json!({ "token": token, "reason": "SCAM", "details": "x" }),
+        ),
+        (
+            "report, not valid",
+            "/v1/invitations/report",
+            json!({ "token": token, "reason": "OTHER" }),
+        ),
+        (
+            "only if yours",
+            "/v1/invitations/claim",
+            json!({ "token": token, "only_if_yours": true }),
+        ),
+        ("claim", "/v1/invitations/claim", json!({ "token": token })),
+    ];
+    let mut answers = Vec::new();
+    for (name, path, body) in calls {
+        let reply = app.call(user, Method::POST, path, Some(body), &[]).await;
+        let content_type = reply
+            .headers
+            .get("content-type")
+            .map(|value| value.to_str().unwrap().to_owned());
+        answers.push((name, reply.status, content_type, reply.body));
+    }
+    answers
+}
+
+/// The property that closes DESIGN.md §18 item 13a: whatever the person
+/// blocked asks about a link from the person who blocked them, signed in or
+/// signed out, is answered exactly as the same question about a made-up
+/// link. Signed out, nobody learns anything about any link; signed in, a
+/// block between the two looks like a dead link everywhere.
+#[tokio::test]
+async fn a_blocked_person_gets_the_made_up_links_answers_about_the_blockers_links() {
+    let app = app().await;
+    let deal = app.active().await;
+    let (ana, ben) = (&deal.ana, &deal.ben);
+    let carla = app.user("Carla").await;
+    block(&app, ana, &deal.exchange).await;
+
+    // Live links from Ana: for whoever opens it, bound to Ben, bound to Carla.
+    let (open_exchange, _, open) = propose(&app, ana).await;
+    let to_ben = bound_proposal(&app, ana, &ben.email).await;
+    let to_carla = bound_proposal(&app, ana, &carla.email).await;
+
+    for user in [None, Some(ben)] {
+        let made_up = answers_about(&app, user, "made-up").await;
+        for token in [&open, &to_ben, &to_carla] {
+            assert_eq!(
+                answers_about(&app, user, token).await,
+                made_up,
+                "signed in: {}",
+                user.is_some()
+            );
+        }
+    }
+    // Signed out, that answer is the refusal to someone without a session,
+    // the same for every link.
+    for (call, status, _, body) in answers_about(&app, None, &open).await {
+        assert_eq!(
+            (status, body),
+            (
+                StatusCode::UNAUTHORIZED,
+                json!({ "code": "UNAUTHENTICATED" })
+            ),
+            "{call}"
+        );
+    }
+
+    // The same holds when the block is the other way round: Ben blocking
+    // Ana leaves him nothing to compare either.
+    let both = app.active().await;
+    block(&app, &both.ben, &both.exchange).await;
+    let (_, _, hers) = propose(&app, &both.ana).await;
+    let made_up = answers_about(&app, Some(&both.ben), "made-up").await;
+    assert_eq!(answers_about(&app, Some(&both.ben), &hers).await, made_up);
+
+    // None of it touched the links or filed anything.
+    assert!(reports(&app, &open_exchange).await.is_empty());
+    // The comparison would have caught a difference: to someone not
+    // blocked, a live link answers unlike a made-up one.
+    let preview = |token: &str| json!({ "token": token });
+    let shown = app
+        .post(&carla, "/v1/invitations/preview", preview(&open))
+        .await;
+    let unknown = app
+        .post(&carla, "/v1/invitations/preview", preview("made-up"))
+        .await;
+    assert_eq!(shown.status, StatusCode::OK);
+    assert_ne!((shown.status, shown.body), (unknown.status, unknown.body));
+    claim(&app, &carla, &to_carla).await.ok();
 }

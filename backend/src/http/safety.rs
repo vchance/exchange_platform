@@ -8,7 +8,7 @@ use axum::{Json, Router};
 use uuid::Uuid;
 
 use super::AppState;
-use super::extract::{ApiJson, MaybeSession, Session};
+use super::extract::{ApiJson, Session};
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::safety::{self, BlockStatus, BlockedPerson, NewInvitationReport, NewReport};
 
@@ -57,15 +57,18 @@ pub async fn report_exchange(
 }
 
 /// Reports the proposal behind an invitation link, and with it the person
-/// who sent it. No sign-in needed: the token is the proof of having received
-/// it, as for the preview, and travels in the body for the same reason. A
-/// link that shows no preview takes no report.
+/// who sent it. Like reading the proposal, it needs a session: signed out,
+/// the answer is `UNAUTHENTICATED` whatever the token, so a report cannot be
+/// used to test a link either (DESIGN.md §9). The token is the proof of
+/// having received the proposal and travels in the body, as for the preview.
+/// A link that shows this account no preview takes no report from it.
 #[utoipa::path(
     post,
     path = "/v1/invitations/report",
     request_body = NewInvitationReport,
     responses(
         (status = 204, description = "Received"),
+        (status = 401, description = "Not signed in, whatever the token", body = ErrorBody),
         (status = 404, description = "The link is not valid, or no longer", body = ErrorBody),
         (status = 409, description = "The link is the caller's own", body = ErrorBody),
         (status = 422, description = "Details too long, or missing for `OTHER`", body = ErrorBody),
@@ -74,11 +77,10 @@ pub async fn report_exchange(
 )]
 pub async fn report_invitation(
     State(state): State<AppState>,
-    MaybeSession(session): MaybeSession,
+    session: Session,
     ApiJson(body): ApiJson<NewInvitationReport>,
 ) -> Result<StatusCode, ApiError> {
-    let reporter = session.map(|session| session.account_id);
-    safety::report_invitation(&state.db, reporter, body).await?;
+    safety::report_invitation(&state.db, session.account_id, body).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

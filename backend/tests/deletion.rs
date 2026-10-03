@@ -1073,15 +1073,10 @@ async fn an_invitation_someone_else_bound_to_the_address_forgets_it_and_dies() {
     .unwrap();
     assert_eq!((bound, revoked), (None, true));
     // A dead link like any other; Ana can issue a new one.
-    app.call(
-        None,
-        Method::POST,
-        "/v1/invitations/preview",
-        Some(json!({ "token": token })),
-        &[],
-    )
-    .await
-    .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    let dee = app.user("Dee").await;
+    app.post(&dee, "/v1/invitations/preview", json!({ "token": token }))
+        .await
+        .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
     app.post(
         &ana,
         &format!("/v1/exchanges/{exchange}/invitation"),
@@ -1170,15 +1165,9 @@ async fn an_offer_the_departing_party_sent_is_withdrawn() {
     assert!(record.to_string().contains("Ana Ruiz"));
 
     // The link nobody opened is dead, and no longer says whom it was for.
-    app.call(
-        None,
-        Method::POST,
-        "/v1/invitations/preview",
-        Some(json!({ "token": token })),
-        &[],
-    )
-    .await
-    .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    app.post(&cal, "/v1/invitations/preview", json!({ "token": token }))
+        .await
+        .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
     app.post(&cal, "/v1/invitations/claim", json!({ "token": token }))
         .await
         .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");

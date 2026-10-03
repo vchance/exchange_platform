@@ -1025,17 +1025,18 @@ async fn find_invitation(
     ))
 }
 
-/// What the holder of an invitation link may read before signing in: the
-/// proposal itself. Every way a link can be dead gives the same answer, and
-/// so does a block between the signed-in viewer and the initiator, so the
-/// preview and the claim agree for them.
+/// What the holder of an invitation link reads once signed in, before
+/// deciding whether to claim it: the proposal itself. Every way a link can be
+/// dead gives the same answer, and so does a block between the viewer and the
+/// initiator, so the preview and the claim agree for them.
 ///
-/// Known gap, accepted for now and listed to be fixed (DESIGN.md §9, §18
-/// item 13a): the same link still shows its proposal to anyone signed out,
-/// so a blocked person who compares the two can still infer the block.
+/// Reading needs an account: the HTTP layer refuses anyone signed out before
+/// the token is looked at. That is what keeps a block from showing. Were the
+/// proposal readable signed out, a blocked person could compare it with the
+/// dead link they get signed in (DESIGN.md §9, §18 item 13a).
 pub async fn preview_invitation(
     db: &PgPool,
-    viewer: Option<Uuid>,
+    viewer: Uuid,
     token: &str,
 ) -> Result<InvitationPreview, ApiError> {
     let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
@@ -1056,9 +1057,7 @@ pub async fn preview_invitation(
         (State::Negotiating, Some(open)) => open,
         _ => return Err(unavailable()),
     };
-    if let Some(viewer) = viewer
-        && blocked_between(&mut conn, viewer, aggregate.accounts[0]).await?
-    {
+    if blocked_between(&mut conn, viewer, aggregate.accounts[0]).await? {
         return Err(unavailable());
     }
 

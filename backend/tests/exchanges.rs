@@ -74,15 +74,19 @@ async fn two_people_agree_on_a_deal_and_complete_it() {
     );
     let revision = view["open_revision"]["id"].as_str().unwrap().to_owned();
 
-    // Ben reads the proposal from the link without signing in.
+    // Signed out, the link says nothing about itself; signed in, Ben reads
+    // the proposal from it. Reading claims nothing.
+    app.call(
+        None,
+        Method::POST,
+        "/v1/invitations/preview",
+        Some(json!({ "token": token })),
+        &[],
+    )
+    .await
+    .refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
     let preview = app
-        .call(
-            None,
-            Method::POST,
-            "/v1/invitations/preview",
-            Some(json!({ "token": token })),
-            &[],
-        )
+        .post(&ben, "/v1/invitations/preview", json!({ "token": token }))
         .await
         .ok();
     assert_eq!(
@@ -595,15 +599,9 @@ async fn an_invitation_naming_someone_is_only_theirs_to_claim() {
     app.post(&carla, "/v1/invitations/claim", token.clone())
         .await
         .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
-    app.call(
-        None,
-        Method::POST,
-        "/v1/invitations/preview",
-        Some(token),
-        &[],
-    )
-    .await
-    .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    app.post(&carla, "/v1/invitations/preview", token)
+        .await
+        .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
 }
 
 #[tokio::test]
@@ -645,13 +643,12 @@ async fn a_dead_link_says_nothing_about_why() {
     let deal = app.negotiating().await;
     let path = format!("/v1/exchanges/{}/invitation", deal.exchange);
     let old = json!({ "token": deal.invitation });
+    let dana = app.user("Dana").await;
 
-    app.call(
-        None,
-        Method::POST,
+    app.post(
+        &dana,
         "/v1/invitations/preview",
-        Some(json!({ "token": "made-up" })),
-        &[],
+        json!({ "token": "made-up" }),
     )
     .await
     .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
@@ -666,15 +663,9 @@ async fn a_dead_link_says_nothing_about_why() {
     app.post(&deal.ben, "/v1/invitations/claim", old.clone())
         .await
         .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
-    app.call(
-        None,
-        Method::POST,
-        "/v1/invitations/preview",
-        Some(old),
-        &[],
-    )
-    .await
-    .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    app.post(&dana, "/v1/invitations/preview", old)
+        .await
+        .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
 
     // A block between the two looks exactly like a dead link.
     sqlx::query(
@@ -689,7 +680,8 @@ async fn a_dead_link_says_nothing_about_why() {
         .await
         .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
     // To him the preview is dead too, or the two together would tell him
-    // of the block. To anyone else, and to him signed out, it still shows.
+    // of the block. Signed out, nobody is shown anything. To anyone else
+    // signed in, it still shows.
     app.post(&deal.ben, "/v1/invitations/preview", new.clone())
         .await
         .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
@@ -701,7 +693,10 @@ async fn a_dead_link_says_nothing_about_why() {
         &[],
     )
     .await
-    .ok();
+    .refused(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED");
+    app.post(&dana, "/v1/invitations/preview", new.clone())
+        .await
+        .ok();
 
     // Someone else can still claim it, after which it cannot be replaced.
     let carla = app.user("Carla").await;
@@ -1477,12 +1472,10 @@ async fn an_invitation_preview_names_the_currency_and_the_timezone() {
     let app = app().await;
     let deal = app.negotiating().await;
     let preview = app
-        .call(
-            None,
-            Method::POST,
+        .post(
+            &deal.ben,
             "/v1/invitations/preview",
-            Some(json!({ "token": deal.invitation })),
-            &[],
+            json!({ "token": deal.invitation }),
         )
         .await
         .ok();

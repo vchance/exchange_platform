@@ -326,12 +326,11 @@ pub async fn report_exchange(
     Ok(())
 }
 
-/// Someone holding an invitation link reports the proposal it shows, and
-/// with it the person who sent it. `reporter` is their account if they
-/// happen to be signed in.
+/// Someone signed in, holding an invitation link, reports the proposal it
+/// shows them, and with it the person who sent it.
 pub async fn report_invitation(
     db: &PgPool,
-    reporter: Option<Uuid>,
+    reporter: Uuid,
     body: NewInvitationReport,
 ) -> Result<(), ApiError> {
     // Exactly the preview's test of the link, by running it: a link that
@@ -339,9 +338,7 @@ pub async fn report_invitation(
     service::preview_invitation(db, reporter, &body.token).await?;
 
     let mut tx = db.begin().await?;
-    if let Some(reporter) = reporter {
-        service::acting(&mut tx, reporter).await?;
-    }
+    service::acting(&mut tx, reporter).await?;
     let found: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
         "SELECT i.exchange_id, initiator.account_id
          FROM invitation i
@@ -356,7 +353,7 @@ pub async fn report_invitation(
         return Err(ErrorCode::InvitationUnavailable.into());
     };
     // Opening one's own link and reporting oneself is not a report.
-    if reporter == Some(subject) {
+    if reporter == subject {
         return Err(ErrorCode::ActionNotAllowed.into());
     }
 
@@ -364,7 +361,7 @@ pub async fn report_invitation(
     file(
         &mut tx,
         Report {
-            reporter,
+            reporter: Some(reporter),
             exchange,
             subject,
             reason,

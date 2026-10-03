@@ -295,8 +295,9 @@ async function pair(codes, n) {
   const revision = sent.exchange.open_revision.id;
   const invitation = { token: sent.invitation_token };
 
-  // The counterparty opens the link, claims it and signs.
+  // The counterparty, signed in, opens the link, claims it and signs.
   await call("POST /v1/invitations/preview", "POST", "/v1/invitations/preview", {
+    token: b,
     body: invitation,
   });
   const claimed = await call("POST /v1/invitations/claim", "POST", "/v1/invitations/claim", {
