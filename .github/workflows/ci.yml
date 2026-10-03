@@ -394,10 +394,10 @@ jobs:
           CODE_DELIVERY: log
           NOTIFICATION_DELIVERY: log
           NO_COLOR: "1"
-          # Each simulated person sends an address of their own here, so the
-          # per-address sign-in limits count them apart
-          # (apps/mobile/e2e/support/network-address.ts).
-          TRUSTED_PROXY_HEADER: X-Forwarded-For
+          # Every request comes from 127.0.0.1; raise the per-address
+          # sign-in limits out of the way.
+          SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR: "1000000"
+          SIGN_IN_FAILED_GUESSES_PER_ADDRESS_PER_HOUR: "1000000"
         run: |
           mkdir -p "$(dirname "$E2E_MOBILE_API_LOG")"
           nohup backend/target/debug/api > "$E2E_MOBILE_API_LOG" 2>&1 &

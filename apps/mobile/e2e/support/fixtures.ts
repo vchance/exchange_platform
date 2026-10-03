@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto'
 import { test as base, devices, type BrowserContext, type Page } from '@playwright/test'
 
 import { webURL } from './env'
-import { connectFrom, networkAddress } from './network-address'
 
 /*
  * The people in a test. Each has a browser context of their own, the size
@@ -21,8 +20,6 @@ export interface Person {
   /** The name they give their account. */
   name: string
   email: string
-  /** The network address their requests come from (support/network-address.ts). */
-  address: string
   context: BrowserContext
   page: Page
 }
@@ -35,7 +32,7 @@ interface PersonOptions {
 export interface Fixtures {
   /** A new person with a phone of their own, signed out. */
   person(name: string, options?: PersonOptions): Promise<Person>
-  /** A new address for someone acting through the API rather than the app. */
+  /** A new email address for someone acting through the API rather than the app. */
   email(name: string): string
 }
 
@@ -61,9 +58,7 @@ export const test = base.extend<Fixtures>({
         acceptDownloads: true,
       })
       contexts.push(context)
-      const address = networkAddress()
-      await connectFrom(context, address)
-      return { name, email: email(name), address, context, page: await context.newPage() }
+      return { name, email: email(name), context, page: await context.newPage() }
     })
     for (const context of contexts) await context.close()
   },
