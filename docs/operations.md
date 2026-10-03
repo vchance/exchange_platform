@@ -158,6 +158,7 @@ MIGRATION_DATABASE_URL=postgres://exchange:...@db.internal:5432/yuppers \
   scripts/backup.sh /backups/yuppers-$(date -u +%Y%m%d).dump
 ```
 
+- With no file named it writes `yuppers-<UTC time>.dump` in the current directory. It refuses to replace a file that is already there, unless given `--force`, and refuses a directory even then. It writes the dump under a fresh name beside the target first, created with `mktemp` so that a link someone left in the directory is never followed, readable by the running user alone, and moves it into place only once `pg_restore` can read it.
 - It needs `pg_dump` and `pg_restore` of the server's major version or newer (PostgreSQL 17); the image does not contain them. Run it from a small scheduled job in the same network, for example a `postgres:17` container with the repository's `scripts/` mounted, or set `PG_BIN` to where the tools are.
 - A connection string with a password in it is visible to other users of the same machine while the command runs. On a shared machine leave the password out of the URL and put it in `PGPASSWORD` or a `.pgpass` file.
 - Managed databases take their own snapshots and point-in-time recovery; keep those on. These files are the copy that does not depend on the provider, that can be restored anywhere, and that the drill below proves.
@@ -177,6 +178,7 @@ psql "$ADMIN_URL" -c "CREATE DATABASE yuppers_restored OWNER exchange"
 scripts/restore.sh -d postgres://exchange:...@db.internal:5432/yuppers_restored yuppers.dump
 ```
 
+- `APP_ROLE` names the application role if it is not `exchange_app`. It reaches the server only as a value psql quotes (`:'app_role'`), never pasted into a query.
 - It refuses a database that already holds tables. `--overwrite` replaces every object the backup holds instead, but leaves alone anything it does not, so a new, empty database is the safe target; point `DATABASE_URL` and `MIGRATION_DATABASE_URL` at it when it is ready.
 - **Grants**: the backup carries the grants the migrations gave `exchange_app`, and the restore applies them as they were. Afterwards `exchange_app` holds exactly those: `SELECT` and `INSERT` on the five append-only tables (`revision`, `revision_attachment`, `contribution_snapshot`, `acceptance`, `exchange_event`) and `contribution_reminder`; `SELECT`, `INSERT`, `UPDATE` on the current-state tables; `SELECT` only on `slot_holding`; `SELECT`, `INSERT`, `UPDATE`, `DELETE` on working data (drafts, blocks, idempotency keys, the outbox, network metadata, codes, sessions, sign-in counts). `backend/tests/schema.rs` asserts these. Do not restore with `--no-acl` or as another application role: the service would then have no rights, or the wrong ones.
 - **Owner**: every object belongs to the role that ran the restore, whatever the owner was called where the backup was made, so a backup moves between servers whose owner roles have different names.
@@ -191,10 +193,10 @@ A backup is only known to work once it has been restored. Do this on a schedule,
 1. Take a backup with `scripts/backup.sh`, or pick last night's.
 2. Create an empty database and restore into it with `scripts/restore.sh`. Note how long it took: that, plus starting the processes, is the time to recover.
 3. `scripts/check-restore.sh SOURCE_URL RESTORED_URL` compares the two: migrations, every privilege of `exchange_app`, every trigger, each table's row count and a digest of its rows. Against the live database the counts and digests differ by what has been written since the backup; against a database restored from the same file they must match exactly.
-4. `scripts/check-restored-record.sh RESTORED_URL RESTORED_APP_URL` starts an api on the copy, reads the oldest agreement in force through the API, and checks that its stored terms still reproduce the hash that was signed. It writes a session into the copy, so never point it at the database the service uses.
+4. `scripts/check-restored-record.sh RESTORED_URL RESTORED_APP_URL` starts an api on the copy, reads the oldest agreement in force through the API, and checks that its stored terms still reproduce the hash that was signed. It writes a session into the copy and deletes it again when it finishes, whether it passed or not; still, never point it at the database the service uses. The session's token is never on a command line: psql reads it on standard input, and curl from a header file only the running user can read.
 5. Drop the scratch database and the backup copy you made for it.
 
-CI runs the same steps on every change (the `Backup and restore` job): it fills a database through the API with the load check, backs it up, checks that `restore.sh` refuses the non-empty source, restores into a new database, compares them with `check-restore.sh`, restores again with `--overwrite` and compares again, runs `backend/tests/schema.rs` against the copy, and reads a signed agreement back from it.
+CI runs the same steps on every change (the `Backup and restore` job): it fills a database through the API with the load check, backs it up, checks that `backup.sh` will not replace that file without `--force`, that `restore.sh` refuses the non-empty source, restores into a new database, compares them with `check-restore.sh`, restores again with `--overwrite` and compares again, runs `backend/tests/schema.rs` against the copy, and reads a signed agreement back from it.
 
 ## Rotating `APP_SECRET`
 

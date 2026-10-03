@@ -67,15 +67,18 @@ fi
 bin="${PG_BIN:+$PG_BIN/}"
 app_role="${APP_ROLE:-exchange_app}"
 
+# The query goes in on standard input, where psql substitutes its variables
+# (it does not in --command): the role's name reaches the server only as
+# :'app_role', quoted by psql, never pasted into the text.
 sql() {
-    "${bin}psql" --no-psqlrc --quiet --tuples-only --no-align \
-        --set ON_ERROR_STOP=1 --dbname="$url" --command="$1"
+    printf '%s\n' "$1" | "${bin}psql" --no-psqlrc --quiet --tuples-only --no-align \
+        --set ON_ERROR_STOP=1 --set app_role="$app_role" --dbname="$url" --file=-
 }
 
 # Readable as a backup before anything is touched.
 "${bin}pg_restore" --list "$file" >/dev/null
 
-role=$(sql "SELECT count(*) FROM pg_roles WHERE rolname = '$app_role'")
+role=$(sql "SELECT count(*) FROM pg_roles WHERE rolname = :'app_role'")
 if [ "$role" != "1" ]; then
     echo "$0: the role $app_role does not exist on this server. Create it first" >&2
     echo "(docker/postgres-init.sql), or set APP_ROLE to its name." >&2
@@ -116,10 +119,10 @@ if [ "$triggers" != "5" ]; then
 fi
 writable=$(sql "SELECT count(*) FROM (VALUES ('revision'), ('revision_attachment'),
                     ('contribution_snapshot'), ('acceptance'), ('exchange_event')) AS t(name)
-                WHERE has_table_privilege('$app_role', t.name, 'UPDATE')
-                   OR has_table_privilege('$app_role', t.name, 'DELETE')
-                   OR has_table_privilege('$app_role', t.name, 'TRUNCATE')
-                   OR NOT has_table_privilege('$app_role', t.name, 'INSERT')")
+                WHERE has_table_privilege(:'app_role', t.name, 'UPDATE')
+                   OR has_table_privilege(:'app_role', t.name, 'DELETE')
+                   OR has_table_privilege(:'app_role', t.name, 'TRUNCATE')
+                   OR NOT has_table_privilege(:'app_role', t.name, 'INSERT')")
 if [ "$writable" != "0" ]; then
     echo "$0: restored, but $app_role's rights on the append-only tables are not as the" >&2
     echo "migrations set them" >&2

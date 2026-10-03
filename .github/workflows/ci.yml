@@ -624,6 +624,20 @@ jobs:
       - name: Back up
         run: scripts/backup.sh -d "$SOURCE_URL" .backup/yuppers.dump
 
+      - name: An existing backup is not replaced without --force
+        run: |
+          before="$(cksum < .backup/yuppers.dump)"
+          if scripts/backup.sh -d "$SOURCE_URL" .backup/yuppers.dump; then
+            echo "::error::backup.sh replaced an existing backup without --force"
+            exit 1
+          fi
+          [ "$(cksum < .backup/yuppers.dump)" = "$before" ]
+          scripts/backup.sh --force -d "$SOURCE_URL" .backup/yuppers.dump
+          if ls -A .backup | grep --quiet partial; then
+            echo "::error::backup.sh left a partial file behind"
+            exit 1
+          fi
+
       - name: A database that is not empty is refused
         run: |
           if scripts/restore.sh -d "$SOURCE_URL" .backup/yuppers.dump; then
