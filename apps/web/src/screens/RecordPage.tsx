@@ -101,6 +101,8 @@ function Record({ record }: { record: RecordDocument }) {
         <br />
         {fmt(w.timesIn, { timezone: exchange.timezone })}
       </p>
+      {/* A reviewer has hidden what the parties wrote from this reader (DESIGN.md §9). */}
+      {record.content_hidden && <p className="notice notice-warning">{w.contentHidden}</p>}
 
       <RecordSummary record={record} />
 
@@ -224,7 +226,7 @@ interface VersionProps {
  * terms, the fingerprint a signature covers, and each signature with what it
  * rests on.
  */
-function Version({ revision, name, when }: VersionProps) {
+export function Version({ revision, name, when }: VersionProps) {
   const { wording, fmt } = useI18n()
   const w = wording.record
   const { standing, signed } = revision

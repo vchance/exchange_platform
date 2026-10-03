@@ -335,7 +335,7 @@ async fn view(
     .map(|(id, at)| (ContributionId(id), at))
     .collect();
 
-    Ok(ExchangeView::build(
+    let mut view = ExchangeView::build(
         &aggregate,
         you,
         ViewContext {
@@ -346,7 +346,12 @@ async fn view(
             status_since,
         },
         rules,
-    ))
+    );
+    // What a reviewer hid from this account reads as a placeholder.
+    if let Some(placeholder) = crate::review::hidden_text(conn, id, account).await? {
+        crate::review::hide_in_view(&mut view, &placeholder);
+    }
+    Ok(view)
 }
 
 /// Whether an account has been deleted.
@@ -631,6 +636,10 @@ pub async fn send_revision(
     if body.expected_version != aggregate.version {
         return Err(ErrorCode::VersionConflict.into());
     }
+    // Terms written over text the sender cannot see are not theirs to send.
+    if crate::review::is_hidden_from(&mut tx, id, session.account_id).await? {
+        return Err(ErrorCode::ContentHidden.into());
+    }
     within_change_rate(&mut tx, id, slot, &settings.rules).await?;
     let consent_language = require_signer(&mut tx, session, &body.consent, settings).await?;
 
@@ -757,6 +766,10 @@ pub async fn run_command(
     let mut signing = None;
     let (command, note) = match body.command {
         CommandDto::Accept { revision, consent } => {
+            // Nobody signs what they cannot read.
+            if crate::review::is_hidden_from(&mut tx, id, session.account_id).await? {
+                return Err(ErrorCode::ContentHidden.into());
+            }
             let language = require_signer(&mut tx, session, &consent, settings).await?;
             signing = Some((language, consent.version));
             (

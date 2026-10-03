@@ -368,7 +368,7 @@ jobs:
 
       - name: Build the backend
         working-directory: backend
-        run: cargo build --locked --bin api --bin migrate
+        run: cargo build --locked --bin api --bin migrate --bin staff
 
       - name: Build the web app
         run: npm run build:web

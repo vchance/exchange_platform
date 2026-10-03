@@ -33,6 +33,7 @@ pub mod extract;
 pub mod health;
 pub mod record;
 pub mod safety;
+pub mod staff;
 pub mod v1;
 pub mod wallet;
 pub mod web;
@@ -256,6 +257,13 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
         safety::block,
         safety::unblock,
         safety::blocked_people,
+        staff::queue,
+        staff::open_report,
+        staff::resolve,
+        staff::suspensions,
+        staff::lift,
+        staff::hidden,
+        staff::restore,
         wallet::apple_pass,
         wallet::apple_link,
         wallet::google_link,

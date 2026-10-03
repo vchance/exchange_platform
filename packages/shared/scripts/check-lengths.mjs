@@ -96,6 +96,10 @@ const TIGHT = {
       'wallet.addToApple',
       'wallet.addToGoogle',
       'wallet.adding',
+      'staff.outcomes.*',
+      'staff.confirm',
+      'staff.lift',
+      'staff.restore',
     ],
   },
   // One line in the web header or the mobile navigation bar.
@@ -119,7 +123,7 @@ const TIGHT = {
   // phone (backend/src/wallet/pass.rs).
   'status tags': {
     max: 28,
-    keys: ['states.*', 'outcomes.*', 'wallet.status.*'],
+    keys: ['states.*', 'outcomes.*', 'wallet.status.*', 'staff.overdue', 'staff.standing.*'],
   },
   // A Wallet pass's labels, above their values in rows of two or three.
   'wallet pass labels': {

@@ -126,6 +126,7 @@ impl Reply {
 }
 
 /// A signed-in person.
+#[derive(Clone)]
 pub struct User {
     pub id: Uuid,
     pub email: String,
@@ -138,6 +139,8 @@ pub struct App {
     pub db: PgPool,
     /// Connected as the schema owner, for looking at what was stored.
     pub owner: PgPool,
+    /// The schema owner's connection string, for a command run as the owner.
+    pub owner_url: String,
     pub rules: Rules,
     /// What the router counted of the requests made through it.
     pub metrics: Arc<HttpMetrics>,
@@ -294,6 +297,7 @@ impl App {
             db,
             metrics,
             owner: connect(owner_url).await,
+            owner_url: owner_url.clone(),
             rules,
         }
     }

@@ -25,7 +25,9 @@ import {
   INVITATION,
   OFFER,
   REPAIR,
+  REPORT,
   ana,
+  rita,
 } from './test/fake-service'
 
 /*
@@ -353,6 +355,71 @@ describe('the other screens', () => {
     const name = field(wording.profile.nameLabel)
     expect(document.activeElement).toBe(name)
     expect(name.getAttribute('aria-invalid')).toBe('true')
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('staff review of reports', () => {
+  test('the queue, with the overdue report marked in words', async () => {
+    const { wording } = await start('/staff', rita)
+    const w = wording.staff
+    await heading(w.title)
+    await until(() => document.querySelectorAll('.card').length >= 3, 'the queue and suspensions')
+    expect(document.title).toBe(`${w.title} · ${wording.productName}`)
+    const overdue = document.querySelector('.card-overdue')!
+    expect(overdue.textContent).toContain(w.overdue)
+    expect(await violations()).toEqual([])
+
+    // Lifting a suspension asks for a note, and Cancel gives the focus back.
+    const lift = button(w.lift)
+    lift.focus()
+    await press(lift)
+    expect(document.activeElement?.classList.contains('panel')).toBe(true)
+    await press(button(w.lift))
+    await settle()
+    const note = field(w.noteLabel)
+    expect(note.getAttribute('aria-required')).toBe('true')
+    expect(note.getAttribute('aria-invalid')).toBe('true')
+    expect(document.activeElement).toBe(note)
+    expect(await violations()).toEqual([])
+    await press(button(wording.common.cancel))
+    await settle(50)
+    expect(document.activeElement?.textContent).toBe(w.lift)
+  })
+
+  test('a report opened, with the record, the decision and its note', async () => {
+    const { wording } = await start(`/staff/reports/${REPORT}`, rita)
+    const w = wording.staff
+    await heading(w.detailTitle.replace('{code}', 'PVVS-5Q2K'))
+    await until(() => document.querySelector('.history') !== null, 'the record')
+    expect(await violations()).toEqual([])
+    // Headings go down one level at a time.
+    const levels = [...document.querySelectorAll('main h1, main h2, main h3')].map((h) => h.tagName)
+    for (let i = 1; i < levels.length; i += 1) {
+      expect(Number(levels[i][1]) - Number(levels[i - 1][1])).toBeLessThanOrEqual(1)
+    }
+
+    await press(button(w.outcomes.ACCOUNT_SUSPENDED))
+    expect(document.activeElement?.classList.contains('panel')).toBe(true)
+    expect(document.activeElement?.textContent).toContain(w.outcomeText.ACCOUNT_SUSPENDED)
+    // A suspension needs a note.
+    await press(button(w.confirm))
+    await settle()
+    expect(field(w.noteLabel).getAttribute('aria-invalid')).toBe('true')
+    expect(await violations()).toEqual([])
+
+    await type(field(w.noteLabel), 'Threats in the notes.')
+    await press(button(w.confirm))
+    await heading(w.title)
+    await settle()
+    expect(announced().polite).toBe(w.outcomeDone.ACCOUNT_SUSPENDED)
+    expect(await violations()).toEqual([])
+  })
+
+  test('to anyone but a reviewer there is no such page, and no link to it', async () => {
+    const { wording } = await start('/staff', ana)
+    await heading(wording.common.notFoundTitle)
+    expect(document.querySelector('a[href^="/staff"]')).toBeNull()
     expect(await violations()).toEqual([])
   })
 })

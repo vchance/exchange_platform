@@ -36,6 +36,9 @@ pub struct Export {
     content_hash: String,
     /// Keyed by the stored name of the method, such as `EMAIL_OTP`.
     verification: HashMap<String, String>,
+    /// What stands in place of text a reviewer has hidden from the reader
+    /// (`crate::review`).
+    hidden: String,
 }
 
 impl Export {
@@ -46,6 +49,11 @@ impl Export {
             statements: self.statements.clone(),
             content_hash: self.content_hash.clone(),
         }
+    }
+
+    /// The placeholder for text a reviewer has hidden from the reader.
+    pub fn hidden(&self) -> &str {
+        &self.hidden
     }
 
     /// How a signer was verified, in words.
@@ -63,6 +71,7 @@ impl Export {
             &self.signatures,
             &self.statements,
             &self.content_hash,
+            &self.hidden,
         ]
         .into_iter()
         .all(said)
@@ -131,6 +140,7 @@ mod tests {
                 &export.signatures,
                 &export.statements,
                 &export.content_hash,
+                &export.hidden,
             ] {
                 // These are put into the document as they are, so they
                 // cannot hold a variable.
@@ -168,9 +178,9 @@ mod tests {
     #[test]
     fn a_language_missing_part_of_it_is_left_out() {
         let whole = r#"{"record":{"export":{"about":"a","signatures":"s","statements":"t",
-            "contentHash":"h","verification":{"EMAIL_OTP":"e","PHONE_OTP":"p"}}}}"#;
+            "contentHash":"h","hidden":"x","verification":{"EMAIL_OTP":"e","PHONE_OTP":"p"}}}}"#;
         let partial = r#"{"record":{"export":{"about":"a","signatures":"s","statements":"t",
-            "contentHash":"h","verification":{"EMAIL_OTP":"e"}}}}"#;
+            "contentHash":"h","hidden":"x","verification":{"EMAIL_OTP":"e"}}}}"#;
         let found = read(&[("en", whole), ("fr", partial), ("de", "{}")]);
         assert_eq!(found.keys().collect::<Vec<_>>(), ["en"]);
     }

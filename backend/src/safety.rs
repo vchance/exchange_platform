@@ -297,6 +297,8 @@ async fn file(conn: &mut PgConnection, report: Report<'_>) -> Result<(), ApiErro
     .bind(report.details)
     .execute(&mut *conn)
     .await?;
+    // Every reviewer hears that a report is waiting, and nothing more.
+    crate::review::alert_staff(conn).await?;
     Ok(())
 }
 

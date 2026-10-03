@@ -1440,3 +1440,172 @@ async fn a_wallet_pass_and_its_devices_hold_only_what_the_service_needs() {
         sqlx::query("UPDATE wallet_pass SET update_status = 'SENT'")
     );
 }
+
+#[tokio::test]
+async fn reviewers_are_named_by_the_owner_and_review_history_cannot_be_rewritten() {
+    let mut tx = app().await;
+    let a = agreement(&mut tx).await;
+    let staff = account(&mut tx).await;
+
+    // Who reviews is read by the service, never written.
+    sqlx::query("SELECT count(*) FROM staff_member")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    for statement in [
+        "INSERT INTO staff_member (account_id) SELECT id FROM account LIMIT 1",
+        "UPDATE staff_member SET granted_at = now()",
+        "DELETE FROM staff_member",
+    ] {
+        let error = refused!(tx, INSUFFICIENT_PRIVILEGE, sqlx::query(statement));
+        assert!(
+            error.to_string().contains("permission denied"),
+            "{statement}: {error}"
+        );
+    }
+
+    // A report, resolved once.
+    let report: Uuid = sqlx::query_scalar(
+        "INSERT INTO report (reporter_account_id, subject_exchange_id, subject_account_id, reason)
+         VALUES ($1, $2, $3, 'SCAM') RETURNING id",
+    )
+    .bind(a.account_b)
+    .bind(a.exchange)
+    .bind(a.account_a)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    // What was reported never changes.
+    refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query("UPDATE report SET details = 'edited' WHERE id = $1").bind(report)
+    );
+    // A resolution is whole, and says what the status says.
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "UPDATE report SET status = 'ACTIONED', resolved_at = now(), resolved_by = $2
+             WHERE id = $1"
+        )
+        .bind(report)
+        .bind(staff)
+    );
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "UPDATE report SET status = 'ACTIONED', resolved_at = now(), resolved_by = $2,
+                               outcome = 'DISMISSED'
+             WHERE id = $1"
+        )
+        .bind(report)
+        .bind(staff)
+    );
+    refused!(
+        tx,
+        CHECK,
+        sqlx::query(
+            "UPDATE report SET status = 'DISMISSED', resolved_at = now(), resolved_by = $2,
+                               outcome = 'BANISHED'
+             WHERE id = $1"
+        )
+        .bind(report)
+        .bind(staff)
+    );
+    sqlx::query(
+        "UPDATE report SET status = 'DISMISSED', resolved_at = now(), resolved_by = $2,
+                           outcome = 'DISMISSED', resolution_note = 'nothing in it'
+         WHERE id = $1",
+    )
+    .bind(report)
+    .bind(staff)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    let error = refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query("UPDATE report SET resolution_note = 'changed' WHERE id = $1").bind(report)
+    );
+    assert!(error.to_string().contains("resolved once"), "{error}");
+    refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query("DELETE FROM report")
+    );
+
+    // Content hidden from one account, and shown again.
+    sqlx::query(
+        "INSERT INTO hidden_content (exchange_id, account_id, report_id) VALUES ($1, $2, $3)",
+    )
+    .bind(a.exchange)
+    .bind(a.account_a)
+    .bind(report)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query("UPDATE hidden_content SET hidden_at = now()")
+    );
+    sqlx::query("DELETE FROM hidden_content WHERE exchange_id = $1")
+        .bind(a.exchange)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+
+    // The audit history: added to, never changed. Only the owner's command
+    // line acts without a reviewer.
+    let event = |staff: Option<Uuid>, action: &'static str| {
+        sqlx::query(
+            "INSERT INTO review_event (staff_account_id, action, report_id, account_id)
+             VALUES ($1, $2, $3, $4)",
+        )
+        .bind(staff)
+        .bind(action)
+        .bind(report)
+        .bind(a.account_a)
+    };
+    event(Some(staff), "REPORT_DISMISSED")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    refused!(tx, CHECK, event(None, "REPORT_VIEWED"));
+    refused!(tx, CHECK, event(Some(staff), "STAFF_GRANTED"));
+    refused!(tx, CHECK, event(Some(staff), "REPORT_FORGOTTEN"));
+    for statement in [
+        "UPDATE review_event SET note = 'changed'",
+        "DELETE FROM review_event",
+        "TRUNCATE review_event",
+    ] {
+        let error = refused!(tx, INSUFFICIENT_PRIVILEGE, sqlx::query(statement));
+        assert!(
+            error.to_string().contains("permission denied"),
+            "{statement}: {error}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_schema_owner_cannot_rewrite_review_history_either() {
+    let mut tx = owner().await.begin().await.unwrap();
+    for statement in [
+        "UPDATE review_event SET note = note",
+        "DELETE FROM review_event",
+    ] {
+        let error = refused!(tx, INSUFFICIENT_PRIVILEGE, sqlx::query(statement));
+        assert!(
+            error.to_string().contains("append-only"),
+            "{statement}: {error}"
+        );
+    }
+    let error = refused!(
+        tx,
+        INSUFFICIENT_PRIVILEGE,
+        sqlx::query("DELETE FROM report")
+    );
+    assert!(error.to_string().contains("append-only"), "{error}");
+}

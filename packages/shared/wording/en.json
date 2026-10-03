@@ -163,6 +163,10 @@
         "subject": "{code} is your code to delete your {productName} account",
         "body": "Enter {code} to confirm that you want to delete your {productName} account. The code works once and expires in a few minutes. It can’t be used to sign in.\n\nIf you didn’t ask to delete your account, ignore this email and nothing will change. Nobody from {productName} will ever ask you for this code."
       }
+    },
+    "staffAlert": {
+      "subject": "A report is waiting for review",
+      "body": "A new report on {productName} is waiting for review. Every report is reviewed within 24 hours.\n\nOpen the review queue: {link}\n\nYou’re getting this email because you review reports on {productName}. It never says what a report is about; sign in to read it."
     }
   },
   "push": {
@@ -525,6 +529,99 @@
     "blockedEmpty": "You haven’t blocked anyone.",
     "blockedSince": "Blocked {date}"
   },
+  "staff": {
+    "title": "Reports to review",
+    "intro": "Every report is reviewed within {hours} hours. Only reviewers can open this page.",
+    "queueHeading": "Open reports",
+    "queueEmpty": "No reports are waiting.",
+    "reportLink": "Report about {code}",
+    "reportLinkNoYup": "Report without a yup",
+    "waiting": "Waiting {hours, plural, one {# hour} other {# hours}}",
+    "waitingMinutes": "Waiting {minutes, plural, one {# minute} other {# minutes}}",
+    "overdue": "Overdue",
+    "reason": "Reason",
+    "details": "What the reporter wrote",
+    "noDetails": "No details given.",
+    "reporter": "Reported by",
+    "reporterLink": "Someone with the invitation link, not signed in",
+    "subject": "Person reported",
+    "account": "Account {id}",
+    "nameInYup": "Named {name} in the yup",
+    "standing": {
+      "ACTIVE": "Active",
+      "SUSPENDED": "Suspended",
+      "DELETED": "Deleted"
+    },
+    "filed": "Filed {date}",
+    "back": "Back to the queue",
+    "detailTitle": "Report about {code}",
+    "decisionHeading": "Decision",
+    "decisionIntro": "The person reported isn’t told about the report. Your decision and note go into the review history.",
+    "outcomes": {
+      "DISMISSED": "Dismiss",
+      "CONTENT_HIDDEN": "Hide content",
+      "ACCOUNT_SUSPENDED": "Suspend account",
+      "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED": "Hide and suspend"
+    },
+    "outcomeText": {
+      "DISMISSED": "Nothing changes for either party, and the report is closed.",
+      "CONTENT_HIDDEN": "For the person reported, everything written in this yup reads “Hidden by review”, and they can no longer sign or change its terms. They can still end it. The reporter’s view doesn’t change.",
+      "ACCOUNT_SUSPENDED": "The person reported is signed out everywhere and can’t sign in again. Their yups stay as they are, and the other party can still end them.",
+      "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED": "Both: this yup’s content is hidden from the person reported, and their account is suspended."
+    },
+    "outcomeDone": {
+      "DISMISSED": "Report dismissed.",
+      "CONTENT_HIDDEN": "Content hidden.",
+      "ACCOUNT_SUSPENDED": "Account suspended.",
+      "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED": "Content hidden and account suspended."
+    },
+    "outcomeNames": {
+      "DISMISSED": "Dismissed",
+      "CONTENT_HIDDEN": "Content hidden",
+      "ACCOUNT_SUSPENDED": "Account suspended",
+      "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED": "Content hidden and account suspended"
+    },
+    "noteLabel": "Note for the review history",
+    "noteOptionalLabel": "Note for the review history (optional)",
+    "noteRequired": "Write a note saying why.",
+    "confirm": "Confirm",
+    "recordHeading": "The yup as recorded",
+    "recordIncomplete": "This record is long; only its beginning is shown.",
+    "noRecord": "This report isn’t about a yup.",
+    "contentHidden": "This yup’s content is hidden from the person reported.",
+    "otherReportsHeading": "Other reports about this yup",
+    "status": {
+      "OPEN": "Open",
+      "DISMISSED": "Dismissed",
+      "ACTIONED": "Acted on"
+    },
+    "historyHeading": "Review history",
+    "historyEmpty": "Nothing yet.",
+    "actions": {
+      "REPORT_VIEWED": "Opened",
+      "REPORT_DISMISSED": "Dismissed",
+      "CONTENT_HIDDEN": "Content hidden",
+      "CONTENT_RESTORED": "Content shown again",
+      "ACCOUNT_SUSPENDED": "Account suspended",
+      "SUSPENSION_LIFTED": "Suspension lifted",
+      "STAFF_GRANTED": "Made a reviewer",
+      "STAFF_REVOKED": "No longer a reviewer"
+    },
+    "byReviewer": "{date}, by account {id}",
+    "byOwner": "{date}, by the owner from the command line",
+    "suspensionsHeading": "Suspended accounts",
+    "suspensionsEmpty": "No account is suspended.",
+    "suspendedSince": "Suspended {date}",
+    "lift": "Lift suspension",
+    "liftText": "They can sign in again. The sessions they had stay ended.",
+    "lifted": "Suspension lifted.",
+    "hiddenHeading": "Hidden content",
+    "hiddenEmpty": "No content is hidden.",
+    "hiddenSince": "Hidden {date}",
+    "restore": "Show again",
+    "restoreText": "They see everything written in this yup again, and can sign and change its terms.",
+    "restored": "Content shown again."
+  },
   "mobile": {
     "back": "Back",
     "openInvitation": {
@@ -675,7 +772,8 @@
     },
     "waitingLong": "{name} has not confirmed this since you marked it delivered on {date}. If they never do, it stays this way. You can ask to close it without agreement; the record then shows this as delivered but not confirmed.",
     "waitingLongMoney": "{name} has not confirmed receiving this since you recorded paying on {date}. If they never do, it stays this way. You can ask to close it without agreement; the record then shows this as paid but not confirmed.",
-    "closeRequestLapses": "If nothing changes, it closes on {date}."
+    "closeRequestLapses": "If nothing changes, it closes on {date}.",
+    "contentHidden": "Part of this yup has been hidden by review. You can still decline or withdraw a proposal, mark items and close the yup, but you can’t sign or change its terms."
   },
   "wallet": {
     "intro": "Keep this agreement in your phone’s wallet. The pass shows how it stands and links back here; its terms stay in {productName}.",
@@ -729,6 +827,7 @@
     "openHint": "Everything that was sent, signed and recorded, to read, print or download.",
     "title": "Record {code}",
     "back": "Back to the yup",
+    "contentHidden": "Part of this record has been hidden by review.",
     "print": "Print or save as PDF",
     "download": "Download a copy (JSON)",
     "fileName": "agreement-record-{code}",
@@ -861,7 +960,8 @@
       "verification": {
         "EMAIL_OTP": "A single one-time code sent to an email address. Nothing else about the signer was checked.",
         "PHONE_OTP": "A single one-time code sent by text message to a phone number. Nothing else about the signer was checked."
-      }
+      },
+      "hidden": "Hidden by review"
     },
     "summary": {
       "heading": "In short",
@@ -949,7 +1049,10 @@
     "NOT_FOUND": "We couldn’t find that.",
     "SERVICE_UNAVAILABLE": "The service is temporarily unavailable. Try again shortly.",
     "INTERNAL": "Something went wrong on our side. Try again.",
-    "WALLET_UNAVAILABLE": "Passes for this wallet aren’t available yet."
+    "WALLET_UNAVAILABLE": "Passes for this wallet aren’t available yet.",
+    "SESSION_TOO_OLD": "This page needs a sign-in from the last 12 hours. Sign out and sign in again.",
+    "CONTENT_HIDDEN": "Part of this yup has been hidden by review, so its terms can’t be signed or changed.",
+    "REPORT_RESOLVED": "This report has already been resolved."
   },
   "a11y": {
     "openExchange": "Opens this yup.",

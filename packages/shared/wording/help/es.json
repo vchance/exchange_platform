@@ -162,7 +162,18 @@
         { "p": "Es posible que una persona bloqueada llegue a darse cuenta de que la bloqueaste." },
         { "p": "Tus bloqueos aparecen en la página de tu cuenta, en “Personas que bloqueaste”, donde puedes quitarlos." },
         { "h": "Denunciar" },
-        { "p": "Denuncia un yup o una propuesta si algo está mal, como acoso, una estafa, algo ilegal, alguien que se hace pasar por otra persona o alguien menor de 18 años. A la persona denunciada no se le avisa. Una denuncia no cambia nada en el yup; bloquea también a la persona si quieres dejar de tratar con ella." }
+        { "p": "Denuncia un yup o una propuesta si algo está mal, como acoso, una estafa, algo ilegal, alguien que se hace pasar por otra persona o alguien menor de 18 años. A la persona denunciada no se le avisa de que la denunciaste." },
+        { "h": "Qué pasa con una denuncia" },
+        { "p": "Cada denuncia la lee una persona de un pequeño equipo de revisión designado por Yuppers, en menos de un día desde que se envía. Quien revisa ve lo que escribiste en la denuncia y, mientras la denuncia está abierta, todo lo que contiene el yup al que se refiere: sus términos, su historial y su registro. Nadie más ve tu denuncia." },
+        { "p": "Quien revisa puede:" },
+        {
+          "ul": [
+            "Cerrar la denuncia sin hacer nada más.",
+            "Ocultar a la persona denunciada lo que se escribió en el yup. En su lugar ve “Oculto por revisión”, y ya no puede firmar el yup ni cambiar sus términos, aunque todavía puede terminarlo. Lo que ves tú no cambia.",
+            "Suspender la cuenta de la persona. Pierde la sesión y no puede volver a iniciarla. Tus yups con ella quedan como están, y todavía puedes terminarlos."
+          ]
+        },
+        { "p": "Lo que quien revisa miró y decidió, y por qué, queda registrado. No se te avisa del resultado. A la persona denunciada no se le avisa de la denuncia, aunque puede notar contenido oculto o una suspensión. Una denuncia no termina ni cambia tu yup por sí sola; bloquea también a la persona si quieres dejar de tratar con ella." }
       ]
     },
     "deleting": {

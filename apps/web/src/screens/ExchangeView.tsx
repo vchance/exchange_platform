@@ -179,6 +179,10 @@ export function ExchangeView({ exchange, issued, onIssued, onChange, reload }: P
       )}
 
       <OtherPartyLeft exchange={exchange} otherName={otherName} />
+      {/* A reviewer has hidden what the parties wrote from this reader (DESIGN.md §9). */}
+      {exchange.content_hidden && (
+        <p className="notice notice-warning">{wording.exchange.contentHidden}</p>
+      )}
       <Counterparty
         exchange={exchange}
         otherName={otherName}

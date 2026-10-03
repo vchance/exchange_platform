@@ -391,6 +391,12 @@ ul.plain {
   margin-block-end: 0;
 }
 
+/* An open report older than the time reports are reviewed within. Said in
+   words too, by its tag. */
+.card-overdue {
+  border: 2px solid var(--alert);
+}
+
 .card-link {
   display: block;
   font-size: 1.125rem;

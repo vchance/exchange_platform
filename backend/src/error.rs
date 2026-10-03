@@ -70,6 +70,14 @@ pub enum ErrorCode {
     /// Passes for this wallet are not issued here: the platform is not
     /// configured (DESIGN.md §11).
     WalletUnavailable,
+    /// Staff review needs a recent sign-in: the session's one-time code was
+    /// entered too long ago. Sign out and sign in again.
+    SessionTooOld,
+    /// A reviewer has hidden what was written in this exchange from the
+    /// caller, so it cannot be signed or changed from here.
+    ContentHidden,
+    /// The report has already been resolved.
+    ReportResolved,
     NotFound,
     ServiceUnavailable,
     Internal,
@@ -101,7 +109,7 @@ impl From<ErrorCode> for ApiError {
             | PhoneCountryNotServed
             | InvalidRevision
             | IdempotencyKeyReused => StatusCode::UNPROCESSABLE_ENTITY,
-            InvalidCode | Unauthenticated => StatusCode::UNAUTHORIZED,
+            InvalidCode | Unauthenticated | SessionTooOld => StatusCode::UNAUTHORIZED,
             WrongActor | AccountSuspended | InvitationNotForYou => StatusCode::FORBIDDEN,
             NotFound | InvitationUnavailable | WalletUnavailable => StatusCode::NOT_FOUND,
             TooManyRequests | TooManyGuesses => StatusCode::TOO_MANY_REQUESTS,
@@ -114,7 +122,9 @@ impl From<ErrorCode> for ApiError {
             | IdentifierInUse
             | VersionConflict
             | ProfileIncomplete
-            | ConsentOutdated => StatusCode::CONFLICT,
+            | ConsentOutdated
+            | ContentHidden
+            | ReportResolved => StatusCode::CONFLICT,
             ClientTooOld => StatusCode::UPGRADE_REQUIRED,
             ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             Internal => StatusCode::INTERNAL_SERVER_ERROR,

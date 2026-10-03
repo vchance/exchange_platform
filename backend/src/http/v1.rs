@@ -6,7 +6,7 @@ use axum::{Extension, Json, Router};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use super::{AppState, account, auth, deletion, devices, exchanges, record, safety, wallet};
+use super::{AppState, account, auth, deletion, devices, exchanges, record, safety, staff, wallet};
 use crate::client_version::MinimumClientVersions;
 use crate::wallet::{Wallet, WalletPlatform};
 
@@ -40,6 +40,7 @@ pub fn router() -> Router<AppState> {
         .route("/invitations/preview", post(exchanges::preview_invitation))
         .route("/invitations/claim", post(exchanges::claim_invitation))
         .merge(safety::routes())
+        .merge(staff::routes())
         .merge(wallet::routes())
 }
 

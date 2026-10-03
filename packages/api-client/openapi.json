@@ -1906,6 +1906,431 @@
           }
         }
       }
+    },
+    "/v1/staff/hidden": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "Staff only. Content hidden by review, most recently hidden first.",
+        "operationId": "hidden",
+        "responses": {
+          "200": {
+            "description": "Hidden content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HiddenContent"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The reviewer must sign in again (`SESSION_TOO_OLD`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a reviewer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/hidden/restore": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "Staff only. Shows hidden content to the account again. A note is\nrequired.",
+        "operationId": "restore",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreContent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Shown again"
+          },
+          "401": {
+            "description": "The reviewer must sign in again (`SESSION_TOO_OLD`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a reviewer, or nothing hidden there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The note is missing or too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many actions in the last hour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/reports": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "Staff only. The open reports, oldest first, each with its age.",
+        "operationId": "queue",
+        "responses": {
+          "200": {
+            "description": "The queue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewQueue"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The reviewer must sign in again (`SESSION_TOO_OLD`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a reviewer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/reports/{id}": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "Staff only. Opens an open report: what it says, who it is about, the\nreported exchange's record with nothing hidden, and what review has done\nso far. Recorded in the audit history. A resolved report shows nothing\nmore.",
+        "operationId": "open_report",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Report ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The report and the exchange",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The reviewer must sign in again (`SESSION_TOO_OLD`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a reviewer, or no such report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already resolved (`REPORT_RESOLVED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reports opened in the last hour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/reports/{id}/resolution": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "Staff only. Resolves an open report, once: dismissed, the exchange's\ncontent hidden from the person reported, their account suspended, or\nboth. A note is required for every outcome but `DISMISSED`.",
+        "operationId": "resolve",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Report ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Resolution"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Resolved"
+          },
+          "401": {
+            "description": "The reviewer must sign in again (`SESSION_TOO_OLD`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a reviewer, or no such report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already resolved (`REPORT_RESOLVED`), or the outcome cannot apply (`ACTION_NOT_ALLOWED`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The note is missing or too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many actions in the last hour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/suspensions": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "Staff only. The suspended accounts, most recently suspended first.",
+        "operationId": "suspensions",
+        "responses": {
+          "200": {
+            "description": "Suspended accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Suspension"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The reviewer must sign in again (`SESSION_TOO_OLD`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a reviewer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/staff/suspensions/{account}/lift": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "Staff only. Lifts a suspension; the account can sign in again. A note is\nrequired.",
+        "operationId": "lift",
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "description": "Account ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffNote"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Lifted"
+          },
+          "401": {
+            "description": "The reviewer must sign in again (`SESSION_TOO_OLD`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a reviewer, or no such suspended account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The note is missing or too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many actions in the last hour",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1947,6 +2372,15 @@
             ]
           }
         }
+      },
+      "AccountStanding": {
+        "type": "string",
+        "description": "Where an account stands.",
+        "enum": [
+          "ACTIVE",
+          "SUSPENDED",
+          "DELETED"
+        ]
       },
       "Action": {
         "type": "string",
@@ -2687,6 +3121,9 @@
           "IDEMPOTENCY_KEY_REUSED",
           "CLIENT_TOO_OLD",
           "WALLET_UNAVAILABLE",
+          "SESSION_TOO_OLD",
+          "CONTENT_HIDDEN",
+          "REPORT_RESOLVED",
           "NOT_FOUND",
           "SERVICE_UNAVAILABLE",
           "INTERNAL"
@@ -2826,6 +3263,10 @@
               "null"
             ]
           },
+          "content_hidden": {
+            "type": "boolean",
+            "description": "A reviewer has hidden what the parties wrote in this exchange from\nthe viewer (DESIGN.md §9): the terms, the descriptions, the criteria\nand the messages read as one placeholder in the viewer's language,\nthere is no working copy, and signing or sending terms is refused\nwith `CONTENT_HIDDEN`. Always sent; a client may read its absence as\n`false`."
+          },
           "contributions": {
             "type": "array",
             "items": {
@@ -2914,6 +3355,42 @@
           }
         }
       },
+      "HiddenContent": {
+        "type": "object",
+        "description": "Content hidden from one account.",
+        "required": [
+          "exchange_id",
+          "display_code",
+          "account_id",
+          "name",
+          "hidden_at",
+          "report_id"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_code": {
+            "type": "string"
+          },
+          "exchange_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "hidden_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Their name as the exchange writes it."
+          },
+          "report_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "HistoryPage": {
         "type": "object",
         "description": "A stretch of an exchange's history, oldest first.",
@@ -2923,6 +3400,10 @@
           "events"
         ],
         "properties": {
+          "content_hidden": {
+            "type": "boolean",
+            "description": "A reviewer has hidden what the parties wrote in this exchange from\nthe reader: every note in this page reads as the same placeholder, in\nthe reader's language (DESIGN.md §9). Always sent; a client may read\nits absence as `false`."
+          },
           "earlier": {
             "type": [
               "integer",
@@ -3218,6 +3699,74 @@
           }
         }
       },
+      "QueuedReport": {
+        "type": "object",
+        "description": "An open report, as the queue lists it.",
+        "required": [
+          "id",
+          "created_at",
+          "age_seconds",
+          "overdue",
+          "reason"
+        ],
+        "properties": {
+          "age_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Seconds since it was made, when the answer was given."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "display_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exchange_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "overdue": {
+            "type": "boolean",
+            "description": "Older than the time a report is to be reviewed within."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ReportReason"
+          },
+          "reporter_account_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Who made it. Absent for a report made through an invitation link\nwithout signing in."
+          },
+          "subject_account_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The person reported."
+          }
+        }
+      },
       "RecordContribution": {
         "type": "object",
         "description": "Where a contribution of the agreement stands.",
@@ -3273,6 +3822,13 @@
           "part"
         ],
         "properties": {
+          "content_hidden": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Set when a reviewer has hidden what the parties wrote in this\nexchange from the reader (DESIGN.md §9). The terms, the descriptions,\nthe criteria and every note then read as one placeholder, in\n`language`, in this copy, `signed` included, so a fingerprint no longer\nmatches what is shown. The record itself is unchanged."
+          },
           "contributions": {
             "type": "array",
             "items": {
@@ -3676,6 +4232,105 @@
           }
         }
       },
+      "RelatedReport": {
+        "type": "object",
+        "description": "Another report about the same exchange.",
+        "required": [
+          "id",
+          "created_at",
+          "reason",
+          "status"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "outcome": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReviewOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ReportReason"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReportStatus"
+          }
+        }
+      },
+      "ReportDetail": {
+        "type": "object",
+        "description": "A report opened for review: what it says, who it is about, the\nexchange's record, and what review has done about it so far.",
+        "required": [
+          "report",
+          "content_hidden",
+          "other_reports",
+          "history"
+        ],
+        "properties": {
+          "content_hidden": {
+            "type": "boolean",
+            "description": "Whether the exchange's content is already hidden from the person\nreported."
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewEntry"
+            },
+            "description": "The audit history of this report, its exchange and the person\nreported: the latest 200 entries, oldest first."
+          },
+          "other_reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelatedReport"
+            },
+            "description": "The other reports about the same exchange, oldest first."
+          },
+          "record": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReviewRecord",
+                "description": "The reported exchange's record, with nothing hidden."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "report": {
+            "$ref": "#/components/schemas/QueuedReport"
+          },
+          "reporter": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReviewedAccount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subject": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReviewedAccount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "ReportReason": {
         "type": "string",
         "description": "Why an exchange is being reported. A fixed list, so that a reviewer can\ntell what kind of harm a report is about before reading it.",
@@ -3687,6 +4342,15 @@
           "UNDERAGE",
           "UNWANTED",
           "OTHER"
+        ]
+      },
+      "ReportStatus": {
+        "type": "string",
+        "description": "Where a report stands.",
+        "enum": [
+          "OPEN",
+          "DISMISSED",
+          "ACTIONED"
         ]
       },
       "RequestCode": {
@@ -3710,6 +4374,226 @@
           "channel": {
             "$ref": "#/components/schemas/CodeChannel",
             "description": "Which of the account's own identifiers to send the code to."
+          }
+        }
+      },
+      "Resolution": {
+        "type": "object",
+        "description": "Resolving a report.",
+        "required": [
+          "outcome"
+        ],
+        "properties": {
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the reviewer found, for the audit history. Required for every\noutcome but `DISMISSED`. At most 1,000 characters."
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ReviewOutcome"
+          }
+        }
+      },
+      "RestoreContent": {
+        "type": "object",
+        "description": "Showing hidden content again.",
+        "required": [
+          "exchange_id",
+          "account_id",
+          "note"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "exchange_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "note": {
+            "type": "string",
+            "description": "At most 1,000 characters."
+          }
+        }
+      },
+      "ReviewAction": {
+        "type": "string",
+        "description": "One entry of the audit history.",
+        "enum": [
+          "REPORT_VIEWED",
+          "REPORT_DISMISSED",
+          "CONTENT_HIDDEN",
+          "CONTENT_RESTORED",
+          "ACCOUNT_SUSPENDED",
+          "SUSPENSION_LIFTED",
+          "STAFF_GRANTED",
+          "STAFF_REVOKED"
+        ]
+      },
+      "ReviewEntry": {
+        "type": "object",
+        "description": "One entry of the audit history.",
+        "required": [
+          "id",
+          "action",
+          "at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The account acted on."
+          },
+          "action": {
+            "$ref": "#/components/schemas/ReviewAction"
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "exchange_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "report_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "staff_account_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The reviewer; absent for the owner's command line."
+          }
+        }
+      },
+      "ReviewOutcome": {
+        "type": "string",
+        "description": "How a reviewer resolved a report.",
+        "enum": [
+          "DISMISSED",
+          "CONTENT_HIDDEN",
+          "ACCOUNT_SUSPENDED",
+          "CONTENT_HIDDEN_AND_ACCOUNT_SUSPENDED"
+        ]
+      },
+      "ReviewQueue": {
+        "type": "object",
+        "description": "The queue of open reports, oldest first.",
+        "required": [
+          "review_within_hours",
+          "reports"
+        ],
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueuedReport"
+            }
+          },
+          "review_within_hours": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How soon a report is to be reviewed (DESIGN.md §9)."
+          }
+        }
+      },
+      "ReviewRecord": {
+        "type": "object",
+        "description": "The record of an exchange as a reviewer reads it while a report about\nit is open: everything a party's copy holds, for neither party, and with\nnothing hidden.",
+        "required": [
+          "exchange",
+          "parties",
+          "contributions",
+          "revisions",
+          "events",
+          "complete"
+        ],
+        "properties": {
+          "complete": {
+            "type": "boolean",
+            "description": "False when the record is longer than one document holds; what is\nhere is its beginning."
+          },
+          "contributions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordContribution"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordEvent"
+            }
+          },
+          "exchange": {
+            "$ref": "#/components/schemas/RecordExchange"
+          },
+          "parties": {
+            "$ref": "#/components/schemas/Parties"
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordRevision"
+            }
+          }
+        }
+      },
+      "ReviewedAccount": {
+        "type": "object",
+        "description": "One side of a report, as the reviewer is shown it.",
+        "required": [
+          "id",
+          "status",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Their name as the exchange writes it; empty if they hold no side."
+          },
+          "party": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Slot",
+                "description": "Their side of the exchange, if they hold one."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountStanding"
           }
         }
       },
@@ -4135,6 +5019,19 @@
           "B"
         ]
       },
+      "StaffNote": {
+        "type": "object",
+        "description": "A reviewer's note, required for lifting a suspension.",
+        "required": [
+          "note"
+        ],
+        "properties": {
+          "note": {
+            "type": "string",
+            "description": "At most 1,000 characters."
+          }
+        }
+      },
       "StateDto": {
         "type": "string",
         "enum": [
@@ -4155,6 +5052,44 @@
           "WAIVED",
           "REMOVED"
         ]
+      },
+      "Suspension": {
+        "type": "object",
+        "description": "A suspended account.",
+        "required": [
+          "account_id",
+          "name"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name on the account."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "report_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "suspended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When review suspended it, RFC 3339; absent if review did not."
+          }
+        }
       },
       "UpdateAccount": {
         "type": "object",
