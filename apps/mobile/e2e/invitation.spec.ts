@@ -68,7 +68,9 @@ test('the invited person reads the proposal, with the notice that money is paid 
   expect(confirmed.state).toBe('ACTIVE')
   await page.getByRole('link', { name: en.exchange.refresh }).click()
   await expect(page.getByText(en.states.ACTIVE, { exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: en.exchange.agreementHeading })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: en.exchange.agreementHeading, exact: true }),
+  ).toBeVisible()
 })
 
 test('a signed-in person pastes an invitation link into the app', async ({ person, email }) => {
