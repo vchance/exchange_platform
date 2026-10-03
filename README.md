@@ -114,6 +114,19 @@ GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on ev
 
 The workflow names the Rust and Node versions it uses; raise them there when the project moves to newer ones.
 
+### Dependencies
+
+[`.github/workflows/audit.yml`](.github/workflows/audit.yml) checks the locked dependencies against the published advisories every Monday and whenever it is started by hand (Actions, "Dependency audit", "Run workflow"): `npm audit --audit-level=high` and `cargo audit`. It fails on high or critical only, and never runs on a push or a pull request, since a new advisory says nothing about the change in front of you. An npm advisory that has been looked at and accepted is named in the workflow, so it does not fail every week; each is below, and comes off the list when its fix lands.
+
+What remains, as of October 2026. Every package here is already at the newest version its dependents allow; npm's suggested fix for the Expo ones is a downgrade to Expo 44, which is not one. The Rust side has nothing open.
+
+| Package | Issue | Where it runs | Why it stays |
+|---|---|---|---|
+| `node-forge` 1.4.0 (high) | RSA signature verification accepts a malformed signature | The Expo command-line tools, through `@expo/cli`: code-signing certificates on the development machine | No fixed release exists. Neither app nor the service contains it. Accepted in the audit workflow. |
+| `braces` 3.0.3 (high) | Stack exhaustion on deeply nested brace patterns | Jest's file matching, through `micromatch`, when the mobile tests run | No fixed release exists. The patterns are the repository's own test configuration. Accepted in the audit workflow, for when `npm audit` starts reporting it. |
+| `decode-uri-component` 0.2.2 (moderate) | Exponential time decoding malformed percent-encoding | The mobile app itself: `expo-router` reads the links the app opens with `query-string` 7 | Waiting on Expo. The fix, 0.5.0, is an ES module that `query-string` 7 cannot load, and `expo-router` 57 requires `query-string` 7. At worst, a crafted link makes the app hang for the person who opens it, and no one else. |
+| `uuid` 7.0.3 (moderate) | Missing bounds check when an output buffer is passed to v3, v5 or v6 | Generating the iOS project at build time, through `xcode` and `@expo/config-plugins` | `xcode` calls only `v4()`, without a buffer, so the flaw is never reached. Waiting on Expo. |
+
 ## Backend binaries
 
 - `api` — the HTTP service. With `WEB_DIR` set, it also serves the built web app from the same origin: each language's entry page at `/{language}/i`, the app's own page for any other path the API does not route, and hashed assets cached for a year (`backend/src/http/web.rs`).
