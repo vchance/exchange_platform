@@ -1,19 +1,17 @@
-# Keeps the pinned digests current. The base images in the Dockerfile, the
-# PostgreSQL service image in the workflows and every action they use are
-# pinned by digest or commit, with the tag or version beside it. Each week
-# Dependabot opens a pull request for any that has a newer build, and CI
-# checks it like any other change.
+# Keeps the pinned digests current. The base images in the Dockerfile and
+# every action the workflows use are pinned by digest or commit, with the tag
+# or version beside it. Each week Dependabot opens a pull request for any that
+# has a newer build, and CI checks it like any other change.
+#
+# The PostgreSQL image in .github/workflows/ci.yml is pinned by digest too,
+# but updated by hand: Dependabot's docker ecosystem reads Dockerfiles and
+# Kubernetes or Helm YAML (files with apiVersion and kind), not workflow files,
+# so an entry for /.github/workflows would never propose anything.
 version: 2
 updates:
   # The Dockerfile's base images, and its syntax frontend.
   - package-ecosystem: docker
     directory: /
-    schedule:
-      interval: weekly
-
-  # The `image:` lines of the workflows' service containers.
-  - package-ecosystem: docker
-    directory: /.github/workflows
     schedule:
       interval: weekly
 

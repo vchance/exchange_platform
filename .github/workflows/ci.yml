@@ -37,6 +37,9 @@ jobs:
       # `exchange` is a superuser here, so it may create the throwaway
       # databases the API tests use.
       postgres:
+        # Pinned by digest, the same in every job and in the backup job's tools
+        # below, and updated by hand: Dependabot does not read workflow files'
+        # service images (README, "Dependencies").
         image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
         env:
           POSTGRES_USER: exchange
@@ -317,6 +320,9 @@ jobs:
       E2E_API_LOG: ${{ github.workspace }}/apps/web/e2e/.output/api.log
     services:
       postgres:
+        # Pinned by digest, the same in every job and in the backup job's tools
+        # below, and updated by hand: Dependabot does not read workflow files'
+        # service images (README, "Dependencies").
         image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
         env:
           POSTGRES_USER: exchange
@@ -421,7 +427,10 @@ jobs:
       E2E_MOBILE_API_LOG: ${{ github.workspace }}/apps/mobile/e2e/.output/api.log
     services:
       postgres:
-        image: postgres:17
+        # Pinned by digest, the same in every job and in the backup job's tools
+        # below, and updated by hand: Dependabot does not read workflow files'
+        # service images (README, "Dependencies").
+        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange
@@ -529,7 +538,10 @@ jobs:
       APP_SECRET: ci-only-secret-for-the-backup-check-0123456789
     services:
       postgres:
-        image: postgres:17
+        # Pinned by digest, the same in every job and in the backup job's tools
+        # below, and updated by hand: Dependabot does not read workflow files'
+        # service images (README, "Dependencies").
+        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f # 17
         env:
           POSTGRES_USER: exchange
           POSTGRES_PASSWORD: exchange
@@ -567,7 +579,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/pg17"
           for tool in pg_dump pg_restore psql; do
-            printf '#!/bin/sh\nexec docker run --rm -i --network host -v "%s:%s" -w "$PWD" postgres:17 %s "$@"\n' \
+            printf '#!/bin/sh\nexec docker run --rm -i --network host -v "%s:%s" -w "$PWD" postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f %s "$@"\n' \
               "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$tool" > "$RUNNER_TEMP/pg17/$tool"
             chmod +x "$RUNNER_TEMP/pg17/$tool"
           done
