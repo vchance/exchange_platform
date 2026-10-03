@@ -113,6 +113,7 @@ How it is checked:
 - `src/a11y.test.tsx` in `apps/web` runs the whole web app in jsdom against a stand-in for the service and checks the invitation page, sign-in, the composer, the exchange view, the record and the rest with [axe-core](https://github.com/dequelabs/axe-core) (WCAG 2.0 to 2.2 A and AA, and axe's best practices). Any violation fails `npm test`. It also checks where the focus goes, what is announced, and the page's title and language. `src/contrast.test.ts` computes the contrast of the colour pairs the stylesheet draws, which axe cannot do in jsdom.
 - `npm run lint -w @yuppers/web` includes oxlint's `jsx-a11y` rules.
 - `src/__tests__/accessibility.test.tsx` in `apps/mobile` walks the main screens, as iOS and as Android, and fails on any pressable control without a role, label, state or a 44-point target, any input without a label, or a screen without a heading; it also checks what is announced and that panels move the screen reader's focus.
+- `e2e/narrow.spec.ts` in `apps/web` goes through the main screens in Spanish in a window 320 CSS pixels wide (WCAG 1.4.10, reflow) and fails if the page scrolls sideways or a button, link, tag, heading or field sticks out of the window or cuts its text off.
 
 None of this replaces trying the apps with VoiceOver, TalkBack, NVDA and a keyboard, at the largest text sizes, before a release: the automated checks see the structure, not how it sounds or how it lays out.
 
@@ -128,6 +129,7 @@ None of this replaces trying the apps with VoiceOver, TalkBack, NVDA and a keybo
 | `npx expo-doctor` (in `apps/mobile/`) | Checks the mobile app's dependencies and configuration against the Expo SDK. |
 | `npx expo export --platform ios --platform android` (in `apps/mobile/`) | Builds both platforms' bundles, which proves they compile. |
 | `npm run build:web` | Production build of the web app, with one entry page per language (`DESIGN.md` §13.5). |
+| `npm run budget -w @yuppers/web` | After `build:web`: the invitation page's size, held to its budget (below). |
 | `cargo test` (in `backend/`) | Backend tests: the rules as pure functions, and the database, sign-in and exchange API against a running PostgreSQL. |
 | `cargo run --bin worker` (in `backend/`) | Background worker. |
 | `npm run e2e` | End-to-end tests of the web app in Chromium, against the real API and database (below). |
@@ -135,7 +137,7 @@ None of this replaces trying the apps with VoiceOver, TalkBack, NVDA and a keybo
 
 ### End-to-end tests
 
-`apps/web/e2e` drives the built web app in Chromium with Playwright, against the real API and a real PostgreSQL database. Each test signs up its own people, each in a browser context of their own, with `example.test` addresses nobody else uses, so tests are independent and run in parallel. They go through the screens as a person would: a first proposal through to a completed exchange and its record, the record's plain summary and its print layout, counter-proposals, declining and withdrawing, discarding a draft, amendments, disputes, a close request, the guide for when something isn't working, what a proposal changes for the person asked to sign it, blocking, Spanish, account deletion, a build the service says is too old, and a replaced invitation link.
+`apps/web/e2e` drives the built web app in Chromium with Playwright, against the real API and a real PostgreSQL database. Each test signs up its own people, each in a browser context of their own, with `example.test` addresses nobody else uses, so tests are independent and run in parallel. They go through the screens as a person would: a first proposal through to a completed exchange and its record, the record's plain summary and its print layout, counter-proposals, declining and withdrawing, discarding a draft, amendments, disputes, a close request, the guide for when something isn't working, what a proposal changes for the person asked to sign it, blocking, Spanish, the main screens in Spanish at 320 pixels wide, account deletion, a build the service says is too old, and a replaced invitation link.
 
 ```sh
 npx playwright install chromium                              # once
@@ -174,7 +176,7 @@ What the harness cannot show, because it only exists on a device:
 GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Seven jobs run side by side:
 
 - **Backend and API client**, against a PostgreSQL 17 container with the same two roles as local development: `cargo fmt --check`, `cargo clippy --all-targets` with warnings as errors, `cargo test`, and then `npm run gen:api`, which fails the job if it changes anything under `packages/api-client`. A stale client means the contract has drifted; regenerate it and commit the result.
-- **TypeScript**: `npm ci`, `npm run typecheck` (which includes the wording check), `npm run lint -w @yuppers/web` (warnings fail it), `npm run lint -w @yuppers/mobile`, `npm test` and `npm run build:web`.
+- **TypeScript**: `npm ci`, `npm run typecheck` (which includes the wording and length checks), `npm run lint -w @yuppers/web` (warnings fail it), `npm run lint -w @yuppers/mobile`, `npm test`, `npm run build:web` and the invitation page's size budget.
 - **Mobile app config**: `npx expo-doctor`, and the iOS and Android projects generated from the app config with `npx expo prebuild` into a directory that is thrown away, checked for the app links, the privacy manifest and the permissions removed ([docs/mobile-release.md](docs/mobile-release.md), "Checks in CI"). Nothing is built or signed, and no account is needed.
 - **Container image**: builds the `Dockerfile`, starts the whole stack from `docker-compose.yml` and checks it from outside: `/healthz` and `/readyz` answer, the web app's entry pages are served in each language with the right cache and security headers, API paths keep precedence, a request ID comes back, metrics answer on their own port and not on the public one, and the worker starts, reports its passes and exits cleanly when stopped. Docker is not needed on a development machine for anything else, so this job is where the image is verified.
 - **End to end**: against a PostgreSQL 17 container, builds the API and the web app, applies the migrations, starts the API in the background and runs `apps/web/e2e` in Chromium. When it fails, the Playwright report, with a trace of each failed test, and the API's log are kept as the run's `playwright-report` artifact.
@@ -283,13 +285,19 @@ TLS termination is the proxy's or the platform's: the service speaks plain HTTP 
 - **Mobile dependencies** are added with `npx expo install <package>` from `apps/mobile`, which picks versions that match the Expo SDK.
 - **One React version** across the repository, pinned to the one the Expo SDK uses.
 
+## Guards on the wording and the invitation page
+
+- **Text written into a screen.** `apps/web/src/pseudo.test.tsx` and `apps/mobile/src/__tests__/pseudo.test.tsx` run the main screens in a pseudo-language made from `en.json` at test time, every Latin letter accented and each message bracketed and a third longer (`Your terms` becomes `[Ýöûŕ ţéŕɱš····]`, placeholders kept), and fail on any plain Latin letter that did not come through it: in text, labels, hints, placeholders and, on mobile, the page the record's PDF is printed from. What may still have plain letters is listed in the tests and kept short: what people wrote or chose in the stand-in data, month names and other words the platform puts in a date, each language's own name and tag, and references, ids, hashes and email addresses. The pseudo-language is `packages/shared/src/testing/pseudo.ts`, which nothing in the apps imports, so it is never built into them.
+- **Lengths.** `packages/shared/scripts/check-lengths.mjs`, part of `npm run typecheck`, reports the messages whose translation runs much longer than the English, for information, and fails when a message in a tight space is longer than its group allows in any language: button labels, navigation and screen titles, status tags, and the lines of a card in the mobile list. The groups are listed by key at the top of the script; a new button or title goes into its group there. It also holds the store listing drafts in `docs/mobile-release.md` to the length each field names. Whether the screens really fit is `e2e/narrow.spec.ts` (Accessibility, above).
+- **The invitation page's size.** `apps/web/scripts/check-budget.mjs` adds up, from the build's manifest, everything `/{language}/i` loads before anyone can act on it (the entry page, the entry script and the chunks it imports, the stylesheet, and the one language's wording) with gzip and with brotli, prints it per language with the main app's size for comparison, and fails when the largest language is over `apps/web/budget.json`. The build writes the manifest to `apps/web/.build/`, outside what is served. The budget was set at the size in October 2026 plus about 10%. When it fails, find what grew first; raise the budget only if the invitation page needs it, in the same change, to the new size plus about 10%, saying why. The service serves the files uncompressed; the sizes are what a compressing proxy or CDN in front of it would send.
+
 ## Adding a language
 
 1. Add `packages/shared/wording/<code>.json` with every message that `en.json` has. The code is a language tag such as `fr` or `pt-BR`.
 2. List it in `packages/shared/wording/languages.json`, with its own name for itself and its text direction.
 3. Import it and add it to the `wording` object in `packages/shared/src/language.ts`.
 
-`npm run typecheck` then fails until the file is complete. The service reads the same list, so it needs no change, and neither does the API or the database. Nor does the mobile app. The web app needs none either: it finds the wording file by itself, and its build writes the language's invitation page, `/<code>/i`, from the file's `linkPreview` text. `DESIGN.md` §4.2 lists what else a language needs before it is offered to people, which is mostly not code.
+`npm run typecheck` then fails until the file is complete, or while a button, title, status tag or mobile list line in it is longer than its space allows (below). The service reads the same list, so it needs no change, and neither does the API or the database. Nor does the mobile app. The web app needs none either: it finds the wording file by itself, and its build writes the language's invitation page, `/<code>/i`, from the file's `linkPreview` text. `DESIGN.md` §4.2 lists what else a language needs before it is offered to people, which is mostly not code.
 
 ## An exchange's record
 
