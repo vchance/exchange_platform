@@ -91,9 +91,28 @@ fn compare(a: &[u64], b: &[u64]) -> std::cmp::Ordering {
     std::cmp::Ordering::Equal
 }
 
+/// What an old client may still do although it changes something: sign
+/// out, and delete the account (asking for the code, then deleting). A
+/// person must never be stuck signed in on a device, or unable to leave,
+/// because the app there has not been updated.
+const ALWAYS_ALLOWED: &[(Method, &str)] = &[
+    (Method::DELETE, "/v1/auth/session"),
+    (Method::POST, "/v1/me/deletion"),
+    (Method::POST, "/v1/me/deletion/codes"),
+];
+
+/// Whether `method` on `path` is one of [`ALWAYS_ALLOWED`]. A trailing
+/// slash is not the same path: the router would not answer it either.
+fn always_allowed(method: &Method, path: &str) -> bool {
+    ALWAYS_ALLOWED
+        .iter()
+        .any(|(allowed, allowed_path)| allowed == method && *allowed_path == path)
+}
+
 /// Refuses a change asked for by a client that says it is older than the
 /// minimum. Reading is still allowed: an old client can show what there is,
-/// and show the person that it must be updated.
+/// and show the person that it must be updated. So are signing out and
+/// deleting the account ([`ALWAYS_ALLOWED`]).
 pub async fn refuse_old_clients(
     State(state): State<AppState>,
     request: Request,
@@ -103,7 +122,7 @@ pub async fn refuse_old_clients(
         *request.method(),
         Method::GET | Method::HEAD | Method::OPTIONS
     );
-    if !reading {
+    if !reading && !always_allowed(request.method(), request.uri().path()) {
         let header = request
             .headers()
             .get(HEADER)
@@ -145,6 +164,18 @@ mod tests {
     fn nothing_is_required_unless_said() {
         assert!(!MinimumClientVersions::default().is_too_old("web/0.0.1"));
         assert!(!required().is_too_old("android/0.0.1"));
+    }
+
+    #[test]
+    fn signing_out_and_deleting_are_always_allowed() {
+        assert!(always_allowed(&Method::DELETE, "/v1/auth/session"));
+        assert!(always_allowed(&Method::POST, "/v1/me/deletion"));
+        assert!(always_allowed(&Method::POST, "/v1/me/deletion/codes"));
+        assert!(!always_allowed(&Method::POST, "/v1/auth/session"));
+        assert!(!always_allowed(&Method::DELETE, "/v1/me/deletion"));
+        assert!(!always_allowed(&Method::POST, "/v1/auth/sessions"));
+        assert!(!always_allowed(&Method::POST, "/v1/me/deletion/codes/x"));
+        assert!(!always_allowed(&Method::POST, "/v1/exchanges"));
     }
 
     #[test]

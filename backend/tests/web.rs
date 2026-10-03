@@ -253,7 +253,8 @@ async fn every_response_carries_the_headers_a_signing_page_needs() {
         assert_eq!(reply.header(X_FRAME_OPTIONS), "DENY", "{path}");
         assert_eq!(
             reply.header(CONTENT_SECURITY_POLICY),
-            "frame-ancestors 'none'",
+            "default-src 'self'; img-src 'self' data:; object-src 'none'; \
+             base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
             "{path}"
         );
         assert_eq!(reply.header(X_CONTENT_TYPE_OPTIONS), "nosniff", "{path}");
@@ -276,6 +277,74 @@ async fn every_response_carries_the_headers_a_signing_page_needs() {
             .header(STRICT_TRANSPORT_SECURITY),
         "max-age=31536000"
     );
+}
+
+#[tokio::test]
+async fn api_answers_are_never_stored_and_pages_keep_their_own_caching() {
+    let build = Build::write();
+    let app = service(
+        "http://localhost:8080",
+        Some(WebApp::open(build.path()).unwrap()),
+    );
+    // Answered, refused or not found: none of it may be kept.
+    for path in ["/v1/meta", "/v1/me", "/v1/nothing", "/v1"] {
+        assert_eq!(
+            get(&app, path).await.header(CACHE_CONTROL),
+            "no-store",
+            "{path}"
+        );
+    }
+    assert_eq!(
+        fetch(&app, Method::POST, "/v1/exchanges")
+            .await
+            .header(CACHE_CONTROL),
+        "no-store"
+    );
+    // Pages and assets keep what the web app's own rules say.
+    assert_eq!(get(&app, "/").await.header(CACHE_CONTROL), "no-cache");
+    assert_eq!(
+        get(&app, "/assets/index-DCaXBRW7.js")
+            .await
+            .header(CACHE_CONTROL),
+        "public, max-age=31536000, immutable"
+    );
+    assert_eq!(get(&app, "/v1x").await.header(CACHE_CONTROL), "no-cache");
+}
+
+#[tokio::test]
+async fn a_path_with_several_leading_slashes_never_redirects_to_another_host() {
+    let build = Build::write();
+    let app = service(
+        "http://localhost:8080",
+        Some(WebApp::open(build.path()).unwrap()),
+    );
+    // `//assets/` in a Location header is a link to a host named `assets`.
+    for path in [
+        "//assets",
+        "///assets",
+        "//evil.example",
+        "/assets",
+        "//es",
+        "/es",
+    ] {
+        let reply = get(&app, path).await;
+        assert!(
+            !reply.status.is_redirection(),
+            "{path}: {} to {}",
+            reply.status,
+            reply.header(LOCATION)
+        );
+        assert_eq!(reply.header(LOCATION), "", "{path}");
+        assert_eq!(reply.status, StatusCode::OK, "{path}");
+        assert_eq!(reply.body, HOME, "{path}");
+    }
+    // Read as the one-slash path it means.
+    assert_eq!(get(&app, "//es/i").await.body, ES);
+    assert_eq!(get(&app, "//assets/index-DCaXBRW7.js").await.body, SCRIPT);
+    // An API path is still the API's, and never a page.
+    let reply = get(&app, "//v1/meta").await;
+    assert_eq!(reply.status, StatusCode::NOT_FOUND);
+    assert!(!reply.header(CONTENT_TYPE).starts_with("text/html"));
 }
 
 #[tokio::test]

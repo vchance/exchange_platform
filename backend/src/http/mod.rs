@@ -4,8 +4,8 @@ use axum::Router;
 use axum::extract::Request;
 use axum::http::HeaderValue;
 use axum::http::header::{
-    CONTENT_SECURITY_POLICY, REFERRER_POLICY, STRICT_TRANSPORT_SECURITY, X_CONTENT_TYPE_OPTIONS,
-    X_FRAME_OPTIONS,
+    CACHE_CONTROL, CONTENT_SECURITY_POLICY, REFERRER_POLICY, STRICT_TRANSPORT_SECURITY,
+    X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
 };
 use axum::middleware::{self, Next};
 use axum::response::Response;
@@ -92,13 +92,29 @@ fn request_span(request: &Request) -> tracing::Span {
     )
 }
 
+/// What a page may load, and from where: only this origin's own scripts,
+/// styles, fonts and API, images from here or inline as `data:`, no plugins,
+/// no `<base>` and no frame around it. The built web app needs nothing more:
+/// it has no inline script or style, and talks to the API on its own origin.
+/// API responses carry it too, which costs nothing and covers a response
+/// some browser decides to render.
+pub const CONTENT_SECURITY_POLICY_VALUE: &str = "default-src 'self'; img-src 'self' data:; \
+    object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
 async fn security_headers(hsts: bool, request: Request, next: Next) -> Response {
+    // The API's answers are about one person, often behind a session: no
+    // cache, shared or the browser's own, may keep them, unless a handler
+    // says otherwise.
+    let api = request.uri().path() == "/v1" || request.uri().path().starts_with("/v1/");
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
+    if api && !headers.contains_key(CACHE_CONTROL) {
+        headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
     headers.insert(X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
     headers.insert(
         CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static("frame-ancestors 'none'"),
+        HeaderValue::from_static(CONTENT_SECURITY_POLICY_VALUE),
     );
     headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
