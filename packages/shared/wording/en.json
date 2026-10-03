@@ -449,19 +449,19 @@
   },
   "invitation": {
     "title": "You’ve got a yup to review",
-    "intro": "{name} wants to agree this with you. Read it, then sign in to accept it, decline it or propose changes.",
+    "signedOutTitle": "Someone sent you a yup",
+    "signInToRead": "Sign in to read it. Nothing binds you until you sign.",
     "introSignedIn": "{name} wants to agree this with you. Read it, then respond to accept it, decline it or propose changes.",
     "notBinding": "Nothing binds you until you sign. Once you have both signed, this yup is a binding agreement.",
     "expires": "This proposal is open until {date}.",
-    "bound": "This invitation is for one particular person. Sign in with the email address or phone number it was sent to.",
+    "boundSignedIn": "This invitation is for one particular person. Only someone signed in with the email address or phone number it was sent to can respond.",
     "noteHeading": "Message from {name}",
-    "respond": "Sign in to respond",
+    "respondNew": "Respond",
     "respondAs": "Respond as {name}",
     "opening": "Opening the yup…",
     "missingTitle": "This link is incomplete",
     "missing": "The invitation link has lost its last part. Open it again from the message it came in, or ask the sender for a new one.",
-    "ownInvitation": "This is your own invitation link. Send it to the other party; you can’t use it yourself.",
-    "alreadyResponded": "If you have already responded to it, it is among your yups."
+    "ownInvitation": "This is your own invitation link. Send it to the other party; you can’t use it yourself."
   },
   "claimant": {
     "reject": "Not who I invited",
@@ -478,7 +478,6 @@
     "leaveText": "You’ll no longer see this yup, and the link you opened won’t work again. {name} is told that you left, and can invite someone else.",
     "leaveVoids": "Anything you signed here is void and can never take effect.",
     "confirmLeave": "Yes, leave",
-    "invitationIntro": "{name} wants to agree this with you. Read it, then sign in to respond. You can sign it straight away. Before you can decline it or propose changes, {name} has to confirm that you are the person they invited.",
     "invitationIntroSignedIn": "{name} wants to agree this with you. Read it, then respond. You can sign it straight away. Before you can decline it or propose changes, {name} has to confirm that you are the person they invited.",
     "blockLeaves": "You leave this yup and can no longer see it. Anything you signed in it is void.",
     "blockedAfterLeaving": "You are no longer in this yup.",
@@ -552,7 +551,7 @@
     },
     "invited": {
       "heading": "Got a yup?",
-      "intro": "You can read a proposal before you sign in. Open the link you were sent, or paste it here."
+      "introSignIn": "Open the link you were sent, or paste it here. You sign in with a one-time code, then read the proposal."
     },
     "notifications": {
       "heading": "Notifications",

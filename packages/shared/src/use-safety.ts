@@ -169,10 +169,10 @@ export interface InvitationReporting {
 }
 
 /**
- * Reporting a proposal from its invitation link, before signing in or
- * without ever doing so. The link's token is the proof of having received
- * the proposal, exactly as it is for reading it; it is sent in the request
- * body and kept nowhere.
+ * Reporting a proposal from its invitation link, signed in, before or
+ * instead of claiming it (DESIGN.md §9). The link's token is the proof of
+ * having received the proposal, exactly as it is for reading it; it is sent
+ * in the request body and kept nowhere.
  */
 export function useInvitationReport(
   api: Pick<ExchangeApi, 'reportInvitation'>,

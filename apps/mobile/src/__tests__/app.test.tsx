@@ -11,6 +11,7 @@ import {
   fakeService,
   INVITATION,
   REPAIR,
+  signInOnScreen,
   TOKEN,
   ana,
   type FakeService,
@@ -259,19 +260,53 @@ test('a draft opens in the composer, with the platform’s own date control', as
 test('an invitation address gives up its token: it is sent in a body and kept out of the route', async () => {
   const { app } = await open(`/en/i#${INVITATION}`, { signedIn: false });
 
-  // The proposal can be read without signing in.
-  await screen.findByText(w.invitation.title);
-  await screen.findByText(w.invitation.notBinding);
+  // Signed out, the screen asks to sign in, and nothing is asked about the link.
+  await screen.findByText(w.invitation.signInToRead);
+  screen.getByRole('header', { name: w.invitation.signedOutTitle });
   expect(app.getPathnameWithParams()).toBe('/invitation');
   expect(heldInvitation()).toBe(INVITATION);
+  expect(service.sent.some((request) => request.path.startsWith('/v1/invitations/'))).toBe(false);
+  expect(screen.queryByText(w.invitation.notBinding)).toBeNull();
 
+  // Signed in, the proposal is read, with the session.
+  await signInOnScreen(w);
+  await screen.findByText(w.invitation.notBinding);
+  screen.getByRole('header', { name: w.invitation.title });
   const preview = service.sent.find((request) => request.path === '/v1/invitations/preview');
-  expect(preview).toMatchObject({ method: 'POST', body: { token: INVITATION } });
+  expect(preview).toMatchObject({
+    method: 'POST',
+    authorization: `Bearer ${TOKEN}`,
+    body: { token: INVITATION },
+  });
+  expect(app.getPathnameWithParams()).toBe('/invitation');
   for (const request of service.sent) expect(request.path).not.toContain(INVITATION);
+  // Nothing is claimed by reading.
+  expect(service.sent.some((request) => request.path === '/v1/invitations/claim')).toBe(false);
+});
+
+test('signed in as someone new, responding asks for the profile and then claims', async () => {
+  const { app } = await open(`/en/i#${INVITATION}`, { signedIn: false });
+  await screen.findByText(w.invitation.signInToRead);
+  await signInOnScreen(w);
+  await screen.findByText(w.invitation.notBinding);
+
+  await fireEvent.press(screen.getByRole('button', { name: w.invitation.respondNew }));
+  await screen.findByText(w.profile.firstIntro);
+  // Signing in is not asked for again.
+  expect(screen.queryByLabelText(w.signIn.identifierLabel)).toBeNull();
+  await fireEvent.changeText(screen.getByLabelText(w.profile.nameLabel), 'Ben Ortiz');
+  await fireEvent(screen.getByLabelText(w.profile.adultLabel), 'valueChange', true);
+  await fireEvent.press(screen.getByText(w.profile.continue));
+
+  await waitFor(() => expect(app.getPathnameWithParams()).toBe(`/exchanges/${EXCHANGE}`));
+  expect(
+    service.sent.filter((request) => request.path === '/v1/invitations/claim').map((r) => r.body),
+  ).toEqual([{ token: INVITATION }]);
+  expect(service.sent.filter((request) => request.path === '/v1/auth/codes')).toHaveLength(1);
 });
 
 test('a second invitation link arriving while one is open shows the new proposal', async () => {
-  await open(`/en/i#${INVITATION}`, { signedIn: false });
+  await open(`/en/i#${INVITATION}`, { signedIn: true });
   await screen.findByText(w.invitation.notBinding);
 
   // The system hands the app another link, as it does when one is tapped
@@ -325,7 +360,10 @@ test('a link someone else used is refused, and opening it never claims', async (
   expect(app.getPathnameWithParams()).toBe('/invitation');
   expect(claims()).toEqual([{ token: INVITATION, only_if_yours: true }]);
   // Nothing on the screen claims it either: there is no way to respond.
-  expect(screen.queryByText(w.invitation.respond)).toBeNull();
+  expect(screen.queryByText(w.invitation.respondNew)).toBeNull();
+  expect(
+    screen.queryByText(w.invitation.respondAs.replace('{name}', ana.display_name)),
+  ).toBeNull();
   expect(screen.queryByText(w.invitation.notBinding)).toBeNull();
   expect(heldInvitation()).toBeNull();
 });
@@ -378,6 +416,10 @@ test('with no link to open, an invitation can be pasted', async () => {
     `https://app.example/es/i#${INVITATION}`,
   );
   await fireEvent.press(screen.getByText(pasting.open));
+  // Signed out, a pasted link leads to signing in first, then the proposal.
+  await screen.findByText(w.invitation.signInToRead);
+  expect(service.sent.some((request) => request.path.startsWith('/v1/invitations/'))).toBe(false);
+  await signInOnScreen(w);
   await screen.findByText(w.invitation.notBinding);
   expect(service.sent.at(-1)).toMatchObject({
     path: '/v1/invitations/preview',

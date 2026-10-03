@@ -1,5 +1,6 @@
 import type { Account, ExchangeView } from '@yuppers/api-client';
-import type { RevisionView } from '@yuppers/shared';
+import type { RevisionView, Wording } from '@yuppers/shared';
+import { fireEvent, screen } from '@testing-library/react-native';
 
 import { answerRecordAndSafety } from './fake-record';
 
@@ -204,6 +205,14 @@ function respond(
     service.account = { ...ana, display_name: '', adult_confirmed: false };
     return [200, { account: service.account, token: TOKEN }];
   }
+  // History, the record, reporting and blocking are answered in `fake-record.ts`.
+  const signedIn = authorization === `Bearer ${TOKEN}` && service.account !== null;
+  const answered = answerRecordAndSafety(service, call, signedIn);
+  if (answered) return answered;
+
+  // Everything else needs the session, the invitation's proposal included:
+  // nothing about a link is answered to someone signed out.
+  if (!signedIn || !service.account) return [401, { code: 'UNAUTHENTICATED' }];
   if (call === 'POST /v1/invitations/preview') {
     // Every way a link can be dead looks the same, used by this account or not.
     if (service.invitation !== 'live') return [404, { code: 'INVITATION_UNAVAILABLE' }];
@@ -220,15 +229,6 @@ function respond(
     ];
   }
 
-  // History, the record, reporting and blocking are answered in `fake-record.ts`.
-  const signedIn = authorization === `Bearer ${TOKEN}` && service.account !== null;
-  const answered = answerRecordAndSafety(service, call, signedIn);
-  if (answered) return answered;
-
-  // Everything else needs the session.
-  if (authorization !== `Bearer ${TOKEN}` || !service.account) {
-    return [401, { code: 'UNAUTHENTICATED' }];
-  }
   if (call === 'GET /v1/me') return [200, service.account];
   if (call === 'POST /v1/invitations/claim') {
     const { only_if_yours } = body as { token: string; only_if_yours?: boolean };
@@ -318,4 +318,15 @@ function respond(
     return [409, { code: 'ACTION_NOT_ALLOWED' }];
   }
   return [404, { code: 'NOT_FOUND' }];
+}
+
+/**
+ * Signs in from the form on the screen, as someone new: the service's stand-in
+ * takes any code and makes an account with no name yet.
+ */
+export async function signInOnScreen(w: Wording): Promise<void> {
+  await fireEvent.changeText(screen.getByLabelText(w.signIn.identifierLabel), 'ben@example.test');
+  await fireEvent.press(screen.getByRole('button', { name: w.signIn.sendCode }));
+  await fireEvent.changeText(await screen.findByLabelText(w.signIn.codeLabel), '123456');
+  await fireEvent.press(screen.getByRole('button', { name: w.signIn.submit }));
 }

@@ -7,10 +7,11 @@ import { ReportForm } from '../components/ReportForm'
 import { safetyApi } from '../lib/safety'
 
 /**
- * Reporting a proposal from its invitation link, before signing in or
- * without ever doing so (DESIGN.md §9). The link's token is the proof of
- * having received the proposal, exactly as it is for reading it. There is no
- * block here: a block is between two accounts, and this reader may have none.
+ * Reporting a proposal from its invitation link, signed in, before or
+ * instead of responding to it (DESIGN.md §9). The link's token is the proof
+ * of having received the proposal, exactly as it is for reading it. There is
+ * no block here: a block is made through an exchange the two share, and this
+ * reader has not joined this one.
  */
 export function InvitationReport({ token }: { token: string }) {
   const { wording } = useI18n()

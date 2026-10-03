@@ -197,8 +197,8 @@ export function blockedPerson(service: FakeService): BlockedPerson {
 
 /**
  * Answers a request about the record or about reporting and blocking, or
- * returns `null` for anything else. Reporting a proposal needs no session,
- * only the invitation's token; everything else here does.
+ * returns `null` for anything else. Everything here needs a session,
+ * reporting a proposal from its invitation included.
  */
 export function answerRecordAndSafety(
   service: FakeService,
@@ -209,6 +209,7 @@ export function answerRecordAndSafety(
   const exchange = `/v1/exchanges/${service.exchange.id}`;
 
   if (call === 'POST /v1/invitations/report') {
+    if (!signedIn) return [401, { code: 'UNAUTHENTICATED' }];
     return state.reportLimitReached ? [429, { code: 'TOO_MANY_REQUESTS' }] : [204, null];
   }
 

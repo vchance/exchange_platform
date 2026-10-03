@@ -44,22 +44,31 @@ test('a first proposal goes from a new draft to a completed exchange both can ta
   await expect(ana.page.getByText(en.invitationLink.copied, { exact: true })).toBeVisible()
   expect(await ana.page.evaluate(() => navigator.clipboard.readText())).toBe(link)
 
-  // Bruno opens it signed out and can read everything before signing in.
+  // Bruno opens it signed out: it says only that a yup is waiting, and asks
+  // him to sign in to read it.
   await bruno.page.goto(link)
+  await expect(
+    bruno.page.getByRole('heading', { name: en.invitation.signedOutTitle, level: 1 }),
+  ).toBeVisible()
+  await expect(bruno.page.getByText(en.invitation.signInToRead)).toBeVisible()
+  await expect(bruno.page.getByText(BICYCLE)).toHaveCount(0)
+  await expect(bruno.page.getByText(ana.name)).toHaveCount(0)
+  // The token has left the address bar.
+  expect(new URL(bruno.page.url()).hash).toBe('')
+
+  // Signed in, he reads everything before responding.
+  await signIn(bruno)
   await expect(
     bruno.page.getByRole('heading', { name: en.invitation.title, level: 1 }),
   ).toBeVisible()
   await expect(
-    bruno.page.getByText(fill(en.claimant.invitationIntro, { name: ana.name })),
+    bruno.page.getByText(fill(en.claimant.invitationIntroSignedIn, { name: ana.name })),
   ).toBeVisible()
   await expect(bruno.page.getByText(BICYCLE, { exact: true })).toBeVisible()
   await expect(bruno.page.getByText(PAYMENT, { exact: true })).toBeVisible()
   await expect(bruno.page.getByText(en.terms.moneyOutside)).toBeVisible()
-  // The token has left the address bar.
-  expect(new URL(bruno.page.url()).hash).toBe('')
 
-  await bruno.page.getByRole('button', { name: en.invitation.respond }).click()
-  await signIn(bruno)
+  await bruno.page.getByRole('button', { name: en.invitation.respondNew, exact: true }).click()
   await setUpProfile(bruno)
   await bruno.page.waitForURL(/\/exchanges\/[0-9a-f-]{36}$/)
   await expect(

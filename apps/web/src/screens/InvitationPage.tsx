@@ -10,15 +10,22 @@ import { ErrorNote, Failure, PageHeading, Written } from '../components/ui'
 import { useAnnouncement } from '../lib/announce'
 import { api, failureCode, type InvitationPreview } from '../lib/api'
 import { forgetInvitationToken, takeInvitationToken } from '../lib/invitation-token'
-import { InvitationReport } from './InvitationReport'
+import { SignIn } from './SignIn'
 
+// Only someone signed in and reading the proposal needs these.
 const AccountSetup = lazy(() => import('./AccountSetup'))
+const InvitationReport = lazy(() =>
+  import('./InvitationReport').then((module) => ({ default: module.InvitationReport })),
+)
 
 /**
- * Where an invitation link lands. The proposal can be read without signing
- * in or installing anything; responding to it means signing in and claiming
- * the invitation, which takes the invited party's place in the exchange
- * (DESIGN.md §8). Reading claims nothing.
+ * Where an invitation link lands. The proposal is read signed in: someone
+ * signed out is shown only that a yup is waiting and the way to sign in,
+ * the same for every link, live or dead. The service answers nothing about a
+ * link to someone signed out, so a blocked person has nothing to compare
+ * with the dead link they are shown signed in (DESIGN.md §9). Responding
+ * means claiming the invitation, which takes the invited party's place in
+ * the exchange (DESIGN.md §8). Reading claims nothing.
  *
  * A second link pasted into a tab already showing this page changes only
  * the fragment, so the browser does not load the page again. The token is
@@ -26,6 +33,7 @@ const AccountSetup = lazy(() => import('./AccountSetup'))
  * start, with nothing kept from the one before.
  */
 export function InvitationPage() {
+  const { account } = useSession()
   // Taking the token also removes it from the address bar.
   const [token, setToken] = useState(takeInvitationToken)
   useEffect(() => {
@@ -38,12 +46,45 @@ export function InvitationPage() {
     window.addEventListener('hashchange', taken)
     return () => window.removeEventListener('hashchange', taken)
   }, [])
-  return <Invitation key={token ?? ''} token={token} />
+  // Whoever signs in, or out, starts from the top: nothing one person was
+  // shown stays on the page for the next.
+  return <Invitation key={`${token ?? ''} ${account?.id ?? ''}`} token={token} />
 }
 
 function Invitation({ token }: { token: string | null }) {
+  const { wording } = useI18n()
+  const { account, ready } = useSession()
+  const w = wording.invitation
+
+  if (!token) {
+    return (
+      <>
+        <PageHeading>{w.missingTitle}</PageHeading>
+        <p>{w.missing}</p>
+      </>
+    )
+  }
+  if (!ready) return <p>{wording.common.loading}</p>
+  if (!account) {
+    // The same page for every link: nothing here depends on the token.
+    return (
+      <>
+        <PageHeading>{w.signedOutTitle}</PageHeading>
+        <p>{w.signInToRead}</p>
+        <section aria-labelledby="invitation-sign-in">
+          <h2 id="invitation-sign-in">{wording.signIn.title}</h2>
+          <SignIn />
+        </section>
+      </>
+    )
+  }
+  return <Proposal token={token} />
+}
+
+/** The proposal behind a link, for the account signed in. */
+function Proposal({ token }: { token: string }) {
   const { wording, fmt, moment } = useI18n()
-  const { account, ready, setAccount } = useSession()
+  const { account, setAccount } = useSession()
   const w = wording.invitation
 
   const [preview, setPreview] = useState<InvitationPreview | null>(null)
@@ -53,7 +94,6 @@ function Invitation({ token }: { token: string | null }) {
   const claiming = useRef(false)
 
   useEffect(() => {
-    if (!token) return
     let cancelled = false
     api.previewInvitation(token).then(
       (found) => {
@@ -61,6 +101,7 @@ function Invitation({ token }: { token: string | null }) {
       },
       (error: unknown) => {
         if (cancelled) return
+        // A session that has ended signs the page out by itself.
         const code = failureCode(error)
         if (code === 'INVITATION_UNAVAILABLE') setSpent(true)
         else setFailure(code)
@@ -81,7 +122,7 @@ function Invitation({ token }: { token: string | null }) {
   // the exchange, and anyone else gets the same refusal as before. Only the
   // button below ever claims.
   useEffect(() => {
-    if (!spent || !ready || !token) return
+    if (!spent) return
     if (!able) {
       forgetInvitationToken(token)
       return
@@ -99,11 +140,11 @@ function Invitation({ token }: { token: string | null }) {
         setFailure(failureCode(error))
       },
     )
-  }, [spent, ready, able, token])
+  }, [spent, able, token])
 
   // Once the person has asked to respond and has an account that can, claim.
   useEffect(() => {
-    if (!responding || !able || !token || claiming.current) return
+    if (!responding || !able || claiming.current) return
     claiming.current = true
     api.claimInvitation(token).then(
       (exchange) => {
@@ -120,22 +161,12 @@ function Invitation({ token }: { token: string | null }) {
     )
   }, [responding, able, token])
 
-  if (!token) {
-    return (
-      <>
-        <PageHeading>{w.missingTitle}</PageHeading>
-        <p>{w.missing}</p>
-      </>
-    )
-  }
-
   const sender = preview?.revision.terms.party_a_name ?? ''
 
   // A link that cannot be read is refused at the top of an otherwise empty
   // page. A claim is refused next to the button that asked for it, which is
   // below the whole proposal.
-  const refused: ErrorCode | null =
-    failure ?? (spent && ready && !able ? 'INVITATION_UNAVAILABLE' : null)
+  const refused: ErrorCode | null = failure ?? (spent && !able ? 'INVITATION_UNAVAILABLE' : null)
   const refusal = refused && (
     <>
       {/* The only refusal a claim gives for this reason is opening one's own link. */}
@@ -144,17 +175,11 @@ function Invitation({ token }: { token: string | null }) {
       ) : (
         <Failure code={refused} />
       )}
-      {refused === 'INVITATION_UNAVAILABLE' && !account && (
-        <p>
-          {w.alreadyResponded} <Link to={paths.home}>{wording.signIn.title}</Link>
-        </p>
-      )}
-      {refused === 'INVITATION_NOT_FOR_YOU' && account && (
+      {refused === 'INVITATION_NOT_FOR_YOU' && (
         <p>
           <button
             type="button"
             onClick={() => {
-              setFailure(null)
               api.signOut().then(
                 () => setAccount(null),
                 () => setAccount(null),
@@ -165,11 +190,9 @@ function Invitation({ token }: { token: string | null }) {
           </button>
         </p>
       )}
-      {account && (
-        <p>
-          <Link to={paths.home}>{wording.common.goHome}</Link>
-        </p>
-      )}
+      <p>
+        <Link to={paths.home}>{wording.common.goHome}</Link>
+      </p>
     </>
   )
 
@@ -185,16 +208,11 @@ function Invitation({ token }: { token: string | null }) {
           {/* An invitation that names nobody can be opened by whoever holds
               the link, so its sender has to confirm them before they can do
               more than sign (DESIGN.md §8). */}
-          {preview.bound ? (
-            <p>{fmt(able ? w.introSignedIn : w.intro, { name: sender })}</p>
-          ) : (
-            <p>
-              {fmt(
-                able ? wording.claimant.invitationIntroSignedIn : wording.claimant.invitationIntro,
-                { name: sender },
-              )}
-            </p>
-          )}
+          <p>
+            {fmt(preview.bound ? w.introSignedIn : wording.claimant.invitationIntroSignedIn, {
+              name: sender,
+            })}
+          </p>
           <p>{w.notBinding}</p>
 
           <section
@@ -218,7 +236,7 @@ function Invitation({ token }: { token: string | null }) {
             <p className="hint">{fmt(w.expires, { date: moment(preview.revision.expires_at) })}</p>
           </section>
 
-          {preview.bound && <p>{w.bound}</p>}
+          {preview.bound && <p>{w.boundSignedIn}</p>}
           {refusal}
 
           {responding && able && <p>{w.opening}</p>}
@@ -227,14 +245,23 @@ function Invitation({ token }: { token: string | null }) {
               <AccountSetup headingLevel="h2" />
             </Suspense>
           )}
-          {!responding && ready && (
+          {!responding && (
             <div className="actions">
-              <button type="button" className="primary" onClick={() => setResponding(true)}>
-                {account && able ? fmt(w.respondAs, { name: account.display_name }) : w.respond}
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  setFailure(null)
+                  setResponding(true)
+                }}
+              >
+                {account && able ? fmt(w.respondAs, { name: account.display_name }) : w.respondNew}
               </button>
             </div>
           )}
-          <InvitationReport token={token} />
+          <Suspense fallback={null}>
+            <InvitationReport token={token} />
+          </Suspense>
         </>
       )}
     </>

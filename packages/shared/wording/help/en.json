@@ -15,8 +15,8 @@
           "ol": [
             "Draft. You write down who it is between and what each of you provides: items, services, tasks or money, each with when it is due. Your draft is saved as you go, and nobody else sees it until you send it. You can discard a draft you don’t want.",
             "Send. Signing and sending is one step: by sending the terms, you sign them. You then get an invitation link to send to the other person, however you usually reach them. We don’t send it for you.",
-            "Read. The other person opens the link and can read the whole proposal without an account.",
-            "Sign in. To respond, they sign in with a one-time code we send them. There is no password.",
+            "Sign in. The other person opens the link and signs in with a one-time code we send them. There is no password, and signing in commits them to nothing.",
+            "Read. Once signed in, they can read the whole proposal.",
             "Sign. They can sign the terms as they are, decline them, or propose changes."
           ]
         },
@@ -142,7 +142,7 @@
       "title": "Blocking and reporting",
       "summary": "What a block does and doesn’t do, and how to report something that is wrong.",
       "blocks": [
-        { "p": "You can block or report the other person from a yup you share, once they have joined it. You can also report a proposal from the invitation page, before you sign in." },
+        { "p": "You can block or report the other person from a yup you share, once they have joined it. You can also report a proposal from the invitation page, once you have signed in to read it." },
         { "h": "What blocking does" },
         {
           "ul": [
@@ -159,7 +159,7 @@
             "Unblocking doesn’t bring back anything the block ended."
           ]
         },
-        { "p": "Someone you block may be able to work out that you blocked them." },
+        { "p": "Nothing we show tells them that you blocked them. An invitation link from you stops working for them the same way a used or expired link does, whether or not they are signed in. They may still guess from what happens between you." },
         { "p": "Your blocks are listed on your account page, under “People you’ve blocked”, where you can lift them." },
         { "h": "Reporting" },
         { "p": "Report a yup or a proposal if something is wrong, such as harassment, a scam, something illegal, someone pretending to be someone else, or someone under 18. The person you report isn’t told. A report changes nothing in the yup itself; block the person as well if you want to stop dealing with them." }

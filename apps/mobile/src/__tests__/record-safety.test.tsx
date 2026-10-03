@@ -514,8 +514,14 @@ describe('blocking from an exchange', () => {
 });
 
 describe('reporting a proposal from its invitation', () => {
-  test('it needs no account, and the token goes in the body and nowhere else', async () => {
-    const { app } = await open(`/en/i#${INVITATION}`, { signedIn: false });
+  test('it is not offered signed out', async () => {
+    await open(`/en/i#${INVITATION}`, { signedIn: false });
+    await screen.findByText(w.invitation.signInToRead);
+    expect(screen.queryByRole('button', { name: safety.reportProposal })).toBeNull();
+  });
+
+  test('signed in, the token goes in the body and nowhere else', async () => {
+    const { app } = await open(`/en/i#${INVITATION}`, { signedIn: true });
     await screen.findByText(w.invitation.notBinding);
 
     await fireEvent.press(screen.getByRole('button', { name: safety.reportProposal }));
@@ -528,21 +534,21 @@ describe('reporting a proposal from its invitation', () => {
       expect.objectContaining({
         method: 'POST',
         path: '/v1/invitations/report',
-        authorization: null,
+        authorization: `Bearer ${TOKEN}`,
         body: { token: INVITATION, reason: 'UNWANTED', details: null },
       }),
     ]);
     for (const request of service.sent) expect(request.path).not.toContain(INVITATION);
     expect(app.getPathnameWithParams()).toBe('/invitation');
-    // There is no block here: a block is between two accounts.
+    // There is no block here: a block is made through an exchange the two share.
     expect(screen.queryByText(fill(safety.block, other))).toBeNull();
     // The proposal is still there to respond to.
-    screen.getByRole('button', { name: w.invitation.respond });
+    screen.getByRole('button', { name: fill(w.invitation.respondAs, { name: ana.display_name }) });
   });
 
   test('a refusal stays in the form', async () => {
     await open(`/en/i#${INVITATION}`, {
-      signedIn: false,
+      signedIn: true,
       before: (made) => {
         recordAndSafety(made).reportLimitReached = true;
       },

@@ -36,6 +36,7 @@ import { InvitationReport } from './InvitationReport';
  * opened the app, or pasted here by the person.
  */
 export function InvitationScreen() {
+  const { account } = useSession();
   const held = useHeldInvitation();
   // The token this screen is showing. Forgetting the held one, once it is
   // spent, does not take the screen away from under the person.
@@ -43,7 +44,15 @@ export function InvitationScreen() {
   if (held && held !== token) setToken(held);
 
   if (!token) return <PasteInvitation onToken={setToken} />;
-  return <Invitation key={token} token={token} onAnother={() => setToken(null)} />;
+  // Whoever signs in, or out, starts from the top: nothing one person was
+  // shown stays on the screen for the next.
+  return (
+    <Invitation
+      key={`${token} ${account?.id ?? ''}`}
+      token={token}
+      onAnother={() => setToken(null)}
+    />
+  );
 }
 
 /** For a link that did not open the app by itself: paste it. */
@@ -106,14 +115,44 @@ function PasteInvitation({ onToken }: { onToken(token: string): void }) {
 }
 
 /**
- * The proposal behind an invitation. It can be read without signing in;
- * responding to it means signing in and claiming the invitation, which takes
- * the invited party's place in the exchange (DESIGN.md §8). Reading claims
- * nothing, and holding the link proves nothing about who is holding it.
+ * An invitation, as the account signed in sees it. Someone signed out is
+ * shown only that a yup is waiting and the way to sign in, the same for every
+ * link, live or dead: the service answers nothing about a link to someone
+ * signed out, so a blocked person has nothing to compare with the dead link
+ * they see signed in (DESIGN.md §9). Responding means claiming the
+ * invitation, which takes the invited party's place in the exchange
+ * (DESIGN.md §8). Reading claims nothing, and holding the link proves
+ * nothing about who is holding it.
  */
 function Invitation({ token, onAnother }: { token: string; onAnother(): void }) {
+  const { wording } = useI18n();
+  const { account, ready } = useSession();
+  const w = wording.invitation;
+
+  if (!ready) {
+    return (
+      <Screen>
+        <P>{wording.common.loading}</P>
+      </Screen>
+    );
+  }
+  if (!account) {
+    // The same screen for every link: nothing here depends on the token.
+    return (
+      <Screen>
+        <Heading>{w.signedOutTitle}</Heading>
+        <P>{w.signInToRead}</P>
+        <AccountSetup headingLevel={2} />
+      </Screen>
+    );
+  }
+  return <Proposal token={token} onAnother={onAnother} />;
+}
+
+/** The proposal behind an invitation, for the account signed in. */
+function Proposal({ token, onAnother }: { token: string; onAnother(): void }) {
   const { wording, fmt, moment } = useI18n();
-  const { account, ready, signOut } = useSession();
+  const { account, signOut } = useSession();
   const router = useRouter();
   const w = wording.invitation;
 
@@ -131,6 +170,7 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
       },
       (error: unknown) => {
         if (cancelled) return;
+        // A session that has ended signs the screen out by itself.
         const code = failureCode(error);
         if (code === 'INVITATION_UNAVAILABLE') setSpent(true);
         else setFailure(code);
@@ -150,7 +190,7 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
   // the exchange, and anyone else gets the same refusal as before. Only the
   // button below ever claims.
   useEffect(() => {
-    if (!spent || !ready) return;
+    if (!spent) return;
     if (!able) {
       forgetInvitation();
       return;
@@ -168,7 +208,7 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
         setFailure(failureCode(error));
       },
     );
-  }, [spent, ready, able, token, router]);
+  }, [spent, able, token, router]);
 
   // Once the person has asked to respond and has an account that can, claim.
   useEffect(() => {
@@ -195,7 +235,7 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
   // screen. A claim is refused next to the button that asked for it, which
   // is below the whole proposal.
   const refused: ErrorCode | null =
-    failure ?? (spent && ready && !able ? 'INVITATION_UNAVAILABLE' : null);
+    failure ?? (spent && !able ? 'INVITATION_UNAVAILABLE' : null);
   const refusal = refused && (
     <>
       {/* The only refusal a claim gives for this reason is opening one's own link. */}
@@ -204,23 +244,11 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
       ) : (
         <Failure code={refused} />
       )}
-      {refused === 'INVITATION_UNAVAILABLE' && !account && <P>{w.alreadyResponded}</P>}
       <Actions>
-        {refused === 'INVITATION_UNAVAILABLE' && !account && (
-          <Button label={wording.signIn.title} onPress={() => router.dismissTo('/')} />
+        {refused === 'INVITATION_NOT_FOR_YOU' && (
+          <Button label={wording.nav.signOut} onPress={() => void signOut()} />
         )}
-        {refused === 'INVITATION_NOT_FOR_YOU' && account && (
-          <Button
-            label={wording.nav.signOut}
-            onPress={() => {
-              setFailure(null);
-              void signOut();
-            }}
-          />
-        )}
-        {account && (
-          <Button label={wording.common.goHome} onPress={() => router.dismissTo('/')} />
-        )}
+        <Button label={wording.common.goHome} onPress={() => router.dismissTo('/')} />
         {!preview && (
           <Button
             label={wording.mobile.openInvitation.title}
@@ -245,16 +273,11 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
         <>
           {/* Whoever holds a link that names nobody can open it, so its sender
               confirms them before they can do more than sign (DESIGN.md §8). */}
-          {preview.bound ? (
-            <P>{fmt(able ? w.introSignedIn : w.intro, { name: sender })}</P>
-          ) : (
-            <P>
-              {fmt(
-                able ? wording.claimant.invitationIntroSignedIn : wording.claimant.invitationIntro,
-                { name: sender },
-              )}
-            </P>
-          )}
+          <P>
+            {fmt(preview.bound ? w.introSignedIn : wording.claimant.invitationIntroSignedIn, {
+              name: sender,
+            })}
+          </P>
           <P>{w.notBinding}</P>
 
           <Card>
@@ -274,17 +297,17 @@ function Invitation({ token, onAnother }: { token: string; onAnother(): void }) 
             <Hint>{fmt(w.expires, { date: moment(preview.revision.expires_at) })}</Hint>
           </Card>
 
-          {preview.bound && <P>{w.bound}</P>}
+          {preview.bound && <P>{w.boundSignedIn}</P>}
           {refusal}
 
           {responding && able && <Notice>{w.opening}</Notice>}
           {responding && !able && <AccountSetup headingLevel={2} />}
-          {!responding && ready && (
+          {!responding && (
             <Actions>
               <Button
                 variant="primary"
                 label={
-                  account && able ? fmt(w.respondAs, { name: account.display_name }) : w.respond
+                  account && able ? fmt(w.respondAs, { name: account.display_name }) : w.respondNew
                 }
                 onPress={() => {
                   setFailure(null);

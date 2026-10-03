@@ -425,21 +425,28 @@ export interface Wording {
     forHint: string
     reissue: string
   }
+  /**
+   * The invitation page. Signed out it shows only `signedOutTitle` and
+   * `signInToRead` above the way to sign in: the proposal is read signed in
+   * (DESIGN.md §9), so nothing about the link shows before then.
+   */
   invitation: {
+    /** The page's heading once the proposal is shown. */
     title: string
-    intro: string
+    signedOutTitle: string
+    signInToRead: string
     introSignedIn: string
     notBinding: string
     expires: string
-    bound: string
+    boundSignedIn: string
     noteHeading: string
-    respond: string
+    /** The button for an account that has not given its name yet. */
+    respondNew: string
     respondAs: string
     opening: string
     missingTitle: string
     missing: string
     ownInvitation: string
-    alreadyResponded: string
   }
   /**
    * Someone who opened an invitation that named nobody, until the initiator
@@ -468,7 +475,6 @@ export interface Wording {
     leaveVoids: string
     confirmLeave: string
     /** The invitation page's introduction when the invitation names nobody. Uses `{name}`. */
-    invitationIntro: string
     invitationIntroSignedIn: string
     /** What blocking does for a claimant, in place of declining what is open. */
     blockLeaves: string
@@ -556,7 +562,7 @@ export interface Wording {
     /** On the signed-out first screen: the way to an invitation without an account. */
     invited: {
       heading: string
-      intro: string
+      introSignIn: string
     }
     /** Push notifications on this phone: the offer on the list, and the account screen's switch. */
     notifications: {

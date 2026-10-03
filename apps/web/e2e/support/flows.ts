@@ -139,13 +139,19 @@ export async function propose(
 
 // ---- Joining -------------------------------------------------------------------
 
-/** Opens an invitation link signed out, then signs up through it and lands on the exchange. */
+/**
+ * Opens an invitation link signed out, signs up on the page it opens, reads
+ * the proposal, responds and lands on the exchange.
+ */
 export async function join(person: Person, link: string, w: Wording = en): Promise<void> {
   const { page } = person
   await page.goto(link)
-  await expect(page.getByRole('heading', { name: w.invitation.title, level: 1 })).toBeVisible()
-  await page.getByRole('button', { name: w.invitation.respond }).click()
+  await expect(
+    page.getByRole('heading', { name: w.invitation.signedOutTitle, level: 1 }),
+  ).toBeVisible()
   await signIn(person, w)
+  await expect(page.getByRole('heading', { name: w.invitation.title, level: 1 })).toBeVisible()
+  await page.getByRole('button', { name: w.invitation.respondNew, exact: true }).click()
   await setUpProfile(person, w)
   await page.waitForURL(UUID)
 }

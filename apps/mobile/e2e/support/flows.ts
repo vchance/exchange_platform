@@ -77,15 +77,16 @@ export async function signUp(person: Person): Promise<void> {
 // ---- Joining -------------------------------------------------------------------
 
 /**
- * Opens an invitation link, as a phone opens one it was handed, then signs
- * up through it and lands on the exchange.
+ * Opens an invitation link, as a phone opens one it was handed, signs up on
+ * the screen it opens, reads the proposal, responds and lands on the exchange.
  */
 export async function join(person: Person, link: string, w: Wording = en): Promise<string> {
   const { page } = person
   await page.goto(link)
-  await expect(title(page, w.invitation.title)).toBeVisible()
-  await button(page, w.invitation.respond).click()
+  await expect(title(page, w.invitation.signedOutTitle)).toBeVisible()
   await signIn(person, w)
+  await expect(title(page, w.invitation.title)).toBeVisible()
+  await button(page, w.invitation.respondNew).click()
   await setUpProfile(person, w)
   await page.waitForURL(UUID)
   return exchangeIdOf(page)

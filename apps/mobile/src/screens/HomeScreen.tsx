@@ -131,8 +131,9 @@ export function HomeScreen() {
 
 /**
  * On the first screen, before signing in: the way to an invitation. Someone
- * invited is usually new and signed out, and can read a proposal without an
- * account (DESIGN.md §8); this takes them to the same screen a link opens.
+ * invited is usually new and signed out; this takes them to the same screen a
+ * link opens, which asks them to sign in and then shows the proposal
+ * (DESIGN.md §8, §9).
  */
 export function InvitedEntry() {
   const { wording } = useI18n();
@@ -141,7 +142,7 @@ export function InvitedEntry() {
   return (
     <Card>
       <Heading level={2}>{w.invited.heading}</Heading>
-      <P>{w.invited.intro}</P>
+      <P>{w.invited.introSignIn}</P>
       <Actions>
         <Button
           label={w.openInvitation.title}

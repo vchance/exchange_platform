@@ -113,7 +113,7 @@ Two kinds of link are claimed (`DESIGN.md` §4.1): an invitation link, `https://
    | `ANDROID_PACKAGE` | Optional; `app.yuppers` by default. |
 
    The iOS file lists the paths the app takes (`/*/i`, `/*/i/` and `/exchanges/*`); the Android file only names the app, and the paths are in the app's intent filter. A value that is not one stops the API at start. The files must be served from the web origin itself, so this works as it is when the API serves the web app (`WEB_DIR`, the container image's default); a deployment that serves the web app from somewhere else must serve the two files there.
-3. **The link reaches the right screen.** Every link the system hands the app goes through `src/app/+native-intent.ts` (`routeForIncomingLink` in `src/lib/invitation.ts`). An invitation link gives up its token, which is held in memory, and opens the invitation screen, for the `https` link exactly as for `yuppers://`. An exchange's address opens that exchange's screen, or its record; someone signed out is asked to sign in first and then sees it. An address under `/exchanges/` that is neither (a page emails never link to) is handed to the router as it came. The tests cover the `https` forms; no device has opened one yet.
+3. **The link reaches the right screen.** Every link the system hands the app goes through `src/app/+native-intent.ts` (`routeForIncomingLink` in `src/lib/invitation.ts`). An invitation link gives up its token, which is held in memory, and opens the invitation screen, for the `https` link exactly as for `yuppers://`; someone signed out is asked to sign in there before the proposal is shown. An exchange's address opens that exchange's screen, or its record; someone signed out is asked to sign in first and then sees it. An address under `/exchanges/` that is neither (a page emails never link to) is handed to the router as it came. The tests cover the `https` forms; no device has opened one yet.
 
 Every other page of the web app stays in the browser. A deployment whose files were cached by Apple before `/exchanges/*` was added picks it up when Apple's servers fetch the file again, which can take a day or more; Android checks again when the app is installed or updated.
 
@@ -230,7 +230,7 @@ Taken from development or preview builds against a service with made-up people (
 | # | Screen | State |
 |---|---|---|
 | 1 | The exchanges list | Signed in as Ana: two active yups (one waiting on the other person, one with a delivery due) and closed ones folded away |
-| 2 | An invitation, opened from its link | Ben reading Ana's terms before signing up, with the notice that money is paid outside the app |
+| 2 | An invitation, opened from its link | Ben, just signed up, reading Ana's terms, with the notice that money is paid outside the app |
 | 3 | Composing terms | Ana's yup with one item each side and a due date |
 | 4 | Signing | The consent and the button to sign, both names shown |
 | 5 | The yup after signing | One delivery marked by Ana and waiting for Ben's confirmation |

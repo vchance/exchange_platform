@@ -37,11 +37,41 @@ import {
 
 afterEach(stop)
 
+/** Signs in from the form on the page as someone new, with no name yet. */
+async function signInAsNewcomer(wording: Awaited<ReturnType<typeof start>>['wording']) {
+  await type(field(wording.signIn.identifierLabel), 'ben@example.test')
+  await press(button(wording.signIn.sendCode))
+  await until(() => document.activeElement === field(wording.signIn.codeLabel), 'the code field')
+  await type(field(wording.signIn.codeLabel), GOOD_CODE)
+  await press(button(wording.signIn.submit))
+}
+
 describe('the invitation page, where people arrive from a link', () => {
-  test('reading the proposal before signing in', async () => {
+  test('signed out: the way to sign in, and nothing of the link', async () => {
     const { wording } = await start(`/en/i#${INVITATION}`, null)
+    await heading(wording.invitation.signedOutTitle)
+
+    expect(await violations()).toEqual([])
+    expect(document.title).toBe(`${wording.invitation.signedOutTitle} · ${wording.productName}`)
+    expect(document.documentElement.lang).toBe('en')
+    expect(document.querySelectorAll('main')).toHaveLength(1)
+    const levels = [...document.querySelectorAll('main h1, main h2')].map((h) => h.tagName)
+    expect(levels).toEqual(['H1', 'H2'])
+    // Arriving leaves the focus where the browser put it.
+    expect(document.activeElement).toBe(document.body)
+    const identifier = field(wording.signIn.identifierLabel)
+    expect(identifier.getAttribute('aria-required')).toBe('true')
+    expect(identifier.getAttribute('aria-describedby')).toBeTruthy()
+  })
+
+  test('reading the proposal once signed in', async () => {
+    const { wording } = await start(`/en/i#${INVITATION}`, null)
+    await heading(wording.invitation.signedOutTitle)
+    await signInAsNewcomer(wording)
     await until(() => document.querySelector('.terms') !== null, 'the proposal')
 
+    // The page the form was on has gone; the keyboard is taken to its heading.
+    expect(document.activeElement?.tagName).toBe('H1')
     expect(await violations()).toEqual([])
     expect(document.title).toBe(`${wording.invitation.title} · ${wording.productName}`)
     expect(document.documentElement.lang).toBe('en')
@@ -54,21 +84,23 @@ describe('the invitation page, where people arrive from a link', () => {
     }
   })
 
-  test('signing in to respond, below the proposal', async () => {
+  test('setting up the account to respond, below the proposal', async () => {
     const { wording } = await start(`/en/i#${INVITATION}`, null)
+    await heading(wording.invitation.signedOutTitle)
+    await signInAsNewcomer(wording)
     await until(() => document.querySelector('.terms') !== null, 'the proposal')
-    await press(button(wording.invitation.respond))
+    await press(button(wording.invitation.respondNew))
     await until(
       () =>
-        [...document.querySelectorAll('h2')].some((h) => h.textContent === wording.signIn.title),
-      'sign-in',
+        [...document.querySelectorAll('h2')].some(
+          (h) => h.textContent === wording.profile.firstTitle,
+        ),
+      'the profile',
     )
 
     // The step that replaced the button has the focus, so it is not lost.
-    expect(document.activeElement?.textContent).toBe(wording.signIn.title)
-    const identifier = field(wording.signIn.identifierLabel)
-    expect(identifier.getAttribute('aria-required')).toBe('true')
-    expect(identifier.getAttribute('aria-describedby')).toBeTruthy()
+    expect(document.activeElement?.textContent).toBe(wording.profile.firstTitle)
+    expect(field(wording.profile.nameLabel).getAttribute('aria-required')).toBe('true')
     expect(await violations()).toEqual([])
   })
 })

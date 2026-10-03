@@ -53,7 +53,7 @@ const TIGHT = {
       'signIn.resend',
       'profile.continue',
       'profile.save',
-      'invitation.respond',
+      'invitation.respondNew',
       'invitationLink.copy',
       'invitationLink.share',
       'composer.addYours',

@@ -6,7 +6,16 @@ import { Platform } from 'react-native';
 
 import { forgetInvitation } from '../lib/invitation';
 import { notifications, resetNotifications } from './fake-notifications';
-import { DRAFT, EXCHANGE, fakeService, INVITATION, TOKEN, ana, type FakeService } from './fake-service';
+import {
+  DRAFT,
+  EXCHANGE,
+  fakeService,
+  INVITATION,
+  signInOnScreen,
+  TOKEN,
+  ana,
+  type FakeService,
+} from './fake-service';
 
 /*
  * Text written into a component instead of the wording stays in English
@@ -176,10 +185,13 @@ describe('every word on the main mobile screens comes from the wording', () => {
     await screen.findByText(w.mobile.openInvitation.intro);
     check();
     await open(`/en/i#${INVITATION}`, false);
+    await screen.findByText(w.invitation.signInToRead);
+    check();
+    await signInOnScreen(w);
     await screen.findByText(w.invitation.notBinding);
     check();
-    await fireEvent.press(screen.getByRole('button', { name: w.invitation.respond }));
-    await screen.findByText(w.signIn.intro);
+    await fireEvent.press(screen.getByRole('button', { name: w.invitation.respondNew }));
+    await screen.findByText(w.profile.firstIntro);
     check();
     expect([...found]).toEqual([]);
   });

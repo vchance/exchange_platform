@@ -15,8 +15,8 @@
           "ol": [
             "Borrador. Escribes entre quiénes es y lo que aporta cada parte: artículos, servicios, tareas o dinero, cada uno con su fecha. El borrador se guarda mientras escribes, y nadie más lo ve hasta que lo envías. Puedes descartar un borrador que no quieras.",
             "Envío. Firmar y enviar es un solo paso: al enviar los términos, los firmas. Después recibes un enlace de invitación para enviárselo a la otra persona, por el medio que uses normalmente. Nosotros no lo enviamos por ti.",
-            "Lectura. La otra persona abre el enlace y puede leer toda la propuesta sin tener cuenta.",
-            "Inicio de sesión. Para responder, inicia sesión con un código de un solo uso que le enviamos. No hay contraseña.",
+            "Inicio de sesión. La otra persona abre el enlace e inicia sesión con un código de un solo uso que le enviamos. No hay contraseña, e iniciar sesión no la compromete a nada.",
+            "Lectura. Una vez que inicia sesión, puede leer toda la propuesta.",
             "Firma. Puede firmar los términos tal como están, rechazarlos o proponer cambios."
           ]
         },
@@ -142,7 +142,7 @@
       "title": "Bloquear y denunciar",
       "summary": "Qué hace un bloqueo y qué no, y cómo denunciar algo que está mal.",
       "blocks": [
-        { "p": "Puedes bloquear o denunciar a la otra persona desde un yup que compartan, una vez que se haya unido. También puedes denunciar una propuesta desde la página de invitación, antes de iniciar sesión." },
+        { "p": "Puedes bloquear o denunciar a la otra persona desde un yup que compartan, una vez que se haya unido. También puedes denunciar una propuesta desde la página de invitación, una vez que hayas iniciado sesión para leerla." },
         { "h": "Qué hace el bloqueo" },
         {
           "ul": [
@@ -159,7 +159,7 @@
             "Desbloquear no recupera nada de lo que terminó con el bloqueo."
           ]
         },
-        { "p": "Es posible que una persona bloqueada llegue a darse cuenta de que la bloqueaste." },
+        { "p": "Nada de lo que mostramos le dice que la bloqueaste. Un enlace de invitación tuyo deja de funcionarle igual que un enlace ya usado o vencido, haya iniciado sesión o no. Aun así, podría suponerlo por lo que pase entre ustedes." },
         { "p": "Tus bloqueos aparecen en la página de tu cuenta, en “Personas que bloqueaste”, donde puedes quitarlos." },
         { "h": "Denunciar" },
         { "p": "Denuncia un yup o una propuesta si algo está mal, como acoso, una estafa, algo ilegal, alguien que se hace pasar por otra persona o alguien menor de 18 años. A la persona denunciada no se le avisa. Una denuncia no cambia nada en el yup; bloquea también a la persona si quieres dejar de tratar con ella." }

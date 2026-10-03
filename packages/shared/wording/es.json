@@ -449,19 +449,19 @@
   },
   "invitation": {
     "title": "Tienes un yup para revisar",
-    "intro": "{name} quiere acordar esto contigo. Léelo y luego inicia sesión para aceptarlo, rechazarlo o proponer cambios.",
+    "signedOutTitle": "Alguien te envió un yup",
+    "signInToRead": "Inicia sesión para leerlo. Nada te obliga hasta que firmes.",
     "introSignedIn": "{name} quiere acordar esto contigo. Léelo y luego responde para aceptarlo, rechazarlo o proponer cambios.",
     "notBinding": "Nada te obliga hasta que firmes. Cuando ambos lo hayan firmado, este yup es un acuerdo vinculante.",
     "expires": "Esta propuesta está abierta hasta el {date}.",
-    "bound": "Esta invitación es para una persona en particular. Inicia sesión con el correo electrónico o número de teléfono al que se envió.",
+    "boundSignedIn": "Esta invitación es para una persona en particular. Solo puede responder quien haya iniciado sesión con el correo electrónico o número de teléfono al que se envió.",
     "noteHeading": "Mensaje de {name}",
-    "respond": "Iniciar sesión para responder",
+    "respondNew": "Responder",
     "respondAs": "Responder como {name}",
     "opening": "Abriendo el yup…",
     "missingTitle": "Este enlace está incompleto",
     "missing": "El enlace de invitación perdió su última parte. Ábrelo de nuevo desde el mensaje en el que llegó, o pide uno nuevo a quien te lo envió.",
-    "ownInvitation": "Este es tu propio enlace de invitación. Envíaselo a la otra parte; tú no puedes usarlo.",
-    "alreadyResponded": "Si ya respondiste a esta invitación, está entre tus yups."
+    "ownInvitation": "Este es tu propio enlace de invitación. Envíaselo a la otra parte; tú no puedes usarlo."
   },
   "claimant": {
     "reject": "No es a quien invité",
@@ -478,7 +478,6 @@
     "leaveText": "Dejarás de ver este yup, y el enlace que abriste no volverá a funcionar. A {name} se le avisa que saliste, y puede invitar a otra persona.",
     "leaveVoids": "Todo lo que hayas firmado aquí queda sin efecto y nunca podrá tenerlo.",
     "confirmLeave": "Sí, salir",
-    "invitationIntro": "{name} quiere acordar esto contigo. Léelo y luego inicia sesión para responder. Puedes firmarlo de inmediato. Para poder rechazarlo o proponer cambios, {name} tiene que confirmar antes que eres la persona a la que invitó.",
     "invitationIntroSignedIn": "{name} quiere acordar esto contigo. Léelo y luego responde. Puedes firmarlo de inmediato. Para poder rechazarlo o proponer cambios, {name} tiene que confirmar antes que eres la persona a la que invitó.",
     "blockLeaves": "Sales de este yup y ya no podrás verlo. Todo lo que hayas firmado en él queda sin efecto.",
     "blockedAfterLeaving": "Ya no estás en este yup.",
@@ -552,7 +551,7 @@
     },
     "invited": {
       "heading": "¿Te enviaron un yup?",
-      "intro": "Puedes leer una propuesta antes de iniciar sesión. Abre el enlace que te enviaron o pégalo aquí."
+      "introSignIn": "Abre el enlace que te enviaron o pégalo aquí. Inicias sesión con un código de un solo uso y luego lees la propuesta."
     },
     "notifications": {
       "heading": "Notificaciones",

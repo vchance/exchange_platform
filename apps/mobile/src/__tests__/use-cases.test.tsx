@@ -10,6 +10,7 @@ import {
   EXCHANGE,
   PAYMENT,
   REPAIR,
+  signInOnScreen,
   TOKEN,
   ana,
   fakeService,
@@ -325,10 +326,10 @@ describe('what a proposal changes, for the person asked to sign it', () => {
 });
 
 describe('an invitation, before signing in', () => {
-  test('the first screen offers it, and it leads to reading the proposal without an account', async () => {
+  test('the first screen offers it, and it leads to signing in, then the proposal', async () => {
     await open('/', { signedIn: false });
     await screen.findByText(w.mobile.invited.heading);
-    screen.getByText(w.mobile.invited.intro);
+    screen.getByText(w.mobile.invited.introSignIn);
     await fireEvent.press(screen.getByRole('button', { name: w.mobile.openInvitation.title }));
     await screen.findByText(w.mobile.openInvitation.intro);
     await fireEvent.changeText(
@@ -336,8 +337,14 @@ describe('an invitation, before signing in', () => {
       `https://app.example/en/i#${'a3'.repeat(32)}`,
     );
     await fireEvent.press(screen.getByText(w.mobile.openInvitation.open));
+    await screen.findByText(w.invitation.signInToRead);
+    // Nothing about the link went anywhere before signing in.
+    expect(service.sent.some((request) => request.path.startsWith('/v1/invitations/'))).toBe(false);
+    await signInOnScreen(w);
     await screen.findByText(w.invitation.notBinding);
-    expect(service.sent.some((request) => request.authorization !== null)).toBe(false);
+    expect(
+      service.sent.filter((request) => request.path.startsWith('/v1/invitations/')),
+    ).toEqual([expect.objectContaining({ authorization: `Bearer ${TOKEN}` })]);
   });
 
   test('not offered once signed in, where the list has its own', async () => {

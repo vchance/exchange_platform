@@ -94,15 +94,25 @@ const h1 = (text: string) => until(() => document.querySelector('h1')?.textConte
 afterEach(stop)
 
 describe('every word on the main web screens comes from the wording', () => {
-  test('the invitation page, read and then answered', async () => {
+  test('the invitation page, signed in to, read and then answered', async () => {
     const found = await screens(async (check) => {
       await start(`/en/i#${INVITATION}`, null, pseudo)
+      await h1(pseudo.invitation.signedOutTitle)
+      await check()
+      await type(field(pseudo.signIn.identifierLabel), 'ben@example.test')
+      await press(button(pseudo.signIn.sendCode))
+      await until(() => document.activeElement === field(pseudo.signIn.codeLabel), 'the code field')
+      await type(field(pseudo.signIn.codeLabel), GOOD_CODE)
+      await press(button(pseudo.signIn.submit))
       await until(() => document.querySelector('.terms') !== null, 'the proposal')
       await check()
-      await press(button(pseudo.invitation.respond))
+      await press(button(pseudo.invitation.respondNew))
       await until(
-        () => [...document.querySelectorAll('h2')].some((h) => h.textContent === pseudo.signIn.title),
-        'sign-in',
+        () =>
+          [...document.querySelectorAll('h2')].some(
+            (h) => h.textContent === pseudo.profile.firstTitle,
+          ),
+        'the profile',
       )
       await check()
     })

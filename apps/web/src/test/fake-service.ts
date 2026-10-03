@@ -472,18 +472,23 @@ function record(exchange: ExchangeView): RecordDocument {
 export interface FakeService {
   /** Who the session cookie belongs to; `null` when nobody is signed in. */
   account: Account | null
+  /** Every request so far, as `METHOD /path` with its body, oldest first. */
+  sent: { call: string; body: unknown }[]
   fetch: typeof fetch
 }
 
 export function fakeService(account: Account | null): FakeService {
   const service: FakeService = {
     account,
+    sent: [],
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init)
       const text = await request.text()
       const body: unknown = text ? JSON.parse(text) : null
       const path = new URL(request.url).pathname
-      const [status, answer] = respond(service, `${request.method} ${path}`, body)
+      const call = `${request.method} ${path}`
+      service.sent.push({ call, body })
+      const [status, answer] = respond(service, call, body)
       return new Response(answer === null ? null : JSON.stringify(answer), {
         status,
         headers: answer === null ? {} : { 'Content-Type': 'application/json' },
@@ -515,6 +520,9 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
       identifier === ana.email ? ana : { ...ana, display_name: '', adult_confirmed: false }
     return [200, { account: service.account }]
   }
+  // Like the service, nothing about an invitation is answered to someone
+  // signed out.
+  if (!service.account) return [401, { code: 'UNAUTHENTICATED' }]
   if (call === 'POST /v1/invitations/preview') {
     const offer = offerExchange()
     const { token } = body as { token?: string }
@@ -531,8 +539,10 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
     ]
   }
   if (call === 'POST /v1/invitations/report') return [204, null]
-
-  if (!service.account) return [401, { code: 'UNAUTHENTICATED' }]
+  if (call === 'POST /v1/invitations/claim') {
+    const { only_if_yours: onlyIfYours } = body as { only_if_yours?: boolean }
+    return onlyIfYours ? [404, { code: 'INVITATION_UNAVAILABLE' }] : [200, offerExchange()]
+  }
   if (call === 'GET /v1/me') return [200, service.account]
   if (call === 'PATCH /v1/me') {
     service.account = { ...service.account, ...(body as Partial<Account>) }

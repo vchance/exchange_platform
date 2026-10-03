@@ -172,7 +172,7 @@ test('no switch on the account screen when the service sends no push notificatio
 
 test('signed out, an invitation asks nothing about notifications', async () => {
   await open(`/en/i#${INVITATION}`, { signedIn: false });
-  await screen.findByText('Ana Ruiz');
+  await screen.findByText(w.invitation.signInToRead);
   expect(screen.queryByText(n.askHeading)).toBeNull();
   expect(notifications.asked).toBe(0);
   expect(registrations()).toEqual([]);

@@ -24,22 +24,32 @@ test('a replaced invitation link stops working, and the new one opens the propos
   await expect(field).not.toHaveValue(first)
   const second = await field.inputValue()
 
-  // The old one shows nothing of the proposal.
+  // Signed out, the old link and the new one open the same page: neither
+  // says anything about itself until someone signs in. (A fresh page each
+  // time: only the fragment differs, which a browser would not reload for.)
   const { page } = bruno
-  await page.goto(first)
-  await expect(page.getByRole('heading', { name: en.invitation.title, level: 1 })).toBeVisible()
-  await expect(page.getByText(en.errors.INVITATION_UNAVAILABLE)).toBeVisible()
-  await expect(page.getByText(en.invitation.alreadyResponded)).toBeVisible()
-  await expect(page.getByText('A set of garden chairs')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: en.invitation.respond })).toHaveCount(0)
+  const signedOut = async (link: string) => {
+    await page.goto('about:blank')
+    await page.goto(link)
+    await expect(
+      page.getByRole('heading', { name: en.invitation.signedOutTitle, level: 1 }),
+    ).toBeVisible()
+    return page.locator('main').innerHTML()
+  }
+  expect(await signedOut(first)).toBe(await signedOut(second))
 
-  // The new one works. (A fresh page: only the fragment differs, which a
-  // browser would not reload for.)
+  // Signed in, the old one shows nothing of the proposal.
+  await signedOut(first)
+  await signIn(bruno)
+  await expect(page.getByText(en.errors.INVITATION_UNAVAILABLE)).toBeVisible()
+  await expect(page.getByText('A set of garden chairs')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: en.invitation.respondNew })).toHaveCount(0)
+
+  // The new one works.
   await page.goto('about:blank')
   await page.goto(second)
   await expect(page.getByText('A set of garden chairs', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: en.invitation.respond }).click()
-  await signIn(bruno)
+  await page.getByRole('button', { name: en.invitation.respondNew, exact: true }).click()
   await setUpProfile(bruno)
   await page.waitForURL(/\/exchanges\/[0-9a-f-]{36}$/)
   await expect(
@@ -63,6 +73,7 @@ test('a second invitation link pasted into a tab showing one opens its own propo
 
   const { page } = bruno
   await page.goto(first)
+  await signIn(bruno)
   await expect(page.getByText('A set of garden chairs', { exact: true })).toBeVisible()
   await expect(page).toHaveURL(/\/en\/i$/)
 
@@ -80,8 +91,7 @@ test('a second invitation link pasted into a tab showing one opens its own propo
   expect(await page.evaluate(() => (window as { samePage?: boolean }).samePage)).toBe(true)
 
   // Responding claims the second.
-  await page.getByRole('button', { name: en.invitation.respond }).click()
-  await signIn(bruno)
+  await page.getByRole('button', { name: en.invitation.respondNew, exact: true }).click()
   await setUpProfile(bruno)
   await page.waitForURL(`**/exchanges/${secondId}`)
 })
@@ -110,7 +120,7 @@ test('a used link takes the person who used it back to the exchange, and claims 
   await carla.page.goto(link)
   await expect(carla.page.getByText(en.errors.INVITATION_UNAVAILABLE)).toBeVisible()
   await expect(carla.page.getByText('A set of garden chairs')).toHaveCount(0)
-  await expect(carla.page.getByRole('button', { name: en.invitation.respond })).toHaveCount(0)
+  await expect(carla.page.getByRole('button', { name: en.invitation.respondNew })).toHaveCount(0)
   await expect(
     carla.page.getByRole('button', { name: fill(en.invitation.respondAs, { name: carla.name }) }),
   ).toHaveCount(0)

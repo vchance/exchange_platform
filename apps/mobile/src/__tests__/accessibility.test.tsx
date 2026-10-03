@@ -11,6 +11,7 @@ import {
   INVITATION,
   PAYMENT,
   REPAIR,
+  signInOnScreen,
   TOKEN,
   ana,
   type FakeService,
@@ -227,15 +228,21 @@ describe('an invitation, before signing in', () => {
 });
 
 describe('the invitation, as it opens from a link', () => {
-  test('reading the proposal and signing in to respond', async () => {
+  test('signing in, reading the proposal and setting up to respond', async () => {
     await open(`/en/i#${INVITATION}`, { signedIn: false });
-    await screen.findByText(w.invitation.notBinding);
-    expect(audit()).toEqual([]);
-    expect(screen.getByRole('header', { name: w.invitation.title })).toBeTruthy();
-
-    await fireEvent.press(screen.getByRole('button', { name: w.invitation.respond }));
-    await screen.findByText(w.signIn.intro);
+    await screen.findByText(w.invitation.signInToRead);
+    expect(screen.getByRole('header', { name: w.invitation.signedOutTitle })).toBeTruthy();
     expect(screen.getByRole('header', { name: w.signIn.title })).toBeTruthy();
+    expect(audit()).toEqual([]);
+
+    await signInOnScreen(w);
+    await screen.findByText(w.invitation.notBinding);
+    expect(screen.getByRole('header', { name: w.invitation.title })).toBeTruthy();
+    expect(audit()).toEqual([]);
+
+    await fireEvent.press(screen.getByRole('button', { name: w.invitation.respondNew }));
+    await screen.findByText(w.profile.firstIntro);
+    expect(screen.getByRole('header', { name: w.profile.firstTitle })).toBeTruthy();
     expect(audit()).toEqual([]);
   });
 });

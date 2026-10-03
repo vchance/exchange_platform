@@ -71,16 +71,19 @@ test('the main screens fit a 320-pixel window in Spanish', async ({ person }) =>
   const { page } = carlos
   const { found, check } = checker(page)
 
-  // The invitation, read and then answered.
+  // The invitation, signed in to, read and then answered.
   await page.goto(link.replace('/en/i#', '/es/i#'))
+  await expect(
+    page.getByRole('heading', { name: es.invitation.signedOutTitle, level: 1 }),
+  ).toBeVisible()
+  await expect(page.getByLabel(es.signIn.identifierLabel)).toBeVisible()
+  await check('signing in from the invitation')
+  await signIn(carlos, es)
   await expect(page.getByRole('heading', { name: es.invitation.title, level: 1 })).toBeVisible()
   await expect(page.locator('.terms')).toBeVisible()
   await expect(page.getByText('Vence el 12 de marzo de 2030 (hora de Los Angeles)')).toBeVisible()
   await check('the invitation')
-  await page.getByRole('button', { name: es.invitation.respond }).click()
-  await expect(page.getByLabel(es.signIn.identifierLabel)).toBeVisible()
-  await check('signing in from the invitation')
-  await signIn(carlos, es)
+  await page.getByRole('button', { name: es.invitation.respondNew, exact: true }).click()
   await expect(page.getByRole('heading', { name: es.profile.firstTitle })).toBeVisible()
   await check('the new account’s profile')
   await page.getByLabel(es.profile.nameLabel, { exact: true }).fill(carlos.name)

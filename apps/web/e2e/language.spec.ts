@@ -23,13 +23,18 @@ test('a Spanish invitation opens in Spanish for a Spanish reader, and stays Span
   const { page } = carlos
   await page.goto(spanish)
   await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+  await expect(
+    page.getByRole('heading', { name: es.invitation.signedOutTitle, level: 1 }),
+  ).toBeVisible()
+  await expect(page.getByText(es.invitation.signInToRead)).toBeVisible()
+  await signIn(carlos, es)
+
   await expect(page.getByRole('heading', { name: es.invitation.title, level: 1 })).toBeVisible()
   await expect(page.getByText(es.invitation.notBinding)).toBeVisible()
   // What the parties wrote is never translated.
   await expect(page.getByText('Una mesa de roble', { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: es.invitation.respond }).click()
-  await signIn(carlos, es)
+  await page.getByRole('button', { name: es.invitation.respondNew, exact: true }).click()
   await setUpProfile(carlos, es)
   await page.waitForURL(/\/exchanges\/[0-9a-f-]{36}$/)
   await expect(

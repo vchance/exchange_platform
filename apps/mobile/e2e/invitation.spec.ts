@@ -18,7 +18,7 @@ import { en, fill } from './support/wording'
  * through the API, as their own app or the web app would.
  */
 
-test('the invited person reads the proposal, with the notice that money is paid outside, then signs in and accepts', async ({
+test('the invited person signs in, reads the proposal, with the notice that money is paid outside, and accepts', async ({
   person,
   email,
 }) => {
@@ -34,17 +34,25 @@ test('the invited person reads the proposal, with the notice that money is paid 
     { note: 'As we discussed on Saturday.' },
   )
 
-  // The link opens the invitation without signing in, and its token never
-  // becomes part of the screen's address.
+  // The link opens the invitation screen, which asks Ben to sign in before
+  // showing anything of it, and its token never becomes part of the
+  // screen's address.
   await page.goto(link)
-  await expect(title(page, en.invitation.title)).toBeVisible()
+  await expect(title(page, en.invitation.signedOutTitle)).toBeVisible()
+  await expect(page.getByText(en.invitation.signInToRead)).toBeVisible()
+  await expect(page.getByText('Paint the fence')).toHaveCount(0)
   expect(new URL(page.url()).pathname).toBe('/invitation')
   expect(page.url()).not.toContain('#')
+  await expect(page.getByRole('heading', { name: en.signIn.title, level: 2 })).toBeVisible()
+  await signIn(ben)
 
   // Everything there is to read before deciding: who sent it, that it binds
   // nobody yet, the message, both sides' items, and that the money is paid
   // outside the product.
-  await expect(page.getByText(fill(en.claimant.invitationIntro, { name: 'Ana' }))).toBeVisible()
+  await expect(title(page, en.invitation.title)).toBeVisible()
+  await expect(
+    page.getByText(fill(en.claimant.invitationIntroSignedIn, { name: 'Ana' })),
+  ).toBeVisible()
   await expect(page.getByText(en.invitation.notBinding)).toBeVisible()
   await expect(page.getByText('As we discussed on Saturday.')).toBeVisible()
   await expect(page.getByText('Paint the fence')).toBeVisible()
@@ -52,10 +60,8 @@ test('the invited person reads the proposal, with the notice that money is paid 
   await expect(page.getByText(en.terms.moneyOutside)).toBeVisible()
   await expect(page.getByText(fill(en.terms.amount, { amount: '$50.00' }))).toBeVisible()
 
-  // Responding needs an account, made right here.
-  await button(page, en.invitation.respond).click()
-  await expect(page.getByRole('heading', { name: en.signIn.title, level: 2 })).toBeVisible()
-  await signIn(ben)
+  // Responding asks only for what a new account still lacks: the profile.
+  await button(page, en.invitation.respondNew).click()
   await setUpProfile(ben)
   await page.waitForURL(`**/exchanges/${id}`)
 
@@ -102,7 +108,8 @@ test('a signed-out person pastes an invitation link from the first screen', asyn
   email,
 }) => {
   // Someone invited is usually new and signed out: the first screen offers
-  // the invitation beside signing in, and reading it needs no account.
+  // the invitation beside signing in, and the invitation asks them to sign in
+  // before showing the proposal.
   const ana = await ApiPerson.signUp('Ana', email('ana'))
   const ben = await person('Ben')
   const { page } = ben
@@ -114,11 +121,13 @@ test('a signed-out person pastes an invitation link from the first screen', asyn
   await button(page, en.mobile.openInvitation.title).click()
   await page.getByLabel(en.mobile.openInvitation.label, { exact: true }).fill(link)
   await button(page, en.mobile.openInvitation.open).click()
-  // The same reading without an account that the link itself opens.
+  // The same screen the link itself opens: sign in first, then read.
+  await expect(title(page, en.invitation.signedOutTitle)).toBeVisible()
+  await expect(page.getByText('A lamp')).toHaveCount(0)
+  await signIn(ben)
   await expect(title(page, en.invitation.title)).toBeVisible()
   await expect(page.getByText('A lamp')).toBeVisible()
-  await button(page, en.invitation.respond).click()
-  await signIn(ben)
+  await button(page, en.invitation.respondNew).click()
   await setUpProfile(ben)
   await expect(page.getByText(fill(en.claimant.limits, { name: 'Ana' }))).toBeVisible()
 })

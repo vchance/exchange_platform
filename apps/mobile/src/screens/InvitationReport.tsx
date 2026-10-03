@@ -6,11 +6,12 @@ import { useI18n } from '../lib/context';
 import { api } from '../lib/session';
 
 /**
- * Reporting a proposal from its invitation, before signing in or without
- * ever doing so (DESIGN.md §9). The invitation's token is the proof of having
- * received the proposal, exactly as it is for reading it: it is sent in the
- * request's body and written nowhere. There is no block here: a block is
- * between two accounts, and this reader may have none.
+ * Reporting a proposal from its invitation, signed in, before or instead of
+ * responding to it (DESIGN.md §9). The invitation's token is the proof of
+ * having received the proposal, exactly as it is for reading it: it is sent
+ * in the request's body and written nowhere. There is no block here: a block
+ * is made through an exchange the two share, and this reader has not joined
+ * this one.
  */
 export function InvitationReport({ token }: { token: string }) {
   const { wording } = useI18n();

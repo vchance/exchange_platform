@@ -70,14 +70,18 @@ test('a Spanish invitation is read, signed and accepted in Spanish', async ({ pe
   )
 
   await page.goto(link)
+  await expect(title(page, es.invitation.signedOutTitle)).toBeVisible()
+  await expect(page.getByText(es.invitation.signInToRead)).toBeVisible()
+  await signIn(lucia, es)
   await expect(title(page, es.invitation.title)).toBeVisible()
-  await expect(page.getByText(fill(es.claimant.invitationIntro, { name: 'Ana' }))).toBeVisible()
+  await expect(
+    page.getByText(fill(es.claimant.invitationIntroSignedIn, { name: 'Ana' })),
+  ).toBeVisible()
   await expect(page.getByText(es.terms.moneyOutside)).toBeVisible()
   // What the parties wrote is shown as they wrote it, never translated.
   await expect(page.getByText('Clases de guitarra')).toBeVisible()
 
-  await button(page, es.invitation.respond).click()
-  await signIn(lucia, es)
+  await button(page, es.invitation.respondNew).click()
   await setUpProfile(lucia, es)
   await page.waitForURL(`**/exchanges/${id}`)
   await acceptOpen(page, es)

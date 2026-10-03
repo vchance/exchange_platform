@@ -1,6 +1,6 @@
 import { ApiPerson } from './support/api'
 import { expect, test } from './support/fixtures'
-import { acceptOpen, button, join, title } from './support/flows'
+import { acceptOpen, button, join, signIn, title } from './support/flows'
 import { en, fill } from './support/wording'
 
 const name = { name: 'Ana' }
@@ -99,23 +99,29 @@ test('blocking the sender of a proposal waiting to be signed declines it', async
   await expect(page.getByText(en.outcomes.NOT_AGREED, { exact: true })).toBeVisible()
 })
 
-test('a proposal can be reported from the invitation, before signing in', async ({
+test('a proposal can be reported from the invitation, once signed in to read it', async ({
   person,
   email,
 }) => {
   const ana = await ApiPerson.signUp('Ana', email('ana'))
   const ben = await person('Ben')
   const { page } = ben
-  const { link } = await ana.propose('Ben', [{ from: 'A', kind: 'ITEM', description: 'A watch' }])
+  const { id, link } = await ana.propose('Ben', [
+    { from: 'A', kind: 'ITEM', description: 'A watch' },
+  ])
 
+  // Signed out there is nothing to report from: only the way to sign in.
   await page.goto(link)
+  await expect(title(page, en.invitation.signedOutTitle)).toBeVisible()
+  await expect(button(page, en.safety.reportProposal)).toHaveCount(0)
+  await signIn(ben)
+
   await expect(title(page, en.invitation.title)).toBeVisible()
   await button(page, en.safety.reportProposal).click()
   await expect(page.getByText(en.safety.reportProposalIntro)).toBeVisible()
   await page.getByRole('radio', { name: en.safety.reasons.UNWANTED }).click()
   await button(page, en.safety.sendReport).click()
   await expect(page.getByText(en.safety.reportSent)).toBeVisible()
-  // Nobody was signed in, and nobody is now.
-  await page.goto('/')
-  await expect(title(page, en.signIn.title)).toBeVisible()
+  // Reporting claimed nothing: the proposal is still waiting for someone.
+  expect((await ana.view(id)).counterparty).toBe('UNCLAIMED')
 })
