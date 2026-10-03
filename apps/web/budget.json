@@ -1,0 +1,7 @@
+{
+  "invitation": {
+    "note": "Bytes, compressed, of everything /{language}/i loads before interaction, for its largest language. Set in October 2026 at 97,663 gzip and 85,243 brotli (Spanish) plus about 10%. How and when to raise it: scripts/check-budget.mjs.",
+    "gzip": 107500,
+    "brotli": 94000
+  }
+}

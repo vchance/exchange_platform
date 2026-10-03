@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use lettre::message::header::ContentType;
-use lettre::message::{Mailbox, Message};
+use lettre::message::{Mailbox, Message, MultiPart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{Address, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
@@ -126,11 +126,15 @@ impl SmtpSender {
         })
     }
 
+    /// Sends `body` as the plain text and, if there is one, `html` beside it
+    /// as `multipart/alternative`: text first, so a client that shows
+    /// either picks the HTML and one that cannot still has the whole text.
     async fn deliver(
         &self,
         to: &str,
         subject: &str,
         body: &str,
+        html: Option<&str>,
         id: Option<String>,
     ) -> anyhow::Result<()> {
         // No error here names the recipient or carries the server's text,
@@ -140,14 +144,22 @@ impl SmtpSender {
         let to: Address = to
             .parse()
             .map_err(|_| anyhow::anyhow!("the recipient is not an address SMTP can deliver to"))?;
-        let message = Message::builder()
+        let builder = Message::builder()
             .from(self.from.clone())
             .to(Mailbox::new(None, to))
             .subject(subject)
-            .message_id(id)
-            .header(ContentType::TEXT_PLAIN)
-            .body(body.to_owned())
-            .map_err(|_| anyhow::anyhow!("the message could not be built"))?;
+            .message_id(id);
+        let message = match html {
+            // Each part is UTF-8, said in its own Content-Type.
+            Some(html) => builder.multipart(MultiPart::alternative_plain_html(
+                body.to_owned(),
+                html.to_owned(),
+            )),
+            None => builder
+                .header(ContentType::TEXT_PLAIN)
+                .body(body.to_owned()),
+        }
+        .map_err(|_| anyhow::anyhow!("the message could not be built"))?;
         self.transport
             .send(message)
             .await
@@ -187,8 +199,14 @@ impl EmailSender for SmtpSender {
             // The same message sent again after a crash carries the same ID,
             // so a mailbox can tell it is a repeat.
             let id = format!("<outbox-{}@{}>", email.reference, self.from.email.domain());
-            self.deliver(&email.to, &email.subject, &email.body, Some(id))
-                .await
+            self.deliver(
+                &email.to,
+                &email.subject,
+                &email.body,
+                email.html.as_deref(),
+                Some(id),
+            )
+            .await
         })
     }
 }
@@ -203,8 +221,14 @@ impl CodeSender for SmtpSender {
             let rendered = self
                 .wording
                 .code_email(message.language, message.purpose, message.code);
-            self.deliver(to, &rendered.subject, &rendered.body, None)
-                .await
+            self.deliver(
+                to,
+                &rendered.subject,
+                &rendered.body,
+                Some(&rendered.html),
+                None,
+            )
+            .await
         })
     }
 }

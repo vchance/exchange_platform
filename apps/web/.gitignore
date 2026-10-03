@@ -27,3 +27,6 @@ playwright-report
 *.njsproj
 *.sln
 *.sw?
+
+# The build manifest, for scripts/check-budget.mjs (build/manifest.ts)
+.build

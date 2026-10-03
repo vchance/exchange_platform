@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
+use super::html;
 use crate::auth::Purpose;
 use crate::domain::notification::Notice;
 use crate::languages;
@@ -94,7 +95,11 @@ pub struct Links<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rendered {
     pub subject: String,
+    /// Plain text.
     pub body: String,
+    /// The same message as an HTML document ([`super::html`]), made from the
+    /// same wording and saying nothing the text does not.
+    pub html: String,
 }
 
 /// Notification wording for every supported language that has it.
@@ -165,11 +170,11 @@ impl Wording {
     /// what the parties agreed or wrote (DESIGN.md §12).
     pub fn email(&self, language: &str, notice: Notice, code: &str, links: Links<'_>) -> Rendered {
         let message_in = |language: &str| {
-            let file = self.languages.get(language)?;
+            let (language, file) = self.languages.get_key_value(language)?;
             let message = file.notifications.email.messages.get(notice.as_str())?;
-            Some((file, message))
+            Some((*language, file, message))
         };
-        let (file, message) = languages::resolve_among(self.supported, language)
+        let (language, file, message) = languages::resolve_among(self.supported, language)
             .and_then(message_in)
             .or_else(|| message_in(self.default))
             .expect("the default language has every notice; checked when loading");
@@ -180,12 +185,65 @@ impl Wording {
             ("link", links.exchange),
             ("recordLink", links.record),
         ];
+        let layout = &file.notifications.email.layout;
         let text = fill(&message.body, &values);
         let mut with_text = values.to_vec();
         with_text.push(("body", &text));
+        let subject = fill(&message.subject, &values);
+        let body = fill(layout, &with_text);
+
+        // The HTML follows the layout paragraph by paragraph: the message
+        // where `{body}` stands, a button where a paragraph ends in `{link}`
+        // (its label is the text before the link), and whatever comes after
+        // that as small print.
+        let markup = [
+            ("productName", Value::Text(&file.product_name)),
+            ("code", Value::Text(code)),
+            ("link", Value::Link(links.exchange)),
+            ("recordLink", Value::Link(links.record)),
+            ("body", Value::Text(&text)),
+        ];
+        let (mut main, mut small_print, mut past_link) = (String::new(), String::new(), false);
+        for part in layout.split("\n\n") {
+            if part.trim() == "{body}" {
+                for paragraph in message.body.split("\n\n") {
+                    main.push_str(&html::paragraph(&fill_html(paragraph, &markup)));
+                }
+                continue;
+            }
+            let label = part
+                .trim_end()
+                .strip_suffix("{link}")
+                .map(|before| {
+                    let label = fill(before, &values);
+                    label
+                        .trim_end_matches(|c: char| {
+                            c.is_whitespace() || matches!(c, ':' | '：' | '-' | '–' | '—')
+                        })
+                        .to_owned()
+                })
+                .filter(|label| !label.is_empty());
+            if let Some(label) = label {
+                main.push_str(&html::button(&label, links.exchange));
+                past_link = true;
+            } else if past_link {
+                small_print.push_str(&html::small_print(&fill_html(part, &markup)));
+            } else {
+                main.push_str(&html::paragraph(&fill_html(part, &markup)));
+            }
+        }
+        let html = html::page(&html::Page {
+            language,
+            direction: languages::direction(language),
+            product: &file.product_name,
+            heading: &subject,
+            main: &main,
+            small_print: &small_print,
+        });
         Rendered {
-            subject: fill(&message.subject, &values),
-            body: fill(&file.notifications.email.layout, &with_text),
+            subject,
+            body,
+            html,
         }
     }
 
@@ -194,26 +252,60 @@ impl Wording {
     /// message says what the code is for (`crate::auth::Purpose`). It is not
     /// wrapped in the notification layout: there is no exchange to link to.
     pub fn code_email(&self, language: &str, purpose: Purpose, code: &str) -> Rendered {
-        let file = languages::resolve_among(self.supported, language)
-            .and_then(|language| self.languages.get(language))
-            .or_else(|| self.languages.get(self.default))
+        let (language, file) = languages::resolve_among(self.supported, language)
+            .and_then(|language| self.languages.get_key_value(language))
+            .or_else(|| self.languages.get_key_value(self.default))
             .expect("the default language has wording; checked when loading");
         let message = file.notifications.one_time_code.for_purpose(purpose);
         let values = [("productName", file.product_name.as_str()), ("code", code)];
+        let subject = fill(&message.subject, &values);
+
+        // The text's paragraphs, with the code shown large under the first
+        // one that gives it: the instruction to enter it. The warnings after
+        // it stay part of the message, not small print.
+        let markup = [
+            ("productName", Value::Text(&file.product_name)),
+            ("code", Value::Strong(code)),
+        ];
+        let mut main = String::new();
+        let mut shown = false;
+        for paragraph in message.body.split("\n\n") {
+            main.push_str(&html::paragraph(&fill_html(paragraph, &markup)));
+            if !shown && paragraph.contains("{code}") {
+                main.push_str(&html::code(code));
+                shown = true;
+            }
+        }
+        let html = html::page(&html::Page {
+            language,
+            direction: languages::direction(language),
+            product: &file.product_name,
+            heading: &subject,
+            main: &main,
+            small_print: "",
+        });
         Rendered {
-            subject: fill(&message.subject, &values),
+            subject,
             body: fill(&message.body, &values),
+            html,
         }
     }
 }
 
-/// Replaces each `{name}` that has a value. What is put in is not read again,
-/// so a value containing braces stays as it is.
-fn fill(template: &str, values: &[(&str, &str)]) -> String {
-    let mut out = String::with_capacity(template.len());
+/// A piece of a template: text as written, or a variable that has a value.
+enum Piece<'t, V> {
+    Text(&'t str),
+    Value(V),
+}
+
+/// Splits `template` at each `{name}` that has a value. What is put in is
+/// not read again, so a value containing braces stays as it is.
+fn pieces<'t, V: Copy>(template: &'t str, values: &[(&str, V)]) -> Vec<Piece<'t, V>> {
+    let mut out = Vec::new();
     let mut rest = template;
-    while let Some(start) = rest.find('{') {
-        out.push_str(&rest[..start]);
+    let mut text_from = 0;
+    let mut at = 0;
+    while let Some(start) = rest[at..].find('{').map(|start| at + start) {
         let after = &rest[start + 1..];
         let value = after.find('}').and_then(|end| {
             let (_, value) = values.iter().find(|(name, _)| *name == &after[..end])?;
@@ -221,17 +313,53 @@ fn fill(template: &str, values: &[(&str, &str)]) -> String {
         });
         match value {
             Some((end, value)) => {
-                out.push_str(value);
+                out.push(Piece::Text(&rest[text_from..start]));
+                out.push(Piece::Value(value));
                 rest = &after[end + 1..];
+                text_from = 0;
+                at = 0;
             }
-            None => {
-                out.push('{');
-                rest = after;
-            }
+            None => at = start + 1,
         }
     }
-    out.push_str(rest);
+    out.push(Piece::Text(&rest[text_from..]));
     out
+}
+
+/// Replaces each `{name}` that has a value.
+fn fill(template: &str, values: &[(&str, &str)]) -> String {
+    pieces(template, values)
+        .into_iter()
+        .map(|piece| match piece {
+            Piece::Text(text) | Piece::Value(text) => text,
+        })
+        .collect()
+}
+
+/// A value put into HTML.
+#[derive(Clone, Copy)]
+enum Value<'a> {
+    /// Text, escaped.
+    Text(&'a str),
+    /// A web address, as a link.
+    Link(&'a str),
+    /// Text set apart, such as a one-time code.
+    Strong(&'a str),
+}
+
+/// [`fill`] for HTML: the template's own text and every value escaped, and a
+/// line break kept as one.
+fn fill_html(template: &str, values: &[(&str, Value<'_>)]) -> String {
+    let text = |text: &str| html::escape(text).replace('\n', "<br>\n");
+    pieces(template, values)
+        .into_iter()
+        .map(|piece| match piece {
+            Piece::Text(written) => text(written),
+            Piece::Value(Value::Text(value)) => text(value),
+            Piece::Value(Value::Link(url)) => html::link(url),
+            Piece::Value(Value::Strong(value)) => html::strong(value),
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -440,5 +568,255 @@ mod tests {
         assert_eq!(fill("a {code} b {link}", &values), "a {link} b L");
         assert_eq!(fill("{unknown} {code", &values), "{unknown} {code");
         assert_eq!(fill("", &values), "");
+        assert_eq!(fill("{{code}}", &values), "{{link}}");
+    }
+
+    #[test]
+    fn filling_html_escapes_the_template_and_every_value() {
+        let values = [
+            ("code", Value::Text("<b>\"x\"</b>")),
+            ("link", Value::Link("https://app.test/a?b=1&c='2'")),
+            ("one", Value::Strong("1<2")),
+        ];
+        assert_eq!(
+            fill_html("a & {code}\n{one} {missing}", &values),
+            "a &amp; &lt;b&gt;&quot;x&quot;&lt;/b&gt;<br>\n<strong dir=\"ltr\">1&lt;2</strong> {missing}"
+        );
+        let link = fill_html("{link}", &values);
+        assert!(
+            link.contains("href=\"https://app.test/a?b=1&amp;c=&#39;2&#39;\""),
+            "{link}"
+        );
+    }
+
+    /// What a reader sees of an HTML document, as words: no style sheet, no
+    /// conditional comments, no tags, entities read back.
+    fn seen_words(html: &str) -> Vec<String> {
+        fn without(text: &str, open: &str, close: &str) -> String {
+            let mut kept = String::new();
+            let mut rest = text;
+            while let Some(start) = rest.find(open) {
+                kept.push_str(&rest[..start]);
+                let end = rest[start..].find(close).expect("closed") + start;
+                rest = &rest[end + close.len()..];
+            }
+            kept.push_str(rest);
+            kept
+        }
+        let text = without(&without(html, "<style>", "</style>"), "<!--", "-->");
+        let mut seen = String::new();
+        let mut in_tag = false;
+        for c in text.chars() {
+            match c {
+                '<' => in_tag = true,
+                '>' if in_tag => {
+                    in_tag = false;
+                    seen.push(' ');
+                }
+                c if !in_tag => seen.push(c),
+                _ => {}
+            }
+        }
+        let seen = seen
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&amp;", "&");
+        words(&seen)
+    }
+
+    fn words(text: &str) -> Vec<String> {
+        text.split_whitespace()
+            .map(|word| word.trim_matches(|c: char| !c.is_alphanumeric()).to_owned())
+            .filter(|word| !word.is_empty())
+            .collect()
+    }
+
+    /// Checks one email's HTML against its text.
+    fn check_html(language: &str, what: &str, email: &Rendered) {
+        let html = &email.html;
+        assert!(
+            html.starts_with("<!DOCTYPE html>")
+                && html.contains(&format!("<html lang=\"{language}\" dir=\"ltr\">")),
+            "{language} {what}: the document's language"
+        );
+        assert!(html.contains("<meta charset=\"utf-8\">"));
+        assert!(html.contains("<meta name=\"color-scheme\" content=\"light dark\">"));
+        for banned in [
+            "<script", "<img", "<link", "@import", "url(", "<form", "<iframe",
+        ] {
+            assert!(!html.contains(banned), "{language} {what}: {banned}");
+        }
+        // Every link goes into the web app, and nothing else is addressed.
+        for (at, _) in html.match_indices("href=\"") {
+            let target = &html[at + 6..];
+            assert!(
+                target.starts_with("https://app.test/exchanges/7"),
+                "{language} {what}: a link to {}",
+                &target[..target.find('"').unwrap()]
+            );
+        }
+        assert_eq!(
+            html.matches("https://").count(),
+            html.matches("https://app.test/").count(),
+            "{language} {what}: an address outside the web origin"
+        );
+
+        let seen = seen_words(html);
+        assert!(
+            !seen
+                .iter()
+                .any(|word| word.contains('{') || word.contains('}')),
+            "{language} {what}: an unfilled variable in {seen:?}"
+        );
+        // Nothing the text and the subject do not say, besides the mark's
+        // letter.
+        let said: std::collections::HashSet<String> = words(&email.subject)
+            .into_iter()
+            .chain(words(&email.body))
+            .collect();
+        for word in &seen {
+            assert!(
+                said.contains(word) || word == html::MARK_LETTER,
+                "{language} {what}: the HTML says {word:?}, which the text does not"
+            );
+        }
+        // And all of the text is there.
+        let seen: std::collections::HashSet<&String> = seen.iter().collect();
+        for word in words(&email.body) {
+            assert!(
+                seen.contains(&word),
+                "{language} {what}: {word:?} is missing from the HTML"
+            );
+        }
+    }
+
+    #[test]
+    fn every_email_has_an_html_part_in_every_language_saying_what_the_text_says() {
+        let wording = Wording::embedded().unwrap();
+        for language in languages::supported() {
+            for notice in Notice::ALL {
+                let email = wording.email(language, notice, CODE, LINKS);
+                check_html(language, notice.as_str(), &email);
+                // The way in is a button, with the address beneath it.
+                assert!(
+                    email.html.contains(&format!("<a href=\"{LINK}\"")),
+                    "{language} {}: the button",
+                    notice.as_str()
+                );
+                assert!(email.html.contains(&format!(">{LINK}</a>")));
+                // Under the message, why the reader gets it.
+                assert!(email.html.contains("class=\"y-muted\" dir=\"ltr\""));
+            }
+            for purpose in [Purpose::SignIn, Purpose::DeleteAccount] {
+                let email = wording.code_email(language, purpose, "123456");
+                check_html(language, purpose.as_str(), &email);
+                assert!(
+                    email.html.contains("user-select:all;\">123456</span>"),
+                    "{language} {}: the code, large and easy to select",
+                    purpose.as_str()
+                );
+                assert!(!email.html.contains("href"), "no link in a code email");
+            }
+        }
+    }
+
+    #[test]
+    fn the_button_is_labelled_by_the_layout_in_the_readers_language() {
+        let wording = Wording::embedded().unwrap();
+        let english = wording.email("en", Notice::RevisionSent, CODE, LINKS);
+        let spanish = wording.email("es", Notice::RevisionSent, CODE, LINKS);
+        assert!(
+            english.html.contains(">Open the yup</a>"),
+            "{}",
+            english.html
+        );
+        assert!(
+            spanish.html.contains(">Abre el yup</a>"),
+            "{}",
+            spanish.html
+        );
+    }
+
+    #[test]
+    fn the_text_part_is_what_it_always_was() {
+        let wording = Wording::embedded().unwrap();
+        assert_eq!(
+            wording
+                .email("en", Notice::DeliveryClaimed, CODE, LINKS)
+                .body,
+            format!(
+                "The other party has marked one of their contributions as delivered. \
+                 Review it, then confirm it or dispute it.\n\n\
+                 Open the yup: {LINK}\n\n\
+                 You’re getting this email because you’re part of yup {CODE} on Yuppers. \
+                 These emails never include the terms; sign in to see them."
+            )
+        );
+        assert_eq!(
+            wording.code_email("en", Purpose::SignIn, "123456").body,
+            "Enter 123456 to sign in to Yuppers. The code works once and expires in a few \
+             minutes.\n\nIf you didn’t ask to sign in, ignore this email: nothing happens \
+             without the code, and nobody from Yuppers will ever ask you for it."
+        );
+    }
+
+    #[test]
+    fn markup_in_a_value_is_shown_as_text_and_never_run() {
+        let wording = Wording::embedded().unwrap();
+        let hostile = r#"<script>alert("x")</script>'"#;
+        let escaped = "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;&#39;";
+        let link = "https://app.test/exchanges/7\"><script>alert('y')</script>";
+        let record = format!("{link}/record");
+        let links = Links {
+            exchange: link,
+            record: &record,
+        };
+        for language in languages::supported() {
+            for notice in Notice::ALL {
+                let html = wording.email(language, notice, hostile, links).html;
+                assert!(!html.contains("<script"), "{html}");
+                assert!(html.contains(escaped), "{html}");
+                assert!(
+                    html.contains(
+                        "https://app.test/exchanges/7&quot;&gt;&lt;script&gt;alert(&#39;y&#39;)"
+                    ),
+                    "{html}"
+                );
+            }
+            for purpose in [Purpose::SignIn, Purpose::DeleteAccount] {
+                let html = wording.code_email(language, purpose, hostile).html;
+                assert!(!html.contains("<script"), "{html}");
+                assert!(html.contains(escaped), "{html}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_layout_of_another_shape_still_makes_a_whole_page() {
+        // No paragraph ends in the link: it is shown in its sentence.
+        let english = file("Yuppers", &Notice::ALL);
+        let wording = Wording::from_files(
+            &THREE,
+            "en",
+            &[(
+                "en",
+                &english.replace("{body} {link}", "{body}\\n\\nGo to {link} now."),
+            )],
+        )
+        .unwrap();
+        let email = wording.email("en", Notice::EndProposed, CODE, LINKS);
+        assert_eq!(email.body, format!("Text.\n\nGo to {LINK} now."));
+        assert!(
+            email.html.contains("Go to <a class=\"y-link\""),
+            "{}",
+            email.html
+        );
+        assert!(
+            !email
+                .html
+                .contains("display:inline-block;padding:12px 24px")
+        );
     }
 }

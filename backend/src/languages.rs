@@ -13,17 +13,37 @@ const MANIFEST: &str = include_str!("../../packages/shared/wording/languages.jso
 #[derive(Deserialize)]
 struct Entry {
     code: String,
+    #[serde(default)]
+    direction: Option<String>,
 }
 
-static CODES: LazyLock<Vec<String>> = LazyLock::new(|| {
+static ENTRIES: LazyLock<Vec<Entry>> = LazyLock::new(|| {
     let entries: Vec<Entry> =
         serde_json::from_str(MANIFEST).expect("wording/languages.json is a list of languages");
     assert!(
         !entries.is_empty(),
         "wording/languages.json lists no language"
     );
-    entries.into_iter().map(|entry| entry.code).collect()
+    entries
 });
+
+static CODES: LazyLock<Vec<String>> =
+    LazyLock::new(|| ENTRIES.iter().map(|entry| entry.code.clone()).collect());
+
+/// The direction a language is written in, `ltr` or `rtl`, as the manifest
+/// says. A language the manifest does not list, or lists without saying, is
+/// taken as `ltr`.
+pub fn direction(code: &str) -> &'static str {
+    let direction = ENTRIES
+        .iter()
+        .find(|entry| entry.code.eq_ignore_ascii_case(code))
+        .and_then(|entry| entry.direction.as_deref());
+    if direction == Some("rtl") {
+        "rtl"
+    } else {
+        "ltr"
+    }
+}
 
 /// Every supported language, as BCP 47 tags such as `en` or `pt-BR`.
 pub fn supported() -> &'static [String] {
@@ -69,6 +89,13 @@ mod tests {
         assert_eq!(resolve("es"), Some("es"));
         assert_eq!(resolve("es-MX"), Some("es"));
         assert_eq!(resolve(" EN-us "), Some("en"));
+    }
+
+    #[test]
+    fn a_language_is_written_in_the_direction_the_manifest_gives() {
+        assert_eq!(direction("en"), "ltr");
+        assert_eq!(direction("es"), "ltr");
+        assert_eq!(direction("tlh"), "ltr", "unlisted");
     }
 
     #[test]

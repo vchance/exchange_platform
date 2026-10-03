@@ -1,0 +1,229 @@
+// @vitest-environment jsdom
+import { HELP_TOPICS, languages } from '@yuppers/shared'
+import {
+  formattedWords,
+  pseudoHelp,
+  pseudoWording,
+  untranslated,
+} from '@yuppers/shared/testing/pseudo'
+import { afterEach, describe, expect, test, vi } from 'vitest'
+
+import {
+  ACTIVE,
+  AMENDING,
+  COUNTER,
+  DISPUTED,
+  DRAFT,
+  ENDED,
+  GOOD_CODE,
+  INVITATION,
+  OFFER,
+  STAND_IN_TEXT,
+  ana,
+} from './test/fake-service'
+import { button, field, press, settle, start, stop, type, until } from './test/harness'
+
+/*
+ * Text written into a component instead of the wording stays in English
+ * whatever language the person reads. Here the app runs in a pseudo-language
+ * made from the English wording, with every Latin letter accented
+ * (`@yuppers/shared/testing/pseudo`), and the main screens are read for any
+ * plain Latin letter that did not come through it.
+ *
+ * What may still have plain letters, and nothing else:
+ *   - what people wrote or chose, as the stand-in service holds it
+ *     (`STAND_IN_TEXT`): names, terms, notes, the currency and time zone;
+ *   - what the platform formats: month names, day periods, time zone names
+ *     and the words joining a date to its time;
+ *   - each language's own name, in the language picker, and its tag, as
+ *     the record says which language a signature's consent was shown in;
+ *   - things that are not words: references, ids, hashes, email addresses.
+ */
+
+const pseudo = pseudoWording()
+const pseudoHelpPages = pseudoHelp()
+const ALLOWED = [
+  ...STAND_IN_TEXT,
+  ...formattedWords('en', ['America/Chicago']),
+  ...languages.flatMap((language) => [language.name, language.code]),
+]
+
+/** Text a person can read or hear: text, and the attributes that are read out or shown. */
+function readable(): string[] {
+  const found: string[] = [document.title]
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const parent = node.parentElement
+    if (parent && ['SCRIPT', 'STYLE'].includes(parent.tagName)) continue
+    if (node.textContent?.trim()) found.push(node.textContent)
+  }
+  for (const element of document.body.querySelectorAll('*')) {
+    for (const name of ['aria-label', 'placeholder', 'title', 'alt', 'aria-roledescription']) {
+      const value = element.getAttribute(name)
+      if (value) found.push(value)
+    }
+    if (element instanceof HTMLInputElement && ['button', 'submit'].includes(element.type)) {
+      found.push(element.value)
+    }
+  }
+  return found
+}
+
+/** Every piece of readable text with a plain Latin letter that is not allowed, with its words. */
+function leaks(): string[] {
+  return readable().flatMap((text) => {
+    const words = untranslated(text, ALLOWED)
+    return words.length > 0 ? [`${JSON.stringify(text.trim())}: ${words.join(' ')}`] : []
+  })
+}
+
+/** Everything found on every screen visited, so one run lists all of it. */
+async function screens(visit: (check: () => Promise<void>) => Promise<void>): Promise<string[]> {
+  const found = new Set<string>()
+  await visit(async () => {
+    await settle(50)
+    for (const leak of leaks()) found.add(leak)
+  })
+  return [...found]
+}
+
+const h1 = (text: string) => until(() => document.querySelector('h1')?.textContent === text, text)
+
+afterEach(stop)
+
+describe('every word on the main web screens comes from the wording', () => {
+  test('the invitation page, read and then answered', async () => {
+    const found = await screens(async (check) => {
+      await start(`/en/i#${INVITATION}`, null, pseudo)
+      await until(() => document.querySelector('.terms') !== null, 'the proposal')
+      await check()
+      await press(button(pseudo.invitation.respond))
+      await until(
+        () => [...document.querySelectorAll('h2')].some((h) => h.textContent === pseudo.signIn.title),
+        'sign-in',
+      )
+      await check()
+    })
+    expect(found).toEqual([])
+  })
+
+  test('signing in, a wrong code, and a new account’s profile', async () => {
+    const found = await screens(async (check) => {
+      await start('/', null, pseudo)
+      await h1(pseudo.signIn.title)
+      await check()
+      await type(field(pseudo.signIn.identifierLabel), 'ben@example.test')
+      await press(button(pseudo.signIn.sendCode))
+      await until(() => document.activeElement === field(pseudo.signIn.codeLabel), 'the code field')
+      await check()
+      await type(field(pseudo.signIn.codeLabel), '000000')
+      await press(button(pseudo.signIn.submit))
+      await until(() => document.body.textContent!.includes(pseudo.errors.INVALID_CODE), 'refusal')
+      await check()
+      await type(field(pseudo.signIn.codeLabel), GOOD_CODE)
+      await press(button(pseudo.signIn.submit))
+      await h1(pseudo.profile.firstTitle)
+      await check()
+      await press(button(pseudo.profile.continue))
+      await check()
+    })
+    expect(found).toEqual([])
+  })
+
+  test('the composer, writing and then signing', async () => {
+    const found = await screens(async (check) => {
+      await start(`/exchanges/${DRAFT}`, ana, pseudo)
+      await h1(pseudo.composer.titleFirst)
+      await check()
+      await press(button(pseudo.composer.review))
+      await h1(pseudo.composer.signTitle)
+      await check()
+    })
+    expect(found).toEqual([])
+  })
+
+  test('the exchange in each state a person meets it in, with its panels open', async () => {
+    const found = await screens(async (check) => {
+      for (const id of [OFFER, ACTIVE, DISPUTED, AMENDING, COUNTER, ENDED]) {
+        await start(`/exchanges/${id}`, ana, pseudo)
+        await until(() => document.querySelector('.history') !== null, 'the history')
+        await check()
+      }
+      await start(`/exchanges/${OFFER}`, ana, pseudo)
+      await until(() => document.querySelector('.history') !== null, 'the history')
+      await press(button(pseudo.exchange.accept))
+      await check()
+
+      await start(`/exchanges/${ACTIVE}`, ana, pseudo)
+      await until(() => document.querySelector('.history') !== null, 'the history')
+      await press(button(pseudo.trouble.open))
+      await check()
+      for (const situation of Object.values(pseudo.trouble.situations)) {
+        const text = situation.replace('{name}', 'Ben Ortiz')
+        const choice = [...document.querySelectorAll('button')].find(
+          (candidate) => candidate.textContent?.trim() === text,
+        )
+        if (!choice) continue
+        await press(choice)
+        await check()
+      }
+    })
+    expect(found).toEqual([])
+  })
+
+  test('the record, in force and ended', async () => {
+    const found = await screens(async (check) => {
+      for (const id of [ACTIVE, ENDED]) {
+        await start(`/exchanges/${id}/record`, ana, pseudo)
+        await until(() => document.querySelector('.record-plain') !== null, 'the summary')
+        await check()
+      }
+    })
+    expect(found).toEqual([])
+  })
+
+  test('the list, the account and deleting it, and a page that is not there', async () => {
+    const found = await screens(async (check) => {
+      await start('/', ana, pseudo)
+      await h1(pseudo.home.title)
+      await until(() => document.querySelector('.card') !== null, 'the list')
+      await check()
+      await start('/account', ana, pseudo)
+      await h1(pseudo.profile.title)
+      await check()
+      await press(button(pseudo.deletion.open))
+      await check()
+      await start('/nowhere', ana, pseudo)
+      await h1(pseudo.common.notFoundTitle)
+      await check()
+    })
+    expect(found).toEqual([])
+  })
+
+  test('the help pages, the list of topics and every topic', async () => {
+    // The help pages' text is a file of its own, fetched by the help page;
+    // here it comes in the pseudo-language too.
+    vi.doMock('./app/wording', async (original) => ({
+      ...(await original<typeof import('./app/wording')>()),
+      loadHelp: async () => pseudoHelpPages,
+    }))
+    try {
+      const found = await screens(async (check) => {
+        await start('/help', null, pseudo)
+        await h1(pseudoHelpPages.title)
+        await check()
+        for (const topic of HELP_TOPICS) {
+          await start(`/help/${topic}`, null, pseudo)
+          await h1(pseudoHelpPages.topics[topic].title)
+          await check()
+        }
+        await start('/help/nothing-here', null, pseudo)
+        await h1(pseudo.common.notFoundTitle)
+        await check()
+      })
+      expect(found).toEqual([])
+    } finally {
+      vi.doUnmock('./app/wording')
+    }
+  })
+})
