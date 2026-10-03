@@ -692,6 +692,8 @@ jobs:
           WEB_ORIGIN: http://127.0.0.1:8090
           CODE_DELIVERY: log
           NOTIFICATION_DELIVERY: log
+          # The load check's sign-ins came from this machine too.
+          SIGN_IN_CODE_REQUESTS_PER_ADDRESS_PER_HOUR: "1000000"
           NO_COLOR: "1"
         run: |
           set -o pipefail
