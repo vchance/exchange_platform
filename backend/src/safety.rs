@@ -308,6 +308,7 @@ pub async fn report_exchange(
     body: NewReport,
 ) -> Result<(), ApiError> {
     let mut tx = db.begin().await?;
+    service::acting(&mut tx, reporter).await?;
     let subject = other_party(&mut tx, exchange, reporter).await?;
     let (reason, details) = checked(body.reason, body.details)?;
     file(
@@ -335,9 +336,12 @@ pub async fn report_invitation(
 ) -> Result<(), ApiError> {
     // Exactly the preview's test of the link, by running it: a link that
     // shows nothing can report nothing, and says so the same way.
-    service::preview_invitation(db, &body.token).await?;
+    service::preview_invitation(db, reporter, &body.token).await?;
 
     let mut tx = db.begin().await?;
+    if let Some(reporter) = reporter {
+        service::acting(&mut tx, reporter).await?;
+    }
     let found: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
         "SELECT i.exchange_id, initiator.account_id
          FROM invitation i
@@ -410,6 +414,9 @@ pub async fn block(
     exchange: Uuid,
 ) -> Result<(), ApiError> {
     let mut tx = db.begin().await?;
+    // Holds the account against its own deletion for the length of this
+    // transaction, so a block cannot be made by an account that is gone.
+    service::acting(&mut tx, blocker).await?;
     let blocked = other_party(&mut tx, exchange, blocker).await?;
 
     let added = sqlx::query(
@@ -515,8 +522,9 @@ async fn end_open_proposals(
 /// on its initiator. That is all it answers them: with no such block there
 /// is, for them as for any stranger, no such exchange.
 pub async fn unblock(db: &PgPool, blocker: Uuid, exchange: Uuid) -> Result<(), ApiError> {
-    let mut conn = db.acquire().await?;
-    let party = match as_party(&mut conn, exchange, blocker).await {
+    let mut tx = db.begin().await?;
+    service::acting(&mut tx, blocker).await?;
+    let party = match as_party(&mut tx, exchange, blocker).await {
         Ok(other) => Some(other),
         Err(error) if error.code == ErrorCode::NotFound => None,
         Err(error) => return Err(error),
@@ -532,14 +540,14 @@ pub async fn unblock(db: &PgPool, blocker: Uuid, exchange: Uuid) -> Result<(), A
         )
         .bind(exchange)
         .bind(blocker)
-        .execute(&mut *conn)
+        .execute(&mut *tx)
         .await?
         .rows_affected();
-        return if lifted == 0 {
-            Err(ErrorCode::NotFound.into())
-        } else {
-            Ok(())
-        };
+        if lifted == 0 {
+            return Err(ErrorCode::NotFound.into());
+        }
+        tx.commit().await?;
+        return Ok(());
     };
 
     let blocked = other.account.ok_or(ErrorCode::ActionNotAllowed)?;
@@ -548,8 +556,9 @@ pub async fn unblock(db: &PgPool, blocker: Uuid, exchange: Uuid) -> Result<(), A
     )
     .bind(blocker)
     .bind(blocked)
-    .execute(&mut *conn)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -559,13 +568,24 @@ pub async fn unblock(db: &PgPool, blocker: Uuid, exchange: Uuid) -> Result<(), A
 /// was made through, so each person is shown by the most recent exchange the
 /// two share. An exchange the caller is still a party to comes before one
 /// they only once held a place in, which is all there is to show for a block
-/// that took them out of it.
+/// that took them out of it; there the other party is named as the last
+/// proposal they saw named them, since what the exchange has called them
+/// since is none of their business.
 pub async fn blocked_people(db: &PgPool, blocker: Uuid) -> Result<Vec<BlockedPerson>, ApiError> {
     let rows: Vec<(Uuid, String, String, OffsetDateTime, bool)> = sqlx::query_as(
         "SELECT exchange_id, display_code, name, blocked_at, left_it
          FROM (
              SELECT DISTINCT ON (b.blocked_account_id)
-                    e.id AS exchange_id, e.display_code, theirs.display_name AS name,
+                    e.id AS exchange_id, e.display_code,
+                    CASE WHEN mine.ended_at IS NULL THEN theirs.display_name
+                         ELSE coalesce((
+                             SELECT CASE WHEN theirs.slot = 'A' THEN r.party_a_name
+                                         ELSE r.party_b_name END
+                             FROM revision r
+                             WHERE r.exchange_id = e.id AND r.created_at <= mine.ended_at
+                             ORDER BY r.sequence DESC
+                             LIMIT 1), '')
+                    END AS name,
                     b.created_at AS blocked_at, mine.ended_at IS NOT NULL AS left_it
              FROM account_block b
              JOIN slot_holding mine ON mine.account_id = b.blocker_account_id

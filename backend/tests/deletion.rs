@@ -687,6 +687,57 @@ async fn the_account_ends_everywhere_and_its_identifiers_are_free_for_a_new_one(
 // ---- Exchanges: negotiations ------------------------------------------------
 
 #[tokio::test]
+async fn an_invitation_someone_else_bound_to_the_address_forgets_it_and_dies() {
+    let test = start().await;
+    let app = &test.app;
+    let ana = app.user("Ana").await;
+    let ben = app.user("Ben").await;
+    let exchange = app.draft(&ana).await;
+    let sent = app
+        .post(
+            &ana,
+            &format!("/v1/exchanges/{exchange}/revisions"),
+            json!({
+                "expected_version": 0,
+                "terms": fence_job(Uuid::new_v4(), Uuid::new_v4()),
+                "consent": consent(),
+                "invitation": { "bound_to": ben.email },
+            }),
+        )
+        .await
+        .ok();
+    let token = sent["invitation_token"].as_str().unwrap().to_owned();
+
+    test.delete(&ben).await;
+
+    let (bound, revoked): (Option<String>, bool) = sqlx::query_as(
+        "SELECT bound_email, revoked_at IS NOT NULL FROM invitation WHERE exchange_id = $1",
+    )
+    .bind(exchange.parse::<Uuid>().unwrap())
+    .fetch_one(&app.owner)
+    .await
+    .unwrap();
+    assert_eq!((bound, revoked), (None, true));
+    // A dead link like any other; Ana can issue a new one.
+    app.call(
+        None,
+        Method::POST,
+        "/v1/invitations/preview",
+        Some(json!({ "token": token })),
+        &[],
+    )
+    .await
+    .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    app.post(
+        &ana,
+        &format!("/v1/exchanges/{exchange}/invitation"),
+        json!({}),
+    )
+    .await
+    .ok();
+}
+
+#[tokio::test]
 async fn an_offer_the_departing_party_sent_is_withdrawn() {
     let test = start().await;
     let app = &test.app;

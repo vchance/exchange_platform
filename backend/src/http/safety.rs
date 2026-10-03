@@ -1,17 +1,14 @@
 //! Report and block endpoints (DESIGN.md §9). The work is in `crate::safety`;
 //! these read the request and name the responses.
 
-use std::convert::Infallible;
-
-use axum::extract::{FromRequestParts, Path, State};
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::http::request::Parts;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use uuid::Uuid;
 
 use super::AppState;
-use super::extract::{ApiJson, Session};
+use super::extract::{ApiJson, MaybeSession, Session};
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::safety::{self, BlockStatus, BlockedPerson, NewInvitationReport, NewReport};
 
@@ -30,18 +27,6 @@ pub fn routes() -> Router<AppState> {
 /// An exchange the caller cannot see and one that does not exist look the same.
 fn exchange_id(raw: &str) -> Result<Uuid, ApiError> {
     raw.parse().map_err(|_| ErrorCode::NotFound.into())
-}
-
-/// The signed-in account if there is one, and nobody otherwise: for the one
-/// endpoint that a person may use either way.
-pub struct MaybeSession(pub Option<Session>);
-
-impl FromRequestParts<AppState> for MaybeSession {
-    type Rejection = Infallible;
-
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Infallible> {
-        Ok(Self(Session::from_request_parts(parts, state).await.ok()))
-    }
 }
 
 /// Reports an exchange, and with it the other party, for review. The other

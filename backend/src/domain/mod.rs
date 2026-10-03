@@ -52,6 +52,9 @@ pub struct Rules {
     pub invitations_per_day: i64,
     /// How far ahead a due date may be set. A placeholder.
     pub due_date_horizon: Duration,
+    /// How long a signature\'s network address and user agent are kept
+    /// (DESIGN.md §14). The signature itself is permanent.
+    pub network_metadata_retention: Duration,
     /// Size limits on what a revision may contain. Placeholders.
     pub limits: Limits,
 }
@@ -99,6 +102,7 @@ impl Default for Rules {
             changes_per_minute: 20,
             invitations_per_day: 5,
             due_date_horizon: Duration::days(3650),
+            network_metadata_retention: Duration::days(90),
             limits: Limits::default(),
         }
     }

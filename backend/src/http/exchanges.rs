@@ -7,7 +7,7 @@ use axum::http::header::USER_AGENT;
 use axum::http::{HeaderMap, StatusCode};
 use uuid::Uuid;
 
-use super::extract::{ApiJson, DigestedJson, Session};
+use super::extract::{ApiJson, DigestedJson, MaybeSession, Session};
 use super::{AppState, ClientAddress};
 use crate::error::{ApiError, ErrorBody, ErrorCode};
 use crate::exchanges::dto::{
@@ -21,12 +21,19 @@ fn exchange_id(raw: &str) -> Result<Uuid, ApiError> {
     raw.parse().map_err(|_| ErrorCode::NotFound.into())
 }
 
-fn idempotency_key(headers: &HeaderMap) -> Option<&str> {
-    headers
-        .get("idempotency-key")?
-        .to_str()
-        .ok()
-        .filter(|key| !key.is_empty())
+/// The longest idempotency key accepted. A key is an opaque token the client
+/// made up, such as a UUID; anything much longer is not one.
+const IDEMPOTENCY_KEY_MAX_BYTES: usize = 200;
+
+fn idempotency_key(headers: &HeaderMap) -> Result<Option<&str>, ApiError> {
+    let Some(value) = headers.get("idempotency-key") else {
+        return Ok(None);
+    };
+    match value.to_str() {
+        Ok("") => Ok(None),
+        Ok(key) if key.len() <= IDEMPOTENCY_KEY_MAX_BYTES => Ok(Some(key)),
+        _ => Err(ErrorCode::InvalidRequest.into()),
+    }
 }
 
 fn user_agent(headers: &HeaderMap) -> Option<&str> {
@@ -154,7 +161,7 @@ pub async fn send_revision(
     DigestedJson { body, digest }: DigestedJson<SendRevision>,
 ) -> Result<Json<RevisionSent>, ApiError> {
     let idempotency = Idempotency {
-        key: idempotency_key(&headers),
+        key: idempotency_key(&headers)?,
         digest,
     };
     let origin = RequestOrigin {
@@ -201,7 +208,7 @@ pub async fn run_command(
     DigestedJson { body, digest }: DigestedJson<RunCommand>,
 ) -> Result<Json<ExchangeView>, ApiError> {
     let idempotency = Idempotency {
-        key: idempotency_key(&headers),
+        key: idempotency_key(&headers)?,
         digest,
     };
     let origin = RequestOrigin {
@@ -288,10 +295,12 @@ pub async fn reissue_invitation(
 )]
 pub async fn preview_invitation(
     State(state): State<AppState>,
+    MaybeSession(session): MaybeSession,
     ApiJson(body): ApiJson<InvitationToken>,
 ) -> Result<Json<InvitationPreview>, ApiError> {
+    let viewer = session.map(|session| session.account_id);
     Ok(Json(
-        service::preview_invitation(&state.db, &body.token).await?,
+        service::preview_invitation(&state.db, viewer, &body.token).await?,
     ))
 }
 

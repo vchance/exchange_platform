@@ -1012,7 +1012,11 @@ async fn a_block_by_someone_not_yet_confirmed_takes_them_out_of_the_exchange() {
         .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
 
     // It is still his to see and to lift, through the exchange he left,
-    // which is the only one the two ever shared.
+    // which is the only one the two ever shared. She has since renamed
+    // herself on a new version of the offer; he is shown the name he saw.
+    let mut renamed = app.view(&ana, &exchange).await["open_revision"]["terms"].clone();
+    renamed["party_a_name"] = json!("A. Ruiz");
+    app.send(&ana, &exchange, renamed).await.ok();
     let people = blocked_people(&app, &ben).await;
     assert_eq!(people.len(), 1);
     assert_eq!(

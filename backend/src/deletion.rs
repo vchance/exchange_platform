@@ -241,6 +241,21 @@ async fn attempt(db: &PgPool, rules: &Rules, account: Uuid) -> Result<Attempt, A
     .bind(account)
     .execute(&mut *tx)
     .await?;
+    // An invitation someone else bound to this account's address and that
+    // nobody has taken: it was for a person who is leaving, so it stops
+    // working and forgets the address. Its sender sees a dead link and can
+    // issue a new one.
+    sqlx::query(
+        "UPDATE invitation
+         SET revoked_at = coalesce(revoked_at, now()), bound_email = NULL, bound_phone = NULL
+         WHERE claimed_by IS NULL
+           AND ((bound_email IS NOT NULL AND bound_email = $1)
+             OR (bound_phone IS NOT NULL AND bound_phone = $2))",
+    )
+    .bind(email.as_deref())
+    .bind(phone.as_deref())
+    .execute(&mut *tx)
+    .await?;
 
     sqlx::query("DELETE FROM account_session WHERE account_id = $1")
         .bind(account)

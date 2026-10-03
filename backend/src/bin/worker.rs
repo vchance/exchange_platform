@@ -1,12 +1,12 @@
-//! Background worker: outbox delivery, reminders, expiries and closures
-//! (DESIGN.md §13). Runs as its own process so slow jobs never stall requests.
+//! Background worker: outbox delivery, reminders, expiries, closures and the
+//! purge of old network metadata (DESIGN.md §13, §14). Runs as its own process so slow jobs never stall requests.
 
 use std::time::Duration;
 
 use exchange_backend::config::WorkerConfig;
 use exchange_backend::domain::Rules;
 use exchange_backend::exchanges::reminders::run_reminders;
-use exchange_backend::exchanges::service::run_timers;
+use exchange_backend::exchanges::service::{purge_network_metadata, run_timers};
 use exchange_backend::notifications::outbox::{self, Delivery, DeliveryRules};
 use exchange_backend::notifications::wording::Wording;
 use exchange_backend::{db, shutdown, telemetry};
@@ -47,6 +47,11 @@ async fn main() -> anyhow::Result<()> {
                     Ok(0) => {}
                     Ok(reminders) => tracing::info!(reminders, "reminders queued"),
                     Err(error) => tracing::error!(%error, "reminders failed"),
+                }
+                match purge_network_metadata(&db, &rules, OffsetDateTime::now_utc()).await {
+                    Ok(0) => {}
+                    Ok(removed) => tracing::info!(removed, "network metadata purged"),
+                    Err(error) => tracing::error!(%error, "network metadata purge failed"),
                 }
                 // After both, so what they just caused goes out in the same
                 // pass.

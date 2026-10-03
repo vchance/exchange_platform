@@ -994,8 +994,15 @@ async fn find_invitation(
 }
 
 /// What the holder of an invitation link may read before signing in: the
-/// proposal itself. Every way a link can be dead gives the same answer.
-pub async fn preview_invitation(db: &PgPool, token: &str) -> Result<InvitationPreview, ApiError> {
+/// proposal itself. Every way a link can be dead gives the same answer, and
+/// so does a block between the signed-in viewer and the initiator: were the
+/// preview to work where the claim does not, that difference would be the
+/// one thing a block must never tell (DESIGN.md §9).
+pub async fn preview_invitation(
+    db: &PgPool,
+    viewer: Option<Uuid>,
+    token: &str,
+) -> Result<InvitationPreview, ApiError> {
     let unavailable = || ApiError::from(ErrorCode::InvitationUnavailable);
     let mut conn = db.acquire().await?;
 
@@ -1014,6 +1021,11 @@ pub async fn preview_invitation(db: &PgPool, token: &str) -> Result<InvitationPr
         (State::Negotiating, Some(open)) => open,
         _ => return Err(unavailable()),
     };
+    if let Some(viewer) = viewer
+        && blocked_between(&mut conn, viewer, aggregate.accounts[0]).await?
+    {
+        return Err(unavailable());
+    }
 
     Ok(InvitationPreview {
         display_code: aggregate.display_code.clone(),
@@ -1023,6 +1035,23 @@ pub async fn preview_invitation(db: &PgPool, token: &str) -> Result<InvitationPr
         timezone: aggregate.timezone.clone(),
         revision: RevisionView::from_record(open),
     })
+}
+
+/// Whether either of two accounts has blocked the other.
+async fn blocked_between(
+    conn: &mut PgConnection,
+    account: Uuid,
+    other: Option<Uuid>,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM account_block
+                        WHERE (blocker_account_id = $1 AND blocked_account_id = $2)
+                           OR (blocker_account_id = $2 AND blocked_account_id = $1))",
+    )
+    .bind(account)
+    .bind(other)
+    .fetch_one(&mut *conn)
+    .await
 }
 
 /// The signed-in account takes the invited party's place in the exchange.
@@ -1064,15 +1093,7 @@ pub async fn claim_invitation(
             .bind(account)
             .fetch_one(&mut *tx)
             .await?;
-    let blocked: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM account_block
-                        WHERE (blocker_account_id = $1 AND blocked_account_id = $2)
-                           OR (blocker_account_id = $2 AND blocked_account_id = $1))",
-    )
-    .bind(account)
-    .bind(initiator)
-    .fetch_one(&mut *tx)
-    .await?;
+    let blocked = blocked_between(&mut tx, account, initiator).await?;
 
     let claimant = invitation::Claimant {
         email,
@@ -1124,6 +1145,23 @@ pub async fn claim_invitation(
 }
 
 // ---- Timers -----------------------------------------------------------------
+
+/// Forgets the network address and user agent recorded with signatures older
+/// than the retention period (DESIGN.md §14). The signatures stay. Returns
+/// how many records were removed. Called by the worker.
+pub async fn purge_network_metadata(
+    db: &PgPool,
+    rules: &Rules,
+    at: OffsetDateTime,
+) -> Result<u64, sqlx::Error> {
+    let before = at - rules.network_metadata_retention;
+    let removed = sqlx::query("DELETE FROM acceptance_network_metadata WHERE recorded_at < $1")
+        .bind(before)
+        .execute(db)
+        .await?
+        .rows_affected();
+    Ok(removed)
+}
 
 /// Runs every timer that has come due: expired revisions, lapsed close
 /// requests, and the inactivity prompt and closure. Returns how many

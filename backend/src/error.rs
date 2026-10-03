@@ -141,7 +141,41 @@ impl From<InvalidIdentifier> for ApiError {
 
 impl From<sqlx::Error> for ApiError {
     fn from(error: sqlx::Error) -> Self {
-        tracing::error!(%error, "database error");
+        // The server's message can quote a key value, such as an email
+        // address, so only what names the failure is logged, never the text.
+        match &error {
+            sqlx::Error::Database(failure) => tracing::error!(
+                sqlstate = failure.code().as_deref().unwrap_or("?"),
+                constraint = failure.constraint().unwrap_or("-"),
+                table = failure.table().unwrap_or("-"),
+                "database error"
+            ),
+            other => tracing::error!(kind = variant_name(other), "database error"),
+        }
         ErrorCode::Internal.into()
+    }
+}
+
+/// The variant of an error, without its contents.
+fn variant_name(error: &sqlx::Error) -> &'static str {
+    match error {
+        sqlx::Error::Configuration(_) => "configuration",
+        sqlx::Error::Io(_) => "io",
+        sqlx::Error::Tls(_) => "tls",
+        sqlx::Error::Protocol(_) => "protocol",
+        sqlx::Error::RowNotFound => "row not found",
+        sqlx::Error::TypeNotFound { .. } => "type not found",
+        sqlx::Error::ColumnIndexOutOfBounds { .. } => "column index out of bounds",
+        sqlx::Error::ColumnNotFound(_) => "column not found",
+        sqlx::Error::ColumnDecode { .. } => "column decode",
+        sqlx::Error::Encode(_) => "encode",
+        sqlx::Error::Decode(_) => "decode",
+        sqlx::Error::AnyDriverError(_) => "driver",
+        sqlx::Error::PoolTimedOut => "pool timed out",
+        sqlx::Error::PoolClosed => "pool closed",
+        sqlx::Error::WorkerCrashed => "worker crashed",
+        sqlx::Error::Migrate(_) => "migrate",
+        sqlx::Error::Database(_) => "database",
+        _ => "other",
     }
 }

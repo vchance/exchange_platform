@@ -178,3 +178,18 @@ fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
         .filter_map(|pair| pair.trim().split_once('='))
         .find_map(|(key, value)| (key == name).then_some(value))
 }
+
+/// The signed-in account if there is one, and nobody otherwise: for the
+/// endpoints a person may use either way.
+pub struct MaybeSession(pub Option<Session>);
+
+impl FromRequestParts<AppState> for MaybeSession {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, std::convert::Infallible> {
+        Ok(Self(Session::from_request_parts(parts, state).await.ok()))
+    }
+}

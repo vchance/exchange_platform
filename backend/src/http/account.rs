@@ -115,20 +115,26 @@ pub async fn update_me(
         None => None,
     };
 
-    sqlx::query(
+    let changed = sqlx::query(
         "UPDATE account
          SET display_name = coalesce($2, display_name),
              language = coalesce($3, language),
              adult_confirmed_at = CASE WHEN $4 THEN coalesce(adult_confirmed_at, now())
                                        ELSE adult_confirmed_at END
-         WHERE id = $1",
+         WHERE id = $1 AND status = 'ACTIVE'",
     )
     .bind(session.account_id)
     .bind(display_name)
     .bind(language)
     .bind(update.adult_confirmed == Some(true))
     .execute(&state.db)
-    .await?;
+    .await?
+    .rows_affected();
+    // The session was checked a moment ago; the account can have been
+    // deleted since, and a deleted account is not edited.
+    if changed == 0 {
+        return Err(ErrorCode::Unauthenticated.into());
+    }
 
     Ok(Json(load(&state.db, session.account_id).await?))
 }
@@ -172,9 +178,11 @@ pub async fn add_identifier(
     )
     .await?;
 
+    // Only while the account is active: an identifier written onto an
+    // account deleted at the same moment could never be used again.
     let update = match identifier {
-        Identifier::Email(_) => "UPDATE account SET email = $2 WHERE id = $1",
-        Identifier::Phone(_) => "UPDATE account SET phone = $2 WHERE id = $1",
+        Identifier::Email(_) => "UPDATE account SET email = $2 WHERE id = $1 AND status = 'ACTIVE'",
+        Identifier::Phone(_) => "UPDATE account SET phone = $2 WHERE id = $1 AND status = 'ACTIVE'",
     };
     let result = sqlx::query(update)
         .bind(session.account_id)
@@ -183,6 +191,7 @@ pub async fn add_identifier(
         .await;
 
     match result {
+        Ok(done) if done.rows_affected() == 0 => Err(ErrorCode::Unauthenticated.into()),
         Ok(_) => Ok(Json(load(&state.db, session.account_id).await?)),
         Err(error) if is_unique_violation(&error) => Err(ErrorCode::IdentifierInUse.into()),
         Err(error) => Err(error.into()),

@@ -561,6 +561,39 @@ async fn an_invitation_naming_someone_is_only_theirs_to_claim() {
 }
 
 #[tokio::test]
+async fn an_idempotency_key_has_a_length_limit() {
+    let app = app().await;
+    let ana = app.user("Ana").await;
+    let exchange = app.draft(&ana).await;
+    let body = json!({
+        "expected_version": 0,
+        "terms": fence_job(Uuid::new_v4(), Uuid::new_v4()),
+        "consent": consent(),
+    });
+    let path = format!("/v1/exchanges/{exchange}/revisions");
+    let long = "k".repeat(201);
+    app.call(
+        Some(&ana),
+        Method::POST,
+        &path,
+        Some(body.clone()),
+        &[("idempotency-key", long.as_str())],
+    )
+    .await
+    .refused(StatusCode::UNPROCESSABLE_ENTITY, "INVALID_REQUEST");
+    let fits = "k".repeat(200);
+    app.call(
+        Some(&ana),
+        Method::POST,
+        &path,
+        Some(body),
+        &[("idempotency-key", fits.as_str())],
+    )
+    .await
+    .ok();
+}
+
+#[tokio::test]
 async fn a_dead_link_says_nothing_about_why() {
     let app = app().await;
     let deal = app.negotiating().await;
@@ -609,6 +642,20 @@ async fn a_dead_link_says_nothing_about_why() {
     app.post(&deal.ben, "/v1/invitations/claim", new.clone())
         .await
         .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    // To him the preview is dead too, or the two together would tell him
+    // of the block. To anyone else, and to him signed out, it still shows.
+    app.post(&deal.ben, "/v1/invitations/preview", new.clone())
+        .await
+        .refused(StatusCode::NOT_FOUND, "INVITATION_UNAVAILABLE");
+    app.call(
+        None,
+        Method::POST,
+        "/v1/invitations/preview",
+        Some(new.clone()),
+        &[],
+    )
+    .await
+    .ok();
 
     // Someone else can still claim it, after which it cannot be replaced.
     let carla = app.user("Carla").await;
