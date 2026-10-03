@@ -24,6 +24,8 @@ use uuid::Uuid;
 /// so nothing else may run while a test reads back what was logged.
 static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+const DATABASE: &str = "exchange_test_telemetry";
+
 /// Keeps the codes the service "sent", without logging them.
 #[derive(Default)]
 struct Codes(Mutex<Vec<(String, String)>>);
@@ -238,7 +240,7 @@ async fn signed_in_with_log(format: LogFormat) -> (String, Secrets) {
     let _guard = tracing::subscriber::set_default(subscriber);
 
     let codes = Arc::new(Codes::default());
-    let app = App::start_sending("telemetry", Rules::default(), codes.clone()).await;
+    let app = App::start_sending(DATABASE, Rules::default(), codes.clone()).await;
     let secrets = sign_in(&app, &codes).await;
     (log.text(), secrets)
 }
@@ -305,7 +307,7 @@ async fn signing_in_logs_one_object_per_request_and_nothing_personal_as_json() {
 #[tokio::test]
 async fn a_request_id_is_taken_only_if_it_is_short_and_plain() {
     let _turn = TURN.lock().await;
-    let app = App::start("telemetry").await;
+    let app = App::start(DATABASE).await;
     let id_for = async |sent: &str| -> String {
         let reply = app
             .call(
@@ -344,7 +346,7 @@ async fn a_request_id_is_taken_only_if_it_is_short_and_plain() {
 #[tokio::test]
 async fn requests_are_counted_by_route_template_not_by_path() {
     let _turn = TURN.lock().await;
-    let app = App::start("telemetry").await;
+    let app = App::start(DATABASE).await;
     let ana = app.user("Ana").await;
     let (first, second) = (Uuid::new_v4(), Uuid::new_v4());
     for id in [first, second] {
