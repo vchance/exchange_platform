@@ -34,5 +34,11 @@ async fn main() -> anyhow::Result<()> {
     }
     db::MIGRATOR.run(&pool).await?;
     tracing::info!("migrations applied");
+    // A restored copy is migrated before its deletion log is replayed (the
+    // replay runs the current code), so this does not refuse; it says what
+    // is still to do, and the api and the worker refuse to start until then.
+    if db::replay_pending(&pool).await? {
+        tracing::warn!("{}", db::REPLAY_PENDING);
+    }
     Ok(())
 }
