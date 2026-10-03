@@ -193,6 +193,8 @@ function respond(
       {
         service: 'yuppers-backend',
         version: '0.0.0',
+        commit: 'unknown',
+        built_at: null,
         minimum_client_versions: { web: null, ios: null, android: null },
         push_notifications: service.push,
         // Both, so a device's own wallet button shows on an agreement in force.

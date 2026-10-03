@@ -3563,11 +3563,23 @@
         "required": [
           "service",
           "version",
+          "commit",
           "minimum_client_versions",
           "push_notifications",
           "wallet_platforms"
         ],
         "properties": {
+          "built_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the running build was made, as an RFC 3339 time in UTC; null\nwhen the build did not say."
+          },
+          "commit": {
+            "type": "string",
+            "description": "The git commit the running build was made from, in full, or\n`unknown` when the build did not say. Also in every response's\n`X-Yuppers-Version` header, shortened to seven characters."
+          },
           "minimum_client_versions": {
             "$ref": "#/components/schemas/MinimumClientVersions",
             "description": "The oldest build of each client that may still change anything. A\nclient below its minimum shows that it must be updated; its changes\nare refused with `CLIENT_TOO_OLD`. Absent for a client with no minimum."
@@ -3580,7 +3592,8 @@
             "type": "string"
           },
           "version": {
-            "type": "string"
+            "type": "string",
+            "description": "The package version, such as `0.1.0`."
           },
           "wallet_platforms": {
             "type": "array",

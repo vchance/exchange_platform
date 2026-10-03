@@ -14,6 +14,7 @@ use std::time::Duration;
 use anyhow::{Context, bail};
 use axum::http::HeaderName;
 
+use crate::app_role::{APP_ROLE, AppRolePassword};
 use crate::auth::{AuthRules, CodeSender, LogSender};
 use crate::client_version::{MinimumClientVersions, parse_version};
 use crate::domain::identity::Identifier;
@@ -374,6 +375,110 @@ fn country_codes(get: Lookup<'_>) -> anyhow::Result<Option<Vec<String>>> {
     Ok(Some(codes))
 }
 
+/// The application role's connection, for the api, the worker and
+/// `replay-deletions`: `DATABASE_URL`, or else `DATABASE_SERVER_URL` with its
+/// user and password replaced by `exchange_app` and `APP_DB_PASSWORD`. The
+/// second way is for a platform whose only connection string for the
+/// database is the owner's (docs/deploy-render.md): it says where the
+/// database is, and the credentials in it are never used. The password is
+/// the one `migrate` created the role with (`crate::app_role`).
+fn database_url(get: Lookup<'_>) -> anyhow::Result<String> {
+    match (
+        optional(get, "DATABASE_URL"),
+        optional(get, "DATABASE_SERVER_URL"),
+    ) {
+        (Some(_), Some(_)) => {
+            bail!("set DATABASE_URL or DATABASE_SERVER_URL (with APP_DB_PASSWORD), not both")
+        }
+        (Some(url), None) => Ok(url),
+        (None, None) => {
+            bail!("DATABASE_URL is not set (nor DATABASE_SERVER_URL and APP_DB_PASSWORD)")
+        }
+        (None, Some(server)) => {
+            let password = AppRolePassword::new(
+                required(get, "APP_DB_PASSWORD")
+                    .context("DATABASE_SERVER_URL needs the application role's password")?,
+            )?;
+            // Never quote the URL in an error: it holds the owner's password.
+            let (scheme, rest) = server
+                .trim()
+                .split_once("://")
+                .filter(|(scheme, _)| matches!(*scheme, "postgres" | "postgresql"))
+                .context("DATABASE_SERVER_URL is not a postgres:// connection string")?;
+            // The credentials end at the last `@` before the path.
+            let authority_end = rest.find(['/', '?']).unwrap_or(rest.len());
+            let (authority, path) = rest.split_at(authority_end);
+            let host = authority
+                .rsplit_once('@')
+                .map_or(authority, |(_, host)| host);
+            if host.is_empty() || !path.starts_with('/') || path.len() < 2 {
+                bail!("DATABASE_SERVER_URL must name a host and a database");
+            }
+            Ok(format!(
+                "{scheme}://{APP_ROLE}:{}@{host}{path}",
+                percent_encode(password.expose())
+            ))
+        }
+    }
+}
+
+/// The application role's connection string from the environment: see
+/// [`database_url`]. For `replay-deletions`.
+pub fn database_url_from_env() -> anyhow::Result<String> {
+    load_env();
+    database_url(&environment)
+}
+
+/// Every byte but the URL's unreserved characters as `%XX`, so a password
+/// or name can sit in a connection string whatever it holds.
+fn percent_encode(text: &str) -> String {
+    text.bytes()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+                (byte as char).to_string()
+            } else {
+                format!("%{byte:02X}")
+            }
+        })
+        .collect()
+}
+
+/// Configuration for the `migrate` binary.
+pub struct MigrateConfig {
+    /// The schema owner's connection string: `MIGRATION_DATABASE_URL`, or
+    /// `DATABASE_URL` in development.
+    pub database_url: String,
+    /// When `MIGRATE_CREATE_APP_ROLE=true`: create the application role with
+    /// this password if it does not exist, before migrating
+    /// (`crate::app_role`).
+    pub create_app_role: Option<AppRolePassword>,
+}
+
+impl MigrateConfig {
+    pub fn from_env() -> anyhow::Result<Self> {
+        load_env();
+        Self::from_lookup(&environment)
+    }
+
+    fn from_lookup(get: Lookup<'_>) -> anyhow::Result<Self> {
+        let database_url = optional(get, "MIGRATION_DATABASE_URL")
+            .or_else(|| optional(get, "DATABASE_URL"))
+            .context("set MIGRATION_DATABASE_URL or DATABASE_URL")?;
+        let create_app_role = match optional(get, "MIGRATE_CREATE_APP_ROLE").as_deref() {
+            None | Some("false") => None,
+            Some("true") => Some(AppRolePassword::new(
+                required(get, "APP_DB_PASSWORD")
+                    .context("MIGRATE_CREATE_APP_ROLE=true needs the role's password")?,
+            )?),
+            Some(other) => bail!("MIGRATE_CREATE_APP_ROLE={other} is not `true` or `false`"),
+        };
+        Ok(Self {
+            database_url,
+            create_app_role,
+        })
+    }
+}
+
 /// Configuration for the `worker` process.
 pub struct WorkerConfig {
     /// The connection string for the restricted application role.
@@ -394,7 +499,7 @@ impl WorkerConfig {
         load_env();
         let get: Lookup<'_> = &environment;
         Ok(Self {
-            database_url: required(get, "DATABASE_URL")?,
+            database_url: database_url(get)?,
             web_origin: web_origin(get)?,
             email_sender: email_sender(get)?,
             push_sender: push_sender(get)?,
@@ -509,7 +614,7 @@ impl ApiConfig {
 
         Ok(Self {
             metrics_addr,
-            database_url: required(get, "DATABASE_URL")?,
+            database_url: database_url(get)?,
             bind_addr,
             app_secret,
             web_origin: web_origin(get)?,
@@ -547,6 +652,112 @@ mod tests {
         ("SMTP_HOST", "smtp.example.test"),
         ("SMTP_FROM", "Yuppers <no-reply@example.test>"),
     ];
+
+    #[test]
+    fn the_application_connection_is_given_whole_or_from_the_server() {
+        let whole = table(&[("DATABASE_URL", "postgres://a:b@h:5432/d")]);
+        assert_eq!(
+            database_url(&lookup(&whole)).unwrap(),
+            "postgres://a:b@h:5432/d"
+        );
+
+        let server = table(&[
+            (
+                "DATABASE_SERVER_URL",
+                "postgresql://owner:s3cr@t@dpg-abc123-a/yuppers",
+            ),
+            ("APP_DB_PASSWORD", "p@ss/word+with=odd:chars"),
+        ]);
+        assert_eq!(
+            database_url(&lookup(&server)).unwrap(),
+            "postgresql://exchange_app:p%40ss%2Fword%2Bwith%3Dodd%3Achars@dpg-abc123-a/yuppers"
+        );
+        let mut with_port_and_options = server.clone();
+        with_port_and_options.insert(
+            "DATABASE_SERVER_URL".to_owned(),
+            "postgres://owner:pw@db.example.test:6543/yuppers?sslmode=require".to_owned(),
+        );
+        assert!(
+            database_url(&lookup(&with_port_and_options))
+                .unwrap()
+                .ends_with("%3Achars@db.example.test:6543/yuppers?sslmode=require")
+        );
+        let mut no_credentials = server.clone();
+        no_credentials.insert(
+            "DATABASE_SERVER_URL".to_owned(),
+            "postgres://h/d".to_owned(),
+        );
+        assert!(
+            database_url(&lookup(&no_credentials))
+                .unwrap()
+                .ends_with("%3Achars@h/d")
+        );
+
+        let mut both = server.clone();
+        both.insert("DATABASE_URL".to_owned(), "postgres://a:b@h/d".to_owned());
+        assert!(database_url(&lookup(&both)).is_err(), "never both");
+        assert!(database_url(&lookup(&table(&[]))).is_err(), "required");
+        let mut no_password = server.clone();
+        no_password.remove("APP_DB_PASSWORD");
+        assert!(database_url(&lookup(&no_password)).is_err());
+        let mut short = server.clone();
+        short.insert("APP_DB_PASSWORD".to_owned(), "short".to_owned());
+        assert!(database_url(&lookup(&short)).is_err(), "a short password");
+        for bad in [
+            "mysql://u:p@h/d",
+            "postgres://u:p@h",
+            "postgres://u:p@/d",
+            "h/d",
+        ] {
+            let mut bad_url = server.clone();
+            bad_url.insert("DATABASE_SERVER_URL".to_owned(), bad.to_owned());
+            let error = database_url(&lookup(&bad_url)).unwrap_err().to_string();
+            assert!(!error.contains("u:p"), "never quoted: {error}");
+        }
+    }
+
+    #[test]
+    fn migrate_creates_the_application_role_only_when_asked() {
+        let owner = table(&[("MIGRATION_DATABASE_URL", "postgres://o:p@h/d")]);
+        let config = MigrateConfig::from_lookup(&lookup(&owner)).unwrap();
+        assert_eq!(config.database_url, "postgres://o:p@h/d");
+        assert!(config.create_app_role.is_none(), "off by default");
+
+        let development = table(&[("DATABASE_URL", "postgres://a:b@h/d")]);
+        let config = MigrateConfig::from_lookup(&lookup(&development)).unwrap();
+        assert_eq!(config.database_url, "postgres://a:b@h/d", "the fallback");
+        assert!(MigrateConfig::from_lookup(&lookup(&table(&[]))).is_err());
+
+        let mut asked = owner.clone();
+        asked.insert("MIGRATE_CREATE_APP_ROLE".to_owned(), "true".to_owned());
+        assert!(
+            MigrateConfig::from_lookup(&lookup(&asked)).is_err(),
+            "needs APP_DB_PASSWORD"
+        );
+        asked.insert(
+            "APP_DB_PASSWORD".to_owned(),
+            "a-long-enough-password".to_owned(),
+        );
+        let config = MigrateConfig::from_lookup(&lookup(&asked)).unwrap();
+        assert_eq!(
+            config.create_app_role.unwrap().expose(),
+            "a-long-enough-password"
+        );
+
+        for value in ["false", ""] {
+            let mut off = asked.clone();
+            off.insert("MIGRATE_CREATE_APP_ROLE".to_owned(), value.to_owned());
+            assert!(
+                MigrateConfig::from_lookup(&lookup(&off))
+                    .unwrap()
+                    .create_app_role
+                    .is_none()
+            );
+        }
+        let mut wrong = asked;
+        wrong.insert("MIGRATE_CREATE_APP_ROLE".to_owned(), "yes".to_owned());
+        assert!(MigrateConfig::from_lookup(&lookup(&wrong)).is_err());
+    }
 
     #[test]
     fn a_delivery_must_be_named_and_must_be_one_that_exists() {

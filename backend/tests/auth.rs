@@ -120,6 +120,7 @@ impl App {
                 min_client_versions: Default::default(),
                 app_links: Default::default(),
                 push_notifications: false,
+                build: Default::default(),
             }),
             code_sender: outbox.clone(),
             metrics: Default::default(),

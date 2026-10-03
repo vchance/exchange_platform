@@ -4,6 +4,7 @@ import appConfig, {
   appLinkDomain,
   checkReleaseSettings,
   withAppLinks,
+  withBuildCommit,
   withPushCredentials,
 } from '../../../app.config';
 import appJson from '../../../app.json';
@@ -127,6 +128,18 @@ describe('the app config', () => {
     expect(config.android?.googleServicesFile).toBe('/home/expo/workingdir/google-services.json');
     expect(config.android?.package).toBe('app.yuppers');
     expect(config.ios).toEqual(base.ios);
+  });
+
+  it('names the commit it was built from when EAS or the build says', () => {
+    const sha = '0123456789ABCDEF0123456789abcdef01234567';
+    expect(withBuildCommit(base, {})).toBe(base);
+    expect(withBuildCommit(base, { EAS_BUILD_GIT_COMMIT_HASH: 'unknown', GIT_SHA: ' ' })).toBe(base);
+    expect(withBuildCommit(base, { EAS_BUILD_GIT_COMMIT_HASH: sha }).extra?.commit).toBe(sha.toLowerCase());
+    expect(withBuildCommit(base, { GIT_SHA: 'abcdef1' }).extra?.commit).toBe('abcdef1');
+    expect(withBuildCommit(base, { EAS_BUILD_GIT_COMMIT_HASH: sha, GIT_SHA: 'abcdef1' }).extra?.commit).toBe(
+      sha.toLowerCase(),
+    );
+    expect(withBuildCommit(base, { GIT_SHA: 'abcdef1' }).name).toBe(base.name);
   });
 
   it('reads the domain from EXPO_PUBLIC_WEB_URL', () => {

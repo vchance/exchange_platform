@@ -2,7 +2,9 @@
 //! `openapi` and `replay-deletions` under `src/bin` all build on this library
 //! (DESIGN.md §13.3).
 
+pub mod app_role;
 pub mod auth;
+pub mod build_info;
 pub mod client_version;
 pub mod config;
 pub mod db;

@@ -129,6 +129,8 @@ export type {
 export { groupExchanges } from './list'
 export type { GroupedExchanges } from './list'
 export { clientHeader, compareVersions, isClientTooOld, parseVersion } from './client-version'
+export { shortCommit, versionText } from './build'
+export type { BuildIdentity } from './build'
 export type { ClientIdentity, ClientName } from './client-version'
 export { ApiFailure, createExchangeApi, failureCode } from './api'
 export type {

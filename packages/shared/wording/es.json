@@ -221,7 +221,11 @@
     "save": "Guardar",
     "saved": "Guardado.",
     "emailLabel": "Correo electrónico",
-    "phoneLabel": "Número de teléfono"
+    "phoneLabel": "Número de teléfono",
+    "version": "Versión {version} ({commit})",
+    "versionOnly": "Versión {version}",
+    "versionBuild": "Versión {version} (compilación {build})",
+    "versionBuildCommit": "Versión {version} (compilación {build}, {commit})"
   },
   "deletion": {
     "heading": "Eliminar tu cuenta",

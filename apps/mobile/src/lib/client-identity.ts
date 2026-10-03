@@ -1,4 +1,4 @@
-import { parseVersion, type ClientIdentity } from '@yuppers/shared';
+import { parseVersion, type BuildIdentity, type ClientIdentity } from '@yuppers/shared';
 
 /*
  * Which client this is and which build, for the `X-Client-Version` header
@@ -37,4 +37,24 @@ export function clientIdentity(os: string, sources: VersionSources): ClientIdent
   if (os !== 'ios' && os !== 'android') return undefined;
   const version = buildVersion(sources);
   return version === null ? undefined : { name: os, version };
+}
+
+export interface BuildSources extends VersionSources {
+  /** `Application.nativeBuildVersion`: the store build number (iOS build, Android version code). */
+  nativeBuild: string | null | undefined;
+  /** `Constants.expoConfig?.extra?.commit`, from `withBuildCommit` in app.config.ts. */
+  commit: unknown;
+}
+
+/**
+ * This build as the account screen shows it: "Version 0.1.0 (build 12,
+ * abc1234)", or as much of it as can be read; `null` when not even the
+ * version can.
+ */
+export function appBuild(sources: BuildSources): BuildIdentity | null {
+  const version = buildVersion(sources);
+  if (version === null) return null;
+  const build = sources.nativeBuild?.trim() || null;
+  const commit = typeof sources.commit === 'string' ? sources.commit : null;
+  return { version, build, commit };
 }

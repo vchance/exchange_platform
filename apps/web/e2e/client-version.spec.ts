@@ -60,9 +60,12 @@ test('a build older than the service accepts shows the update page, and its chan
   await expect(page.getByRole('heading', { name: en.signIn.title })).toHaveCount(0)
   await expect(page.getByRole('button', { name: en.signIn.sendCode })).toHaveCount(0)
 
-  // The app names its build on every request.
+  // The app names its build on every request, with the commit it was built
+  // from when the build said (CI builds it with GIT_SHA), which the service
+  // ignores when comparing versions.
   const header = (await named).headers()['x-client-version']
-  expect(header).toBe(`web/${version}`)
+  expect(header).toMatch(/^web\/[0-9.]+(\+[0-9a-f]{7})?$/)
+  expect(header.split('+')[0]).toBe(`web/${version}`)
 
   // Reading is still allowed; a change from that build is refused.
   const meta = await page.request.get(`${origin}/v1/meta`, { headers: { 'X-Client-Version': header } })

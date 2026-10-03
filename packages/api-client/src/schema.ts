@@ -1197,6 +1197,17 @@ export interface components {
         };
         Meta: {
             /**
+             * @description When the running build was made, as an RFC 3339 time in UTC; null
+             *     when the build did not say.
+             */
+            built_at?: string | null;
+            /**
+             * @description The git commit the running build was made from, in full, or
+             *     `unknown` when the build did not say. Also in every response's
+             *     `X-Yuppers-Version` header, shortened to seven characters.
+             */
+            commit: string;
+            /**
              * @description The oldest build of each client that may still change anything. A
              *     client below its minimum shows that it must be updated; its changes
              *     are refused with `CLIENT_TOO_OLD`. Absent for a client with no minimum.
@@ -1208,6 +1219,7 @@ export interface components {
              */
             push_notifications: boolean;
             service: string;
+            /** @description The package version, such as `0.1.0`. */
             version: string;
             /**
              * @description The wallets a pass can be added to here (DESIGN.md §11). Empty until

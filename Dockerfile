@@ -12,6 +12,14 @@
 # APP_SECRET first of all, comes from the environment at run time
 # (.env.example lists them).
 #
+# Which build it is, is built in: the git commit (`--build-arg GIT_SHA=...`,
+# or Render's RENDER_GIT_COMMIT) and the build time (`--build-arg
+# BUILD_TIME=...`, else the time of the build). The service reports them in
+# GET /v1/meta, the X-Yuppers-Version header, its first log line and the
+# yuppers_build_info metric, and the web app on its account and staff screens
+# (docs/operations.md, "What is deployed"). Nothing runs git here; a build
+# without a commit still builds, and says `unknown`.
+#
 # Every image is pinned by digest, with its tag kept beside it, so a build
 # uses exactly the bytes that were reviewed. Dependabot proposes new digests
 # weekly (.github/dependabot.yml).
@@ -29,6 +37,10 @@ COPY packages/api-client/package.json packages/api-client/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY apps/web apps/web
 COPY packages packages
+# Declared here, after the dependency layers, so a new commit rebuilds only
+# what it has to. vite.config.ts reads them.
+ARG GIT_SHA=""
+ARG RENDER_GIT_COMMIT=""
 RUN npm run build:web
 
 # ---- The service ------------------------------------------------------------
@@ -37,9 +49,15 @@ WORKDIR /src
 COPY backend backend
 # The build embeds the wording and the list of languages (backend/build.rs).
 COPY packages/shared/wording packages/shared/wording
+# Read at compile time (backend/src/build_info.rs).
+ARG GIT_SHA=""
+ARG RENDER_GIT_COMMIT=""
+ARG BUILD_TIME=""
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/backend/target \
-    cd backend \
+    export GIT_SHA="${GIT_SHA:-$RENDER_GIT_COMMIT}" \
+    && export BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" \
+    && cd backend \
     && cargo build --release --locked --bin api --bin worker --bin migrate --bin replay-deletions --bin staff \
     && mkdir -p /out \
     && cp target/release/api target/release/worker target/release/migrate target/release/replay-deletions target/release/staff /out/

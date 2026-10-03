@@ -652,6 +652,8 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
       {
         service: 'yuppers-backend',
         version: '0.0.0',
+        commit: 'unknown',
+        built_at: null,
         minimum_client_versions: { web: null, ios: null, android: null },
         // Both, so a device's own wallet button shows on an agreement in force.
         wallet_platforms: ['APPLE', 'GOOGLE'],

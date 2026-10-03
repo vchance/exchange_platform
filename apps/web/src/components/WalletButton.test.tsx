@@ -39,6 +39,7 @@ function stand(platforms: WalletPlatform[], refuse: boolean): WalletApi & Stand 
     meta: async () => ({
       service: 'yuppers-backend',
       version: '0.0.0',
+      commit: 'unknown',
       minimum_client_versions: {},
       push_notifications: false,
       wallet_platforms: service.platforms,
