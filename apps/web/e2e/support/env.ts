@@ -1,0 +1,48 @@
+import { mkdirSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+/*
+ * Where everything the end-to-end tests need lives. Each can be overridden
+ * from the environment; the defaults suit a checkout with the backend built
+ * by `cargo build` and the web app by `npm run build:web`.
+ */
+
+const here = dirname(fileURLToPath(import.meta.url))
+
+export const repoRoot = resolve(here, '../../../..')
+export const webRoot = resolve(repoRoot, 'apps/web')
+
+/** The API the tests drive. It serves the built web app too, so the browser talks to one origin. */
+export const port = Number(process.env.E2E_PORT ?? 8090)
+/** Always 127.0.0.1: the session cookie belongs to the exact host, and WEB_ORIGIN must match it. */
+export const baseURL = `http://127.0.0.1:${port}`
+
+/** A second API, started by the test that needs a service refusing this build as too old. */
+export const outdatedPort = Number(process.env.E2E_OUTDATED_PORT ?? 8091)
+
+export const apiBinary = resolve(
+  process.env.E2E_API_BIN ?? resolve(repoRoot, 'backend/target/debug/api'),
+)
+export const webDir = resolve(process.env.E2E_WEB_DIR ?? resolve(webRoot, 'dist'))
+
+/**
+ * The API's log. With CODE_DELIVERY=log the service writes each one-time
+ * code there, and the tests read it back instead of receiving email.
+ */
+export const apiLog = resolve(process.env.E2E_API_LOG ?? resolve(webRoot, 'e2e/.output/api.log'))
+mkdirSync(dirname(apiLog), { recursive: true })
+
+/** The settings every API process the tests start runs with, beside the database from `.env`. */
+export function apiEnvironment(listenPort: number): Record<string, string> {
+  return {
+    BIND_ADDR: `127.0.0.1:${listenPort}`,
+    WEB_ORIGIN: `http://127.0.0.1:${listenPort}`,
+    WEB_DIR: webDir,
+    CODE_DELIVERY: 'log',
+    NOTIFICATION_DELIVERY: 'log',
+    RUST_LOG: 'info',
+    // Plain lines, so the codes can be read back.
+    NO_COLOR: '1',
+  }
+}

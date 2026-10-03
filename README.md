@@ -103,14 +103,30 @@ EXPO_PUBLIC_API_URL=http://localhost:5185 EXPO_PUBLIC_WEB_URL=http://localhost:8
 | `npm run build:web` | Production build of the web app, with one entry page per language (`DESIGN.md` §13.5). |
 | `cargo test` (in `backend/`) | Backend tests: the rules as pure functions, and the database, sign-in and exchange API against a running PostgreSQL. |
 | `cargo run --bin worker` (in `backend/`) | Background worker. |
+| `npm run e2e` | End-to-end tests of the web app in Chromium, against the real API and database (below). |
+
+### End-to-end tests
+
+`apps/web/e2e` drives the built web app in Chromium with Playwright, against the real API and a real PostgreSQL database. Each test signs up its own people, each in a browser context of their own, with `example.test` addresses nobody else uses, so tests are independent and run in parallel. They go through the screens as a person would: a first proposal through to a completed exchange and its record, counter-proposals, declining and withdrawing, discarding a draft, amendments, disputes, a close request, blocking, Spanish, account deletion, a build the service says is too old, and a replaced invitation link.
+
+```sh
+npx playwright install chromium                              # once
+cargo run --manifest-path backend/Cargo.toml --bin migrate   # the database the API will use
+npm run e2e                                                  # builds the API and the web app, then runs the tests
+```
+
+`npm run e2e` starts the API on `http://127.0.0.1:8090`, serving the built web app from the same origin (`WEB_DIR`), with its database from `.env` and `CODE_DELIVERY=log`; a test reads a one-time code back from the API's log, `apps/web/e2e/.output/api.log`, so no mail server is involved. The test for a build that is too old starts a second API on port 8091 with `MIN_CLIENT_VERSION_WEB` above the web app's version. `E2E_PORT`, `E2E_OUTDATED_PORT`, `E2E_API_LOG`, `E2E_API_BIN` and `E2E_WEB_DIR` change those; if an API already answers on `E2E_PORT` it is used as it is, and `E2E_API_LOG` must then name its log. The report of the last run is in `apps/web/playwright-report`.
+
+Nothing that takes days is tested: a proposal or an invitation expiring, a close request lapsing into a close as unresolved, an exchange closed for inactivity. Those are the worker's timers, and the backend's tests cover them.
 
 ## CI
 
-GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Three jobs run side by side:
+GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every pull request and on every push to `main`. A newer push to the same branch cancels the run in progress. Four jobs run side by side:
 
 - **Backend and API client**, against a PostgreSQL 17 container with the same two roles as local development: `cargo fmt --check`, `cargo clippy --all-targets` with warnings as errors, `cargo test`, and then `npm run gen:api`, which fails the job if it changes anything under `packages/api-client`. A stale client means the contract has drifted; regenerate it and commit the result.
 - **TypeScript**: `npm ci`, `npm run typecheck` (which includes the wording check), `npm run lint -w @exchange/web` (warnings fail it), `npm run lint -w @exchange/mobile`, `npm test` and `npm run build:web`.
 - **Container image**: builds the `Dockerfile`, starts the whole stack from `docker-compose.yml` and checks it from outside: `/healthz` and `/readyz` answer, the web app's entry pages are served in each language with the right cache and security headers, API paths keep precedence, and the worker starts and exits cleanly when stopped. Docker is not needed on a development machine for anything else, so this job is where the image is verified.
+- **End to end**: against a PostgreSQL 17 container, builds the API and the web app, applies the migrations, starts the API in the background and runs `apps/web/e2e` in Chromium. When it fails, the Playwright report, with a trace of each failed test, and the API's log are kept as the run's `playwright-report` artifact.
 
 The workflow names the Rust and Node versions it uses; raise them there when the project moves to newer ones.
 
