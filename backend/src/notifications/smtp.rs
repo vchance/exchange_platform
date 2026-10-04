@@ -167,10 +167,23 @@ impl SmtpSender {
                 .body(body.to_owned()),
         }
         .map_err(|_| anyhow::anyhow!("the message could not be built"))?;
-        self.transport
+        let response = self
+            .transport
             .send(message)
             .await
             .map_err(|error| anyhow::anyhow!(describe(&error)))?;
+        // What the server said on taking the message, such as a provider's
+        // own ID for it, so a delivery can be traced in the provider's
+        // records. Any line that could carry an address is left out.
+        let reply: Vec<&str> = response
+            .message()
+            .filter(|line| !line.contains('@'))
+            .collect();
+        tracing::info!(
+            code = %response.code(),
+            reply = %reply.join(" "),
+            "email handed to the SMTP server"
+        );
         Ok(())
     }
 }
