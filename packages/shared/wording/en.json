@@ -204,7 +204,13 @@
     "submit": "Sign in",
     "resend": "Send a new code",
     "resent": "A new code is on its way.",
-    "changeIdentifier": "Use a different email address or phone number"
+    "changeIdentifier": "Use a different email address or phone number",
+    "introEmail": "Enter your email address and we’ll send you a one-time code. There’s no password.",
+    "emailLabel": "Email address",
+    "identifierHintCountries": "For a phone number, start with the country code. We can only send codes to phone numbers starting {codes}.",
+    "emailOnly": "Sign in with your email address. We can’t send codes to phone numbers at the moment.",
+    "invalidEmail": "Enter a valid email address.",
+    "changeEmail": "Use a different email address"
   },
   "profile": {
     "firstTitle": "Set up your account",

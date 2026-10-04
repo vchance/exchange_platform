@@ -64,7 +64,7 @@ Both are built and off: with `SMS_DELIVERY` and `PUSH_DELIVERY` unset nothing ch
 2. On the api: `SMS_DELIVERY=twilio`, `SMS_ACCOUNT_SID`, `SMS_AUTH_TOKEN` (a secret), `SMS_FROM` (`+1...` or `MG...`), `SMS_MAX_PER_HOUR` if 50 an hour is not right, `SMS_MAX_PER_PREFIX_PER_HOUR` if 10 an hour to one area code is not, and `SMS_ALLOWED_COUNTRY_CODES` if countries other than `+1` are served. The api logs at start how many it may send an hour.
 3. Check: ask for a code for a phone you hold; it arrives in one message, in the account's or the browser's language, and `yuppers_sms_codes_this_hour{result="sent"}` counts it.
 
-With SMS off, a code for a phone number is refused as unavailable, as before; sign-in and deletion screens still offer phone numbers. Costs to watch are in "What to watch".
+With SMS off (and `CODE_DELIVERY=smtp`), a code for a phone number is refused as unavailable, as before, and the apps know it: `GET /v1/meta` says `"sign_in_channels": ["email"]`, so the sign-in screens ask for an email address only and stop a phone number typed anyway, and deleting an account sends its code by email. Turning SMS on adds `phone`, with the countries in `sms_country_codes`; an open page or app sees the change the next time it shows a sign-in form. Costs to watch are in "What to watch".
 
 **Push notifications.**
 

@@ -43,6 +43,8 @@ function stand(platforms: WalletPlatform[], refuse: boolean): WalletApi & Stand 
       minimum_client_versions: {},
       push_notifications: false,
       wallet_platforms: service.platforms,
+      sign_in_channels: ['email'],
+      sms_country_codes: [],
     }),
     appleWalletLink: async (id: string) => {
       service.asked.push(`apple ${id}`)

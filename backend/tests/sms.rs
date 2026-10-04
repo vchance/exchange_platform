@@ -362,23 +362,29 @@ async fn numbers_beginning_alike_have_their_own_hourly_cap() {
     }
 }
 
+/// An SMTP sender that never connects: what `CODE_DELIVERY=smtp` builds.
+fn smtp() -> Arc<SmtpSender> {
+    Arc::new(
+        SmtpSender::new(
+            SmtpSettings {
+                host: "127.0.0.1".to_owned(),
+                port: 9,
+                tls: TlsMode::None,
+                credentials: None,
+                from: "no-reply@example.test".to_owned(),
+                timeout: Duration::from_secs(1),
+            },
+            Wording::embedded().unwrap(),
+        )
+        .unwrap(),
+    )
+}
+
 #[tokio::test]
 async fn with_sms_off_a_code_for_a_phone_number_is_refused_as_before_and_costs_nothing() {
     // CODE_DELIVERY=smtp and SMS_DELIVERY=off: the SMTP sender alone. It
     // refuses a phone number before it would connect anywhere.
-    let smtp = SmtpSender::new(
-        SmtpSettings {
-            host: "127.0.0.1".to_owned(),
-            port: 9,
-            tls: TlsMode::None,
-            credentials: None,
-            from: "no-reply@example.test".to_owned(),
-            timeout: Duration::from_secs(1),
-        },
-        Wording::embedded().unwrap(),
-    )
-    .unwrap();
-    let (app, _turn) = start(50, Arc::new(smtp)).await;
+    let (app, _turn) = start(50, smtp()).await;
     ask(&app, &number(), "en")
         .await
         .refused(StatusCode::SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE");
@@ -386,6 +392,56 @@ async fn with_sms_off_a_code_for_a_phone_number_is_refused_as_before_and_costs_n
         counted(&app, 50)
             .await
             .contains("yuppers_sms_codes_this_hour{result=\"sent\"} 0")
+    );
+}
+
+#[tokio::test]
+async fn the_service_says_which_identifiers_it_can_send_codes_to() {
+    let _turn = TURN.lock().await;
+    let meta = |app: App| async move {
+        let meta = app
+            .call(None, Method::GET, "/v1/meta", None, &[])
+            .await
+            .ok();
+        (
+            meta["sign_in_channels"].clone(),
+            meta["sms_country_codes"].clone(),
+        )
+    };
+    let with_sms = |email: Arc<dyn CodeSender>| -> Arc<dyn CodeSender> {
+        Arc::new(CodeRouter::new(
+            email,
+            Arc::new(LogSmsSender),
+            Wording::embedded().unwrap(),
+        ))
+    };
+
+    // CODE_DELIVERY=smtp, SMS_DELIVERY=off: email only, and no countries.
+    assert_eq!(
+        meta(open(50, smtp()).await).await,
+        (json!(["email"]), json!([]))
+    );
+    // CODE_DELIVERY=smtp with SMS_DELIVERY on (log or twilio alike).
+    assert_eq!(
+        meta(open(50, with_sms(smtp())).await).await,
+        (json!(["email", "phone"]), json!(["+1"]))
+    );
+    // CODE_DELIVERY=log: phone codes go to the development log, SMS or not.
+    let log: Arc<dyn CodeSender> = Arc::new(LogSender);
+    for sender in [log.clone(), with_sms(log)] {
+        assert_eq!(
+            meta(open(50, sender).await).await,
+            (json!(["email", "phone"]), json!(["+1"]))
+        );
+    }
+    // The countries are the deployment's.
+    let served = AuthRules {
+        phone_country_codes: vec!["1".to_owned(), "52".to_owned()],
+        ..rules(50)
+    };
+    assert_eq!(
+        meta(open_with(served, with_sms(smtp())).await).await,
+        (json!(["email", "phone"]), json!(["+1", "+52"]))
     );
 }
 

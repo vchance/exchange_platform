@@ -843,6 +843,32 @@ mod tests {
     }
 
     #[test]
+    fn the_channels_offered_are_the_ones_the_deployment_can_deliver() {
+        use crate::auth::{SignInChannel::*, sign_in_channels};
+        const TWILIO: &[(&str, &str)] = &[
+            ("SMS_DELIVERY", "twilio"),
+            ("SMS_ACCOUNT_SID", "AC0123"),
+            ("SMS_AUTH_TOKEN", "hunter2-sms"),
+            ("SMS_FROM", "+15550000000"),
+        ];
+        let channels = |codes: &str, sms: &[(&str, &str)]| {
+            let pairs = [SMTP, &[("CODE_DELIVERY", codes)], sms].concat();
+            sign_in_channels(code_sender(&lookup(&table(&pairs))).unwrap().as_ref())
+        };
+        for sms in [&[][..], &[("SMS_DELIVERY", "off")]] {
+            // Codes by email, and nothing to send a text message with: what
+            // a deployment has before it buys SMS.
+            assert_eq!(channels("smtp", sms), [Email]);
+            // The development log takes phone codes too.
+            assert_eq!(channels("log", sms), [Email, Phone]);
+        }
+        for sms in [&[("SMS_DELIVERY", "log")][..], TWILIO] {
+            assert_eq!(channels("smtp", sms), [Email, Phone]);
+            assert_eq!(channels("log", sms), [Email, Phone]);
+        }
+    }
+
+    #[test]
     fn phone_numbers_are_taken_from_the_us_and_the_rest_of_nanp_unless_set() {
         let read = |pairs: &[(&str, &str)]| auth_rules(&lookup(&table(pairs)));
         assert_eq!(read(&[]).unwrap().phone_country_codes, ["1"]);

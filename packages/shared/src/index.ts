@@ -227,3 +227,11 @@ export {
   walletPlatforms,
 } from './wallet'
 export type { WalletApi, WalletButton } from './wallet'
+export {
+  identifierRefused,
+  phoneOffered,
+  signInChannels,
+  signInText,
+  useSignInChannels,
+} from './sign-in'
+export type { SignInApi, SignInChannel, SignInChannels, SignInText } from './sign-in'

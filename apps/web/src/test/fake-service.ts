@@ -498,6 +498,8 @@ export interface FakeService {
   account: Account | null
   /** Every request so far, as `METHOD /path` with its body, oldest first. */
   sent: { call: string; body: unknown }[]
+  /** Whether the service says it can send codes to phone numbers. */
+  phone: boolean
   fetch: typeof fetch
 }
 
@@ -505,6 +507,7 @@ export function fakeService(account: Account | null): FakeService {
   const service: FakeService = {
     account,
     sent: [],
+    phone: true,
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init)
       const text = await request.text()
@@ -657,6 +660,8 @@ function respond(service: FakeService, call: string, body: unknown): [number, un
         minimum_client_versions: { web: null, ios: null, android: null },
         // Both, so a device's own wallet button shows on an agreement in force.
         wallet_platforms: ['APPLE', 'GOOGLE'],
+        sign_in_channels: service.phone ? ['email', 'phone'] : ['email'],
+        sms_country_codes: service.phone ? ['+1'] : [],
       },
     ]
   }

@@ -50,16 +50,19 @@ export interface Started {
  * Opens the app at `address`, as `account` or signed out, with a fresh copy
  * of every module so nothing one test did is still there in the next. The
  * wording is English unless `speaking` names another language, or is a whole
- * wording of its own (the pseudo-language test).
+ * wording of its own (the pseudo-language test). `prepare` sets the stand-in
+ * service up before the app first asks it anything.
  */
 export async function start(
   address: string,
   account: Account | null,
   speaking: Language | Wording = 'en',
+  prepare?: (service: FakeService) => void,
 ): Promise<Started> {
   await stop()
   vi.resetModules()
   service = fakeService(account)
+  prepare?.(service)
   window.sessionStorage.clear()
   window.localStorage.clear()
   window.history.replaceState(null, '', address)

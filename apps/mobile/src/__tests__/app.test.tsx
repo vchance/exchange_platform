@@ -70,10 +70,17 @@ globalThis.fetch = ((...args: Parameters<typeof fetch>) => service.fetch(...args
 
 const w = wordingFor('en');
 
-/** Starts the app at an address, signed in or not. */
-async function open(initialUrl: string, { signedIn }: { signedIn: boolean }) {
+/**
+ * Starts the app at an address, signed in or not, with a service that can
+ * send codes to phone numbers unless `phone` is false.
+ */
+async function open(
+  initialUrl: string,
+  { signedIn, phone = true }: { signedIn: boolean; phone?: boolean },
+) {
   mockKeychain.clear();
   service = fakeService();
+  service.phone = phone;
   if (signedIn) {
     mockKeychain.set('yuppers.session', TOKEN);
     service.account = ana;
@@ -98,9 +105,10 @@ test('signing in keeps the token in secure storage and nowhere else, then asks f
   await open('/', { signedIn: false });
 
   // Nobody is signed in: the first screen is the way to sign in. The app
-  // has asked the service nothing but how old a build may be.
+  // has asked the service nothing but how old a build may be and what it
+  // can send codes to.
   await screen.findByText(w.signIn.intro);
-  expect(service.sent.map((request) => request.path)).toEqual(['/v1/meta']);
+  expect(new Set(service.sent.map((request) => request.path))).toEqual(new Set(['/v1/meta']));
   expect(service.sent[0].body).toBeNull();
 
   await fireEvent.changeText(
@@ -143,6 +151,54 @@ test('signing in keeps the token in secure storage and nowhere else, then asks f
     authorization: `Bearer ${TOKEN}`,
     body: { display_name: 'Ana Ruiz', adult_confirmed: true },
   });
+});
+
+test('where the service has no text messages, signing in asks for an email address only', async () => {
+  await open('/', { signedIn: false, phone: false });
+  await screen.findByText(w.signIn.introEmail);
+  expect(screen.queryByText(w.signIn.intro)).toBeNull();
+  expect(screen.queryByLabelText(w.signIn.identifierLabel)).toBeNull();
+  const email = screen.getByLabelText(w.signIn.emailLabel);
+  // The keyboard and the system's suggestions are for an email address.
+  expect(email.props.inputMode).toBe('email');
+  expect(email.props.textContentType).toBe('emailAddress');
+  expect(email.props.autoComplete).toBe('email');
+
+  // A phone number typed anyway is stopped here, before anything is sent.
+  await fireEvent.changeText(email, '+1 555 123 4567');
+  await fireEvent.press(screen.getByText(w.signIn.sendCode));
+  await screen.findByText(w.signIn.emailOnly);
+  expect(screen.queryByText(w.errors.SERVICE_UNAVAILABLE)).toBeNull();
+  expect(service.sent.some((request) => request.path === '/v1/auth/codes')).toBe(false);
+
+  // An email address goes through, and going back offers another one.
+  await fireEvent.changeText(email, 'ana@example.test');
+  expect(screen.queryByText(w.signIn.emailOnly)).toBeNull();
+  await fireEvent.press(screen.getByText(w.signIn.sendCode));
+  await screen.findByLabelText(w.signIn.codeLabel);
+  expect(service.sent.at(-1)).toMatchObject({
+    path: '/v1/auth/codes',
+    body: { identifier: 'ana@example.test' },
+  });
+  expect(screen.getByText(w.signIn.changeEmail)).toBeTruthy();
+});
+
+test('where the service sends text messages, a phone number is asked for and sent', async () => {
+  await open('/', { signedIn: false });
+  await screen.findByText(w.signIn.intro);
+  const identifier = screen.getByLabelText(w.signIn.identifierLabel);
+  expect(identifier.props.accessibilityHint).toContain(
+    w.signIn.identifierHintCountries.replace('{codes}', '+1'),
+  );
+  expect(identifier.props.textContentType).toBe('username');
+  await fireEvent.changeText(identifier, '+15551234567');
+  await fireEvent.press(screen.getByText(w.signIn.sendCode));
+  await screen.findByLabelText(w.signIn.codeLabel);
+  expect(service.sent.at(-1)).toMatchObject({
+    path: '/v1/auth/codes',
+    body: { identifier: '+15551234567' },
+  });
+  expect(screen.getByText(w.signIn.changeIdentifier)).toBeTruthy();
 });
 
 test('a session from an earlier launch opens straight onto the exchanges', async () => {

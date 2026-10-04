@@ -16,7 +16,7 @@ use tracing::Instrument;
 use utoipa::OpenApi;
 use uuid::Uuid;
 
-use crate::auth::{AuthRules, CodeSender};
+use crate::auth::{AuthRules, CodeSender, SignInChannel};
 use crate::build_info::{self, BuildInfo};
 use crate::client_version::{self, MinimumClientVersions};
 use crate::domain::Rules;
@@ -281,7 +281,13 @@ async fn security_headers(hsts: bool, request: Request, next: Next) -> Response 
         wallet::apple_link,
         wallet::google_link,
     ),
-    components(schemas(ErrorBody, ErrorCode, MinimumClientVersions, WalletPlatform))
+    components(schemas(
+        ErrorBody,
+        ErrorCode,
+        MinimumClientVersions,
+        SignInChannel,
+        WalletPlatform
+    ))
 )]
 struct ApiDoc;
 

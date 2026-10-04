@@ -160,7 +160,8 @@ test('deleting the account says what it does, takes a code and a last confirmati
   // The app is back at the way to sign in, and says what happened.
   await screen.findByText(w.signIn.intro);
   await screen.findByText(d.deleted);
-  expect(service.sent.at(-1)).toMatchObject({
+  // Besides asking what the service can send sign-in codes to.
+  expect(service.sent.filter((request) => request.path !== '/v1/meta').at(-1)).toMatchObject({
     method: 'POST',
     path: '/v1/me/deletion',
     authorization: `Bearer ${TOKEN}`,
@@ -174,8 +175,11 @@ test('deleting the account says what it does, takes a code and a last confirmati
   await fireEvent.press(screen.getByText(d.dismiss));
   expect(screen.queryByText(d.deleted)).toBeNull();
   screen.getByText(w.signIn.intro);
-  // The dead token was never tried again: the deletion was the last request.
-  expect(service.sent.at(-1)?.path).toBe('/v1/me/deletion');
+  // The dead token was never tried again: the deletion was the last request
+  // besides asking what the service can send sign-in codes to.
+  expect(service.sent.filter((request) => request.path !== '/v1/meta').at(-1)?.path).toBe(
+    '/v1/me/deletion',
+  );
 });
 
 test('the notice that the account was deleted stays when the account screen was opened on its own', async () => {

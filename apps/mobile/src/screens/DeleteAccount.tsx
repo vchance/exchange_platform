@@ -1,5 +1,5 @@
 import type { Account } from '@yuppers/api-client';
-import { useAccountDeletion, type CodeChannel } from '@yuppers/shared';
+import { useAccountDeletion, useSignInChannels, type CodeChannel } from '@yuppers/shared';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import type { TextInput } from 'react-native';
@@ -51,17 +51,24 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
   const router = useRouter();
   const w = wording.deletion;
 
-  const deletion = useAccountDeletion(api, account, async () => {
-    // The service has ended every session; the token this device held is
-    // taken out of its secure storage first, and only then is it back to
-    // the first screen, where what is left is the way to sign in. In the
-    // other order, a first screen that was not already beneath this one (the
-    // account screen opened by a direct link) would appear while the account
-    // was still known and take the notice that it was deleted as read
-    // (`AccountDeleted`).
-    await forget();
-    router.dismissTo('/');
-  });
+  // A phone number is offered for the code only where the service can text it.
+  const channels = useSignInChannels(api);
+  const deletion = useAccountDeletion(
+    api,
+    account,
+    async () => {
+      // The service has ended every session; the token this device held is
+      // taken out of its secure storage first, and only then is it back to
+      // the first screen, where what is left is the way to sign in. In the
+      // other order, a first screen that was not already beneath this one (the
+      // account screen opened by a direct link) would appear while the account
+      // was still known and take the notice that it was deleted as read
+      // (`AccountDeleted`).
+      await forget();
+      router.dismissTo('/');
+    },
+    channels,
+  );
   const { step, preview, destination, busy } = deletion;
   const identifier = destination?.identifier ?? '';
 

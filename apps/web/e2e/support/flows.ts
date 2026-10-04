@@ -35,10 +35,18 @@ export function exchangeIdOf(page: Page): string {
 
 // ---- Signing in ----------------------------------------------------------------
 
-/** Signs in from a sign-in form already on the page, reading the code from the API's log. */
-export async function signIn(person: Person, w: Wording = en): Promise<void> {
+/**
+ * Signs in from a sign-in form already on the page, reading the code from
+ * the API's log. The field is labelled for an email address or phone number
+ * unless `label` says otherwise.
+ */
+export async function signIn(
+  person: Person,
+  w: Wording = en,
+  label: string = w.signIn.identifierLabel,
+): Promise<void> {
   const { page } = person
-  await page.getByLabel(w.signIn.identifierLabel).fill(person.email)
+  await page.getByLabel(label, { exact: true }).fill(person.email)
   const code = await codeFrom(person.email, 'sign-in', () =>
     page.getByRole('button', { name: w.signIn.sendCode, exact: true }).click(),
   )

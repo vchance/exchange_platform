@@ -21,7 +21,7 @@ use hyper::http::{HeaderName, HeaderValue, StatusCode, header};
 
 use super::smtp::Secret;
 use super::wording::Wording;
-use crate::auth::{CodeMessage, CodeSender, SendFuture};
+use crate::auth::{CodeMessage, CodeSender, SendFuture, SignInChannel};
 use crate::domain::identity::Identifier;
 use crate::outbound::Client;
 
@@ -259,6 +259,13 @@ impl CodeSender for CodeRouter {
 
     fn charged_per_message(&self, to: &Identifier) -> bool {
         matches!(to, Identifier::Phone(_))
+    }
+
+    fn delivers(&self, channel: SignInChannel) -> bool {
+        match channel {
+            SignInChannel::Phone => true,
+            SignInChannel::Email => self.email.delivers(channel),
+        }
     }
 }
 

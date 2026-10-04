@@ -3566,7 +3566,9 @@
           "commit",
           "minimum_client_versions",
           "push_notifications",
-          "wallet_platforms"
+          "wallet_platforms",
+          "sign_in_channels",
+          "sms_country_codes"
         ],
         "properties": {
           "built_at": {
@@ -3590,6 +3592,20 @@
           },
           "service": {
             "type": "string"
+          },
+          "sign_in_channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SignInChannel"
+            },
+            "description": "The kinds of identifier this deployment can send a one-time code to\nright now, email first: `email` while codes go by email (or to the\ndevelopment log), `phone` while text messages are sent (or, in\ndevelopment, phone codes go to the log too). A client asks only for\nthese when someone signs in or adds an identifier; a code for any\nother kind is refused with `SERVICE_UNAVAILABLE`."
+          },
+          "sms_country_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The country calling codes, such as `+1`, of the phone numbers codes\ncan be sent to (`PHONE_COUNTRY_NOT_SERVED` refuses any other). Empty\nwhen `sign_in_channels` has no `phone`."
           },
           "version": {
             "type": "string",
@@ -4986,6 +5002,14 @@
         "enum": [
           "OFF_PLATFORM",
           "PROCESSOR"
+        ]
+      },
+      "SignInChannel": {
+        "type": "string",
+        "description": "A kind of identifier a code can be sent to: what someone can sign in with.",
+        "enum": [
+          "email",
+          "phone"
         ]
       },
       "Signature": {

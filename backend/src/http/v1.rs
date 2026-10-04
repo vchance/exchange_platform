@@ -7,6 +7,7 @@ use serde::Serialize;
 use utoipa::ToSchema;
 
 use super::{AppState, account, auth, deletion, devices, exchanges, record, safety, staff, wallet};
+use crate::auth::{SignInChannel, sign_in_channels};
 use crate::client_version::MinimumClientVersions;
 use crate::wallet::{Wallet, WalletPlatform};
 
@@ -66,6 +67,17 @@ pub struct Meta {
     /// The wallets a pass can be added to here (DESIGN.md §11). Empty until
     /// a deployment configures one; a client shows no Wallet button then.
     pub wallet_platforms: Vec<WalletPlatform>,
+    /// The kinds of identifier this deployment can send a one-time code to
+    /// right now, email first: `email` while codes go by email (or to the
+    /// development log), `phone` while text messages are sent (or, in
+    /// development, phone codes go to the log too). A client asks only for
+    /// these when someone signs in or adds an identifier; a code for any
+    /// other kind is refused with `SERVICE_UNAVAILABLE`.
+    pub sign_in_channels: Vec<SignInChannel>,
+    /// The country calling codes, such as `+1`, of the phone numbers codes
+    /// can be sent to (`PHONE_COUNTRY_NOT_SERVED` refuses any other). Empty
+    /// when `sign_in_channels` has no `phone`.
+    pub sms_country_codes: Vec<String>,
 }
 
 /// Identifies the service and its build, and says how old a client may be.
@@ -74,6 +86,7 @@ pub async fn meta(
     State(state): State<AppState>,
     Extension(wallet): Extension<Arc<Wallet>>,
 ) -> Json<Meta> {
+    let channels = sign_in_channels(state.code_sender.as_ref());
     Json(Meta {
         service: env!("CARGO_PKG_NAME").to_owned(),
         version: state.settings.build.version.to_owned(),
@@ -82,5 +95,17 @@ pub async fn meta(
         minimum_client_versions: state.settings.min_client_versions.clone(),
         push_notifications: state.settings.push_notifications,
         wallet_platforms: wallet.platforms(),
+        sms_country_codes: if channels.contains(&SignInChannel::Phone) {
+            state
+                .settings
+                .auth
+                .phone_country_codes
+                .iter()
+                .map(|code| format!("+{code}"))
+                .collect()
+        } else {
+            Vec::new()
+        },
+        sign_in_channels: channels,
     })
 }

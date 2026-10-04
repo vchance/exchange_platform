@@ -45,6 +45,8 @@ function service(platforms: WalletPlatform[], refuse = false): WalletApi {
       minimum_client_versions: {},
       push_notifications: false,
       wallet_platforms: platforms,
+      sign_in_channels: ['email'],
+      sms_country_codes: [],
     }),
     appleWalletLink: async () => {
       if (refuse) throw new ApiFailure('TOO_MANY_REQUESTS');

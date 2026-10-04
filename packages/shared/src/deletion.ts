@@ -2,6 +2,7 @@ import type { Account, ErrorCode } from '@yuppers/api-client'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 
 import { failureCode, type CodeChannel, type DeletionPreview } from './api'
+import type { SignInChannels } from './sign-in'
 
 /*
  * Deleting the account, as both apps do it (DESIGN.md §4.1): what will
@@ -16,11 +17,20 @@ export interface CodeDestination {
   identifier: string
 }
 
-/** Where a code can be sent for this account, email first. */
-export function codeDestinations(account: Pick<Account, 'email' | 'phone'>): CodeDestination[] {
+/**
+ * Where a code can be sent for this account, email first. The phone number
+ * is left out where the service has said it cannot text it (`channels`) and
+ * there is an email address to use instead; an account with only a phone
+ * number keeps it, the one way there is to ask.
+ */
+export function codeDestinations(
+  account: Pick<Account, 'email' | 'phone'>,
+  channels: SignInChannels | null = null,
+): CodeDestination[] {
   const found: CodeDestination[] = []
   if (account.email) found.push({ channel: 'EMAIL', identifier: account.email })
-  if (account.phone) found.push({ channel: 'PHONE', identifier: account.phone })
+  const textable = channels === null || channels.phone || !account.email
+  if (account.phone && textable) found.push({ channel: 'PHONE', identifier: account.phone })
   return found
 }
 
@@ -96,9 +106,10 @@ export function useAccountDeletion(
   api: DeletionApi,
   account: Pick<Account, 'email' | 'phone'>,
   onDeleted: () => void | Promise<void>,
+  channels: SignInChannels | null = null,
 ): AccountDeletion {
   const { email, phone } = account
-  const destinations = codeDestinations({ email, phone })
+  const destinations = codeDestinations({ email, phone }, channels)
   const [step, setStep] = useState<DeletionStep>('explain')
   const [preview, setPreview] = useState<DeletionPreview | null>(null)
   const [previewFailure, setPreviewFailure] = useState<ErrorCode | null>(null)

@@ -22,7 +22,7 @@ use lettre::{Address, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 
 use super::wording::Wording;
 use super::{Email, EmailSender};
-use crate::auth::{CodeMessage, CodeSender, SendFuture};
+use crate::auth::{CodeMessage, CodeSender, SendFuture, SignInChannel};
 use crate::domain::identity::Identifier;
 
 /// How the connection to the server is protected.
@@ -237,6 +237,11 @@ impl CodeSender for SmtpSender {
             )
             .await
         })
+    }
+
+    /// Email only: a code for a phone number needs SMS delivery.
+    fn delivers(&self, channel: SignInChannel) -> bool {
+        channel == SignInChannel::Email
     }
 }
 

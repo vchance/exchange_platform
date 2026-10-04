@@ -1,5 +1,5 @@
 import type { Account } from '@yuppers/api-client'
-import { useAccountDeletion } from '@yuppers/shared'
+import { useAccountDeletion, useSignInChannels } from '@yuppers/shared'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
@@ -56,12 +56,19 @@ function Steps({ account, onCancel }: { account: Account; onCancel(): void }) {
   const w = wording.deletion
   const id = useId()
 
-  const deletion = useAccountDeletion(api, account, () => {
-    // The service has ended every session and taken back the cookie; this
-    // page stops acting as the account and goes back to the way in.
-    setAccount(null)
-    navigate(paths.home)
-  })
+  // A phone number is offered for the code only where the service can text it.
+  const channels = useSignInChannels(api)
+  const deletion = useAccountDeletion(
+    api,
+    account,
+    () => {
+      // The service has ended every session and taken back the cookie; this
+      // page stops acting as the account and goes back to the way in.
+      setAccount(null)
+      navigate(paths.home)
+    },
+    channels,
+  )
   const { step, preview, destination, busy } = deletion
   const identifier = destination?.identifier ?? ''
 

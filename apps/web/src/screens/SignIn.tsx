@@ -1,15 +1,17 @@
 import type { ErrorCode } from '@yuppers/api-client'
+import { identifierRefused, phoneOffered, signInText, useSignInChannels } from '@yuppers/shared'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 
 import { useI18n, useSession } from '../app/context'
-import { Failure, Field, Notice } from '../components/ui'
+import { ErrorNote, Failure, Field, Notice } from '../components/ui'
 import { api, failureCode } from '../lib/api'
 
 /**
  * Signing in: an email address or phone number, then the six-digit code sent
  * to it. The first time, this creates the account. The service answers a
  * request for a code the same way whether or not an account exists, and so
- * does this form.
+ * does this form. A phone number is asked for only where the service can
+ * text it (`GET /v1/meta`); elsewhere one typed anyway is stopped here.
  */
 export function SignIn() {
   const { wording, fmt, language } = useI18n()
@@ -22,6 +24,11 @@ export function SignIn() {
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<ErrorCode | null>(null)
   const [resent, setResent] = useState(false)
+  // Said under the field, before or instead of what the service answered.
+  const [problem, setProblem] = useState<string | null>(null)
+  const channels = useSignInChannels(api)
+  const text = signInText(w, channels, fmt)
+  const phone = phoneOffered(channels)
   const codeInput = useRef<HTMLInputElement>(null)
   const identifierInput = useRef<HTMLInputElement>(null)
   const changing = useRef(false)
@@ -37,15 +44,23 @@ export function SignIn() {
   }, [sentTo])
 
   async function requestCode(to: string, again: boolean) {
-    setBusy(true)
     setFailure(null)
+    setProblem(null)
     setResent(false)
+    if (identifierRefused(to, channels) === 'emailOnly') {
+      setProblem(w.emailOnly)
+      return
+    }
+    setBusy(true)
     try {
       await api.requestCode(to)
       setSentTo(to)
       setResent(again)
     } catch (error) {
-      setFailure(failureCode(error))
+      const code = failureCode(error)
+      // The service's words for this one mention phone numbers.
+      if (code === 'INVALID_IDENTIFIER' && !phone && channels) setProblem(w.invalidEmail)
+      else setFailure(code)
     } finally {
       setBusy(false)
     }
@@ -79,28 +94,38 @@ export function SignIn() {
           void requestCode(identifier.trim(), false)
         }}
       >
-        <p>{w.intro}</p>
+        <p>{text.intro}</p>
         <Field
-          label={w.identifierLabel}
-          hint={w.identifierHint}
+          label={text.label}
+          hint={text.hint}
           required
-          problem={failure ? failureId : null}
+          problem={failure || problem ? failureId : null}
         >
           {(control) => (
             <input
               {...control}
               ref={identifierInput}
-              type="text"
+              // An email field where only an email address is taken; a text
+              // field where a phone number may be typed too, which a browser
+              // would otherwise take for a malformed email address.
+              type={phone ? 'text' : 'email'}
               inputMode="email"
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
               value={identifier}
-              onChange={(event) => setIdentifier(event.target.value)}
+              onChange={(event) => {
+                setIdentifier(event.target.value)
+                setProblem(null)
+              }}
             />
           )}
         </Field>
-        <Failure code={failure} id={failureId} />
+        {problem ? (
+          <ErrorNote id={failureId}>{problem}</ErrorNote>
+        ) : (
+          <Failure code={failure} id={failureId} />
+        )}
         <div className="actions">
           <button type="submit" className="primary" disabled={busy}>
             {w.sendCode}
@@ -146,10 +171,11 @@ export function SignIn() {
             setSentTo(null)
             setCode('')
             setFailure(null)
+            setProblem(null)
             setResent(false)
           }}
         >
-          {w.changeIdentifier}
+          {text.changeIdentifier}
         </button>
       </div>
     </form>

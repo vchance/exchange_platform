@@ -1219,6 +1219,21 @@ export interface components {
              */
             push_notifications: boolean;
             service: string;
+            /**
+             * @description The kinds of identifier this deployment can send a one-time code to
+             *     right now, email first: `email` while codes go by email (or to the
+             *     development log), `phone` while text messages are sent (or, in
+             *     development, phone codes go to the log too). A client asks only for
+             *     these when someone signs in or adds an identifier; a code for any
+             *     other kind is refused with `SERVICE_UNAVAILABLE`.
+             */
+            sign_in_channels: components["schemas"]["SignInChannel"][];
+            /**
+             * @description The country calling codes, such as `+1`, of the phone numbers codes
+             *     can be sent to (`PHONE_COUNTRY_NOT_SERVED` refuses any other). Empty
+             *     when `sign_in_channels` has no `phone`.
+             */
+            sms_country_codes: string[];
             /** @description The package version, such as `0.1.0`. */
             version: string;
             /**
@@ -1760,6 +1775,11 @@ export interface components {
         };
         /** @enum {string} */
         SettlementDto: "OFF_PLATFORM" | "PROCESSOR";
+        /**
+         * @description A kind of identifier a code can be sent to: what someone can sign in with.
+         * @enum {string}
+         */
+        SignInChannel: "email" | "phone";
         /** @description One party's signature on one exact revision. */
         Signature: {
             consent: components["schemas"]["ConsentShown"];

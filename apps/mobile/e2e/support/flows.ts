@@ -42,11 +42,19 @@ export async function turnOn(scope: Page | Locator, label: string): Promise<void
  * in the page, hidden.
  */
 
-/** Signs in from a sign-in form already on the screen, reading the code from the API's log. */
-export async function signIn(person: Person, w: Wording = en): Promise<void> {
+/**
+ * Signs in from a sign-in form already on the screen, reading the code from
+ * the API's log. The field is labelled for an email address or phone number
+ * unless `label` says otherwise.
+ */
+export async function signIn(
+  person: Person,
+  w: Wording = en,
+  label: string = w.signIn.identifierLabel,
+): Promise<void> {
   const { page } = person
   const shown = (locator: Locator) => locator.filter({ visible: true })
-  await shown(page.getByLabel(w.signIn.identifierLabel)).fill(person.email)
+  await shown(page.getByLabel(label)).fill(person.email)
   const code = await codeFrom(person.email, 'sign-in', () =>
     shown(button(page, w.signIn.sendCode)).click(),
   )

@@ -204,7 +204,13 @@
     "submit": "Iniciar sesión",
     "resend": "Enviar un código nuevo",
     "resent": "Va en camino un código nuevo.",
-    "changeIdentifier": "Usar otro correo electrónico o número de teléfono"
+    "changeIdentifier": "Usar otro correo electrónico o número de teléfono",
+    "introEmail": "Escribe tu correo electrónico y te enviaremos un código de un solo uso. No hay contraseña.",
+    "emailLabel": "Correo electrónico",
+    "identifierHintCountries": "Si es un número de teléfono, empieza con el código de país. Solo podemos enviar códigos a números que empiezan por {codes}.",
+    "emailOnly": "Inicia sesión con tu correo electrónico. Por ahora no podemos enviar códigos a números de teléfono.",
+    "invalidEmail": "Escribe un correo electrónico válido.",
+    "changeEmail": "Usar otro correo electrónico"
   },
   "profile": {
     "firstTitle": "Configura tu cuenta",

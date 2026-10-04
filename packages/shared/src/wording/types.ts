@@ -210,6 +210,19 @@ export interface Wording {
     resend: string
     resent: string
     changeIdentifier: string
+    /**
+     * The same as `intro`, `identifierLabel` and `changeIdentifier` where
+     * the service takes email addresses only (`GET /v1/meta`).
+     */
+    introEmail: string
+    emailLabel: string
+    changeEmail: string
+    /** `identifierHint`, naming the country codes served: `{codes}`, such as `+1`. */
+    identifierHintCountries: string
+    /** Said, before anything is sent, of a phone number where only email addresses are taken. */
+    emailOnly: string
+    /** `INVALID_IDENTIFIER`, where only email addresses are taken. */
+    invalidEmail: string
   }
   profile: {
     firstTitle: string

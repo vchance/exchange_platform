@@ -247,6 +247,34 @@ pub trait CodeSender: Send + Sync {
     fn charged_per_message(&self, _to: &Identifier) -> bool {
         false
     }
+
+    /// Whether this sender can deliver a code to an identifier of this kind
+    /// at all, which `GET /v1/meta` tells the clients (`sign_in_channels`)
+    /// so that they ask only for what can be used. A sender refusing a kind
+    /// here refuses it in [`CodeSender::send`] too.
+    fn delivers(&self, _channel: SignInChannel) -> bool {
+        true
+    }
+}
+
+/// A kind of identifier a code can be sent to: what someone can sign in with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum SignInChannel {
+    Email,
+    Phone,
+}
+
+impl SignInChannel {
+    pub const ALL: [SignInChannel; 2] = [SignInChannel::Email, SignInChannel::Phone];
+}
+
+/// The kinds of identifier `sender` can deliver codes to, email first.
+pub fn sign_in_channels(sender: &dyn CodeSender) -> Vec<SignInChannel> {
+    SignInChannel::ALL
+        .into_iter()
+        .filter(|channel| sender.delivers(*channel))
+        .collect()
 }
 
 /// Development delivery: writes the code to the service log. Never configured

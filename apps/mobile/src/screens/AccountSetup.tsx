@@ -1,9 +1,13 @@
 import type { Account, ErrorCode } from '@yuppers/api-client';
 import {
   failureCode,
+  identifierRefused,
   isComplete,
   languages,
+  phoneOffered,
   pickLanguage,
+  signInText,
+  useSignInChannels,
   type Language,
 } from '@yuppers/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -14,6 +18,7 @@ import {
   Button,
   Check,
   Choice,
+  ErrorNote,
   Failure,
   Heading,
   Notice,
@@ -99,7 +104,8 @@ export function Gate({ children, signedOut }: { children: ReactNode; signedOut?:
  * Signing in: an email address or phone number, then the six-digit code sent
  * to it. The first time, this creates the account. The service answers a
  * request for a code the same way whether or not an account exists, and so
- * does this form.
+ * does this form. A phone number is asked for only where the service can
+ * text it (`GET /v1/meta`); elsewhere one typed anyway is stopped here.
  */
 function SignIn() {
   const { wording, fmt, language, setLanguage } = useI18n();
@@ -112,6 +118,11 @@ function SignIn() {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ErrorCode | null>(null);
   const [resent, setResent] = useState(false);
+  // Said under the field, before or instead of what the service answered.
+  const [problem, setProblem] = useState<string | null>(null);
+  const channels = useSignInChannels(api);
+  const text = signInText(w, channels, fmt);
+  const phone = phoneOffered(channels);
   const codeInput = useRef<TextInput>(null);
 
   // Each step starts with the keyboard on the one thing it asks for.
@@ -120,15 +131,23 @@ function SignIn() {
   }, [sentTo]);
 
   async function requestCode(to: string, again: boolean) {
-    setBusy(true);
     setFailure(null);
+    setProblem(null);
     setResent(false);
+    if (identifierRefused(to, channels) === 'emailOnly') {
+      setProblem(w.emailOnly);
+      return;
+    }
+    setBusy(true);
     try {
       await api.requestCode(to);
       setSentTo(to);
       setResent(again);
     } catch (error) {
-      setFailure(failureCode(error));
+      const code = failureCode(error);
+      // The service's words for this one mention phone numbers.
+      if (code === 'INVALID_IDENTIFIER' && !phone && channels) setProblem(w.invalidEmail);
+      else setFailure(code);
     } finally {
       setBusy(false);
     }
@@ -152,22 +171,25 @@ function SignIn() {
   if (!sentTo) {
     return (
       <>
-        <P>{w.intro}</P>
+        <P>{text.intro}</P>
         <TextField
-          label={w.identifierLabel}
-          hint={w.identifierHint}
+          label={text.label}
+          hint={text.hint}
           required
           inputMode="email"
           autoCapitalize="none"
           autoCorrect={false}
-          autoComplete="username"
-          textContentType="username"
+          autoComplete={phone ? 'username' : 'email'}
+          textContentType={phone ? 'username' : 'emailAddress'}
           returnKeyType="send"
           value={identifier}
-          onChangeText={setIdentifier}
+          onChangeText={(value) => {
+            setIdentifier(value);
+            setProblem(null);
+          }}
           onSubmitEditing={() => void requestCode(identifier.trim(), false)}
         />
-        <Failure code={failure} />
+        {problem ? <ErrorNote>{problem}</ErrorNote> : <Failure code={failure} />}
         <Actions>
           <Button
             variant="primary"
@@ -213,12 +235,13 @@ function SignIn() {
       <Actions>
         <Button
           variant="link"
-          label={w.changeIdentifier}
+          label={text.changeIdentifier}
           disabled={busy}
           onPress={() => {
             setSentTo(null);
             setCode('');
             setFailure(null);
+            setProblem(null);
             setResent(false);
           }}
         />

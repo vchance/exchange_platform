@@ -140,6 +140,8 @@ export interface FakeService {
   invitation: 'live' | 'spent' | 'yours';
   /** Whether the service says it sends push notifications. */
   push: boolean;
+  /** Whether the service says it can send codes to phone numbers. */
+  phone: boolean;
   /** The devices registered for push, by ID, with what was registered. */
   devices: Map<string, unknown>;
   fetch: typeof fetch;
@@ -154,6 +156,7 @@ export function fakeService(): FakeService {
     conflictNext: false,
     invitation: 'live',
     push: false,
+    phone: true,
     devices: new Map(),
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
@@ -199,6 +202,8 @@ function respond(
         push_notifications: service.push,
         // Both, so a device's own wallet button shows on an agreement in force.
         wallet_platforms: ['APPLE', 'GOOGLE'],
+        sign_in_channels: service.phone ? ['email', 'phone'] : ['email'],
+        sms_country_codes: service.phone ? ['+1'] : [],
       },
     ];
   }
